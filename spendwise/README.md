@@ -2,8 +2,9 @@
 
 An agentic expense tracker, built one small phase at a time as a learning project.
 
-**Current state (Phase 2):** a FastAPI backend with `GET /health`, `GET /hello/{name}`, and
-`POST /ask`, which sends a prompt to Gemini and returns its answer.
+**Current state (Phase 3):** a modular-monolith FastAPI backend with `GET /health`, `POST /ask`
+(sends a prompt to Gemini), and a database with `categories` and `expenses` modules.
+The modules have no HTTP routes yet; `backend/seed.py` fills them with sample data.
 
 ## Requirements
 
@@ -16,15 +17,20 @@ From the `spendwise/` folder:
 
 ```powershell
 Copy-Item .env.example .env     # once, then paste your Gemini API key into .env
-.\run.ps1
+.\run.ps1                       # creates .venv, installs requirements, starts the server
 ```
 
-Get a Gemini API key at https://aistudio.google.com/apikey and put it after `GEMINI_API_KEY=` in `.env`.
+In a second terminal, add sample data (safe to run more than once):
+
+```powershell
+.\.venv\Scripts\python.exe backend\seed.py
+```
 
 `run.ps1` creates `.venv` on the first run, installs `requirements.txt` whenever that file has
-changed, and starts the server. No activation is needed. Extra arguments are passed to uvicorn,
-for example `.\run.ps1 --port 8001`.
+changed, and starts the server with auto-reload. No activation is needed. Extra arguments are
+passed to uvicorn, for example `.\run.ps1 --port 8001`.
 
+Get a Gemini API key at https://aistudio.google.com/apikey and put it after `GEMINI_API_KEY=` in `.env`.
 If PowerShell refuses to run the script, allow local scripts once with
 `Set-ExecutionPolicy -Scope CurrentUser RemoteSigned`, then try again.
 
@@ -37,15 +43,18 @@ py -3 -m venv .venv                         # macOS/Linux: python3 -m venv .venv
 .\.venv\Scripts\Activate.ps1                # macOS/Linux: source .venv/bin/activate
 python -m pip install -r requirements.txt
 Copy-Item .env.example .env                 # macOS/Linux: cp .env.example .env
-python -m uvicorn backend.main:app --reload
+python -m uvicorn app.main:app --app-dir backend --reload --reload-dir backend
+python backend/seed.py                      # in a second terminal
 ```
+
+`--app-dir backend` is needed because the code imports itself as `app.…`, and the `app`
+package lives inside `backend/`.
 
 ## Check it works
 
-With the server running, open:
+With the server running:
 
 - http://127.0.0.1:8000/health → `{"status":"ok"}`
-- http://127.0.0.1:8000/hello/Priya → `{"message":"Hello, Priya!"}`
 - http://127.0.0.1:8000/docs → interactive API docs (Swagger UI)
 
 To try Gemini, open `/docs`, expand **POST /ask**, click **Try it out**, send
@@ -53,26 +62,46 @@ To try Gemini, open `/docs`, expand **POST /ask**, click **Try it out**, send
 A working setup returns `200` with `{"answer": "..."}`. A missing key returns `500` (the
 terminal says which setting is missing); a wrong key returns `502` with Google's error message.
 
-`--reload` restarts the server whenever a file changes. Use it for development only.
-Stop the server with `Ctrl+C`.
+The seed script prints the 10 sample expenses it saved, each in rupees and in paise.
+The database is the file `backend/spendwise.db`; delete it to start from an empty database.
+
+## Architecture: modular monolith
+
+One FastAPI app, one deployable, one database, split inside into **modules by business
+domain** (expenses, categories, assistant, ...). A module talks to another only through that
+module's public interface (`modules/<name>/__init__.py`) and never touches its tables.
+Full rules, request flow and how to add a module: [docs/architecture.md](docs/architecture.md).
+
+## Documentation
+
+[docs/](docs/README.md) has the learning notes for each phase, the decision log, Gemini setup
+and free-tier notes, and troubleshooting.
 
 ## Project layout
 
 ```
 spendwise/
   backend/
-    __init__.py      makes backend/ an importable package
-    main.py          FastAPI app and routes
-    llm.py           ask_gemini(): the one place that talks to Gemini
-  run.ps1            one-command dev start (Windows)
-  requirements.txt   pinned direct dependencies
-  .env.example       names of the settings the app expects (no secret values)
-  .env               your real settings and API key (git-ignored, you create it)
-  .gitignore
+    app/
+      main.py              composition root: creates the app, includes module routers
+      core/
+        config.py          settings from .env (pydantic-settings)
+        db.py              database engine, table creation, get_session dependency
+        money.py           rupees <-> paise helpers
+        llm.py             ask_gemini(): the one place that talks to Gemini
+      modules/
+        assistant/         POST /ask (router, schemas, service)
+        categories/        Category table + public interface
+        expenses/          Expense table + public interface
+    seed.py                default categories and sample expenses
+    spendwise.db           local SQLite database (git-ignored, created automatically)
+  run.ps1                  one-command dev start (Windows)
+  requirements.txt         pinned direct dependencies
+  .env.example             names of the settings the app expects (no secret values)
+  .env                     your real settings and API key (git-ignored, you create it)
+  docs/                    learning notes, decisions, Gemini notes, troubleshooting
   README.md
 ```
-
-`mcp_server/`, `agents/`, `skills/`, `web/` and `tests/` are added in later phases.
 
 ## Conventions
 
@@ -86,7 +115,7 @@ spendwise/
 - `.venv` is never committed. It can be deleted and rebuilt from `requirements.txt` at any time.
 - If you move or rename the project folder, delete `.venv` and create it again:
   a venv stores absolute paths and stops working when moved.
-- In VS Code, run **Python: Select Interpreter** and choose `.venv`, so the editor and terminal use the same Python.
+- In VS Code, the repo's `.vscode/settings.json` already points at `.venv`.
 
 ### Dependencies
 
@@ -103,13 +132,22 @@ spendwise/
 
 - Secrets and machine-specific settings (API keys, database URLs) live in `.env`, never in code.
 - `.env` is git-ignored. `.env.example` is committed and lists every setting name with no real values.
+- All settings are read in one place, `backend/app/core/config.py`. Real environment variables
+  override values in `.env`.
 - When a phase adds a new setting, add its name to `.env.example` in the same commit.
+
+### Money
+
+- Amounts are stored as whole **paise** (integer minor units) plus a currency code, default `INR`:
+  450.50 rupees is stored as `45050`.
+- Convert only with `app.core.money` (`rupees_to_paise`, `paise_to_rupees`), which use `Decimal`.
+  Never put money through a `float`.
 
 ### Generated files
 
 - `__pycache__/` folders hold compiled bytecode that Python creates and refreshes automatically on import.
   They are git-ignored and safe to delete at any time; Python rebuilds them on the next run.
-- Leave bytecode caching on (don't set `PYTHONDONTWRITEBYTECODE`). It only makes startup faster.
+- `backend/spendwise.db` is your local data. It's git-ignored and recreated (empty) when the server starts.
 
 ### What gets committed
 
@@ -118,6 +156,7 @@ spendwise/
 | Source code (`backend/`, ...) | `.venv/` |
 | `requirements.txt` | `__pycache__/`, `*.pyc` |
 | `.env.example` | `.env` |
-| `.gitignore`, `README.md` | |
+| `.gitignore`, `README.md`, `docs/`, `run.ps1` | `*.db` (your local database) |
 
 Before each commit, check that `git status` lists none of the files in the right-hand column.
+Update `docs/` in the same commit as the code it describes (see [docs/README.md](docs/README.md)).

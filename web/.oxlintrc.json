@@ -1,8 +1,132 @@
 {
   "$schema": "./node_modules/oxlint/configuration_schema.json",
-  "plugins": ["react", "typescript", "oxc"],
+  "plugins": [
+    "react",
+    "typescript",
+    "oxc",
+    "jsx-a11y"
+  ],
   "rules": {
     "react/rules-of-hooks": "error",
-    "react/only-export-components": ["warn", { "allowConstantExport": true }]
-  }
+    "react/only-export-components": [
+      "warn",
+      {
+        "allowConstantExport": true
+      }
+    ]
+  },
+  "overrides": [
+    {
+      "files": [
+        "src/features/*/*.ts",
+        "src/features/*/*.tsx"
+      ],
+      "rules": {
+        "no-restricted-imports": [
+          "error",
+          {
+            "patterns": [
+              {
+                "group": [
+                  "@/features/*/*"
+                ],
+                "message": "Import another feature only through its public API, \"@/features/<name>\". Inside a feature, use relative imports."
+              },
+              {
+                "group": [
+                  "@/app",
+                  "@/app/*"
+                ],
+                "message": "Features don't import the app: the app composes the features."
+              },
+              {
+                "group": [
+                  "../**"
+                ],
+                "message": "This relative import leaves the feature. Use \"@/features/<name>\" or \"@/shared/...\" instead."
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "files": [
+        "src/features/*/*/**"
+      ],
+      "rules": {
+        "no-restricted-imports": [
+          "error",
+          {
+            "patterns": [
+              {
+                "group": [
+                  "@/features/*/*"
+                ],
+                "message": "Import another feature only through its public API, \"@/features/<name>\". Inside a feature, use relative imports."
+              },
+              {
+                "group": [
+                  "@/app",
+                  "@/app/*"
+                ],
+                "message": "Features don't import the app: the app composes the features."
+              },
+              {
+                "group": [
+                  "../../**"
+                ],
+                "message": "This relative import leaves the feature. Use \"@/features/<name>\" or \"@/shared/...\" instead."
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "files": [
+        "src/shared/**"
+      ],
+      "rules": {
+        "no-restricted-imports": [
+          "error",
+          {
+            "patterns": [
+              {
+                "group": [
+                  "@/features",
+                  "@/features/*",
+                  "@/app",
+                  "@/app/*",
+                  "**/features/**",
+                  "**/app/**"
+                ],
+                "message": "shared/ is used by every feature, so it can't depend on any feature or on the app."
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "files": [
+        "src/app/**"
+      ],
+      "rules": {
+        "no-restricted-imports": [
+          "error",
+          {
+            "patterns": [
+              {
+                "group": [
+                  "@/features/*/*"
+                ],
+                "message": "Import a feature only through its public API, \"@/features/<name>\"."
+              }
+            ]
+          }
+        ]
+      }
+    }
+  ]
 }

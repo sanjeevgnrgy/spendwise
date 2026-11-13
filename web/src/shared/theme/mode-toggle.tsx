@@ -1,0 +1,37 @@
+import { Monitor, Moon, Sun, type LucideIcon } from "lucide-react"
+
+import { Button } from "@/shared/ui/button"
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/shared/ui/dropdown-menu"
+
+import { useTheme, type Theme } from "./theme-context"
+
+const CHOICES: { theme: Theme; label: string; icon: LucideIcon }[] = [
+  { theme: "light", label: "Light", icon: Sun },
+  { theme: "dark", label: "Dark", icon: Moon },
+  { theme: "system", label: "System", icon: Monitor },
+]
+
+// Light / dark / follow the system. ThemeProvider saves the choice and puts a "dark" class on
+// <html>; the colours in index.css switch on that class.
+export function ModeToggle() {
+  const { setTheme } = useTheme()
+
+  return (
+    <DropdownMenu>
+      <DropdownMenuTrigger asChild>
+        <Button variant="ghost" size="icon" aria-label="Change theme">
+          {/* Both icons are always rendered; CSS shows the right one, so there's no flicker on load. */}
+          <Sun className="size-4 scale-100 rotate-0 transition-all dark:scale-0 dark:-rotate-90" />
+          <Moon className="absolute size-4 scale-0 rotate-90 transition-all dark:scale-100 dark:rotate-0" />
+        </Button>
+      </DropdownMenuTrigger>
+      <DropdownMenuContent align="end">
+        {CHOICES.map(({ theme, label, icon: Icon }) => (
+          <DropdownMenuItem key={theme} onClick={() => setTheme(theme)}>
+            <Icon /> {label}
+          </DropdownMenuItem>
+        ))}
+      </DropdownMenuContent>
+    </DropdownMenu>
+  )
+}

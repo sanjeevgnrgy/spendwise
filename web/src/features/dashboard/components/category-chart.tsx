@@ -1,0 +1,44 @@
+import { Bar, BarChart, XAxis, YAxis } from "recharts"
+
+import { EmptyState } from "@/shared/components/empty-state"
+import { ROUTES } from "@/shared/config/routes"
+import { formatMoney, formatMonth } from "@/shared/lib/format"
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/shared/ui/card"
+import { ChartContainer, ChartTooltip, ChartTooltipContent } from "@/shared/ui/chart"
+
+import type { MonthlySummary } from "../api"
+import { SPENT_CONFIG } from "./chart-config"
+
+const CATEGORY_AXIS_WIDTH = 96
+
+export function CategoryChart({ summary }: { summary: MonthlySummary }) {
+  // Recharts draws numbers: the API's rupee string ("450.50") becomes 450.5, for the chart only.
+  const rows = summary.by_category.map((c) => ({ name: c.category_name, total: Number(c.total) }))
+
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle>By category</CardTitle>
+        <CardDescription>{formatMonth(summary.month)}</CardDescription>
+      </CardHeader>
+      <CardContent>
+        {rows.length === 0 ? (
+          <EmptyState message="No spending this month yet." action={{ label: "Add an expense", to: ROUTES.expenses }} />
+        ) : (
+          // Horizontal bars: category names stay readable even with many categories.
+          <ChartContainer config={SPENT_CONFIG} className="aspect-auto h-64 w-full">
+            <BarChart data={rows} layout="vertical" margin={{ left: 8, right: 8 }} accessibilityLayer>
+              <XAxis type="number" hide />
+              <YAxis dataKey="name" type="category" width={CATEGORY_AXIS_WIDTH} tickLine={false} axisLine={false} />
+              <ChartTooltip
+                cursor={false}
+                content={<ChartTooltipContent formatter={(value) => formatMoney(Number(value), summary.currency)} />}
+              />
+              <Bar dataKey="total" fill="var(--color-total)" radius={4} />
+            </BarChart>
+          </ChartContainer>
+        )}
+      </CardContent>
+    </Card>
+  )
+}

@@ -2,5 +2,7 @@
   // The venv lives in spendwise/, not the folder VS Code opened, so point the Python
   // extension (and its import checker) at it explicitly. Windows path; on macOS/Linux
   // it would be spendwise/.venv/bin/python.
-  "python.defaultInterpreterPath": "${workspaceFolder}/spendwise/.venv/Scripts/python.exe"
+  "python.defaultInterpreterPath": "${workspaceFolder}/spendwise/.venv/Scripts/python.exe",
+  // The backend imports itself as "app.…", and the app package lives in spendwise/backend.
+  "python.analysis.extraPaths": ["spendwise/backend"]
 }

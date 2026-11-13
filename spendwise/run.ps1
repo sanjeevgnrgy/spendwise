@@ -30,7 +30,9 @@ try {
     }
 
     # Calling the venv's python directly means no activation is needed.
-    & $python -m uvicorn backend.main:app --reload @args
+    # --app-dir backend: the code imports itself as "app.…", which lives inside backend/.
+    # --reload-dir backend: watch only our code, not the thousands of files in .venv.
+    & $python -m uvicorn app.main:app --app-dir backend --reload --reload-dir backend @args
 }
 finally {
     Pop-Location

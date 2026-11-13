@@ -4,5 +4,7 @@ fastapi==0.162.5
 uvicorn==0.54.0
 # Imported directly for request/response models, so it's listed even though FastAPI brings it.
 pydantic==2.14.3
+# Reads settings from .env (it installs python-dotenv for us).
+pydantic-settings==2.16.2
+sqlmodel==0.0.49
 google-genai==3.3.0
-python-dotenv==1.2.4

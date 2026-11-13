@@ -7,3 +7,7 @@ __pycache__/
 
 # Real secrets live here. Only .env.example (no real values) is committed.
 .env
+
+# Local SQLite database: your data, recreated by the app and backend/seed.py.
+*.db
+*.db-journal

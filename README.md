@@ -1,55 +1,173 @@
-# SpendWise
+# 💸 SpendWise
 
-An agentic expense tracker, built one small phase at a time as a learning project.
+<div align="center">
+  <img src="https://img.shields.io/badge/Python-3.14-3776AB?logo=python&logoColor=white" alt="Python 3.14" />
+  <img src="https://img.shields.io/badge/FastAPI-0.162-009688?logo=fastapi&logoColor=white" alt="FastAPI" />
+  <img src="https://img.shields.io/badge/SQLAlchemy-2.1_+_Alembic-D71F00?logo=sqlalchemy&logoColor=white" alt="SQLAlchemy and Alembic" />
+  <img src="https://img.shields.io/badge/SQLite-local_file-003B57?logo=sqlite&logoColor=white" alt="SQLite" />
+  <img src="https://img.shields.io/badge/Google_Gemini-Interactions_API-8E75B2?logo=googlegemini&logoColor=white" alt="Google Gemini" />
+  <img src="https://img.shields.io/badge/MCP-Python_SDK_2.3-000000?logo=anthropic&logoColor=white" alt="Model Context Protocol" />
+  <img src="https://img.shields.io/badge/AG--UI-1.0-6E56CF" alt="AG-UI" />
+  <img src="https://img.shields.io/badge/A2UI-1.0-4285F4" alt="A2UI" />
+  <img src="https://img.shields.io/badge/React-19.3-61DAFB?logo=react&logoColor=black" alt="React" />
+  <img src="https://img.shields.io/badge/TypeScript-7.0-3178C6?logo=typescript&logoColor=white" alt="TypeScript" />
+  <img src="https://img.shields.io/badge/Vite-8.3-646CFF?logo=vite&logoColor=white" alt="Vite" />
+  <img src="https://img.shields.io/badge/TanStack_Query-5.107-FF4154?logo=reactquery&logoColor=white" alt="TanStack Query" />
+  <img src="https://img.shields.io/badge/Tailwind_CSS-4.3_+_shadcn%2Fui-06B6D4?logo=tailwindcss&logoColor=white" alt="Tailwind CSS and shadcn/ui" />
+</div>
+<br>
 
-**Current state (Phase 18):** a React web app (`web/`) with a sidebar layout, light/dark theme, a
-Dashboard (this month's total, category and 6-month trend charts, recent expenses), an
-Expenses page (sortable table, filters, add/edit/delete) and an Assistant chat panel on every page
-that shows the agent's reply as it's written, each tool it uses as a live status chip ("Saving expense…" → "Expense
-saved"), a card for each tool's result drawn from an A2UI description (an insight card with stats and a donut chart for
-"where did my money go?", expenses saved, updated or found), a pre-filled form (written by the model and checked, or a
-built-in one) when details are missing, Approve/Cancel buttons before anything is deleted, and refreshes the page as
-soon as a tool changes data, on top of a modular-monolith FastAPI
-backend with a REST API for expenses
-(create, list with filters, read, update, delete), a monthly summary, a categories list,
-`POST /ask` (sends a prompt to Gemini), `POST /parse` (turns a note like "Paid 450 at Swiggy
-yesterday" into a structured expense, without saving it), `POST /chat` (a Gemini agent that
-adds, finds, summarises, updates and deletes expenses through tools, and remembers the conversation
-per `thread_id`; see it with `GET /threads/{id}`) and `POST /agent` (the same agent, streaming its reply as
-AG-UI events over Server-Sent Events; the chat panel uses this one). The same expense tools are also exposed to any MCP client (MCP Inspector, Claude
-Desktop) by an MCP server at `/mcp/` and over stdio. `backend/seed.py` fills the database with sample
-data.
+<div align="center">
+  <img src="./docs/images/hero.png" alt="The SpendWise Dashboard: this month's total, spending by category, the 6-month trend and recent expenses" width="100%" />
+</div>
+<br>
 
-## Requirements
+**SpendWise** is an agentic expense tracker. You record and explore expenses on a web app, or ask an AI assistant
+in plain words: *"add 250 for lunch at Subway"*, *"where did my money go this month?"*, *"delete #14"*. The assistant
+works through the same rules as the app: it reads and changes data only through MCP tools, streams its answer and
+its tool activity live (AG-UI), shows cards, charts and forms drawn from data (A2UI), and never deletes anything
+until you press **Approve**.
 
-- Python 3.11 or newer (developed on 3.14)
-- Node.js 20 or newer, for the web app (developed on 24)
-- Commands below are for Windows PowerShell. macOS/Linux equivalents are noted where they differ.
+It's built as a **learning project**, one phase at a time, on a **FastAPI modular monolith with CQRS** and a
+**React app organised as feature slices**. Every phase has its own notes with the concepts, how to test it, and
+questions to check your understanding ([docs/](docs/README.md)).
 
-## Quick start (Windows)
+---
+
+## 🏗️ System Architecture
+
+One backend process, deployed as one unit, divided into **modules by business domain** that talk only through
+their contracts and a **command/query bus**. The web app talks to it through a **generated, typed contract**.
+
+```mermaid
+flowchart TD
+    subgraph Browser ["Browser: React 19 SPA (web/)"]
+        direction LR
+        F_EXP["features/expenses<br/>table, filters, add & edit"]
+        F_DASH["features/dashboard<br/>stats, charts, recent"]
+        F_CAT["features/categories"]
+        F_AST["features/assistant<br/>chat, AG-UI stream, A2UI renderer"]
+        SHARED["shared/<br/>typed HTTP client (generated), ui kit, theme"]
+    end
+
+    subgraph Host ["FastAPI app (backend/app/main.py)"]
+        REST["/api/v1 REST<br/>RFC 9457 problem details"]
+        AGUI["/api/v1/agent<br/>AG-UI over Server-Sent Events"]
+        MCPHTTP["/mcp/ Streamable HTTP<br/>bearer token (optional)"]
+    end
+
+    subgraph Modules ["Modules (backend/app/modules/)"]
+        CAT["categories<br/>commands · queries"]
+        EXP["expenses<br/>commands · queries · domain<br/>optimistic concurrency"]
+        CONV["conversations<br/>provider-neutral history"]
+        AST["assistant<br/>agent loop · approvals · A2UI cards & forms"]
+        MCP["mcp<br/>tools & resources (adapter)"]
+    end
+
+    subgraph Core ["core/ (no business rules)"]
+        BUS["MessageBus<br/>CQRS + unit of work"]
+        LLM["LLM port<br/>Gemini adapter"]
+        INFRA["config · db · clock · money · errors"]
+    end
+
+    DB[("SQLite<br/>Alembic migrations")]
+    GEM["Google Gemini API"]
+    EXT["MCP clients<br/>Inspector, Claude Desktop"]
+
+    Browser -->|"openapi-fetch + TanStack Query"| REST
+    F_AST -->|"fetch + SSE, validated with @ag-ui/core"| AGUI
+    REST --> BUS
+    AGUI --> AST
+    AST -->|"in-process MCP client"| MCP
+    AST --> LLM
+    MCP --> BUS
+    MCPHTTP --> MCP
+    EXT -->|"stdio or HTTP"| MCP
+    BUS --> CAT & EXP & CONV & AST
+    CAT & EXP & CONV & AST --> DB
+    LLM --> GEM
+```
+
+---
+
+## 🌟 Core Architectural Principles
+
+- **Modular monolith, strictly bounded:** each module (`categories`, `expenses`, `conversations`, `assistant`) owns
+  its tables, contracts and handlers. Another module's names come only from its package (`app.modules.expenses`), never
+  its files; no module queries another's tables; links are plain ids with no cross-module foreign keys.
+  `core/` never imports a module, and `bootstrap.py` is the one composition root.
+- **CQRS-lite with a unit of work:** every operation is a **command** (changes data, returns at most an id) or a
+  **query** (reads, changes nothing), sent through `MessageBus`. The bus opens one session per outermost command,
+  commits once, rolls back on error, and gives nested commands a SAVEPOINT. Same database for reads and writes.
+- **Ports and adapters:** the LLM (`core/llm`: provider-neutral messages, Gemini behind a `LanguageModel` port) and the
+  assistant's expense tools (an `ExpenseTools` port over MCP) are interfaces; the composition root picks the adapter.
+  Chat history is stored in SpendWise's own message format, so another provider is one new adapter.
+- **MCP is the agent's only door to data:** the assistant has no tools of its own. It discovers this app's MCP server
+  and calls it **in-process** by default (no HTTP to itself). Tools return **typed, structured results**
+  (`outputSchema`), so cards never guess at JSON keys.
+- **Human in the loop, enforced by the server:** in the web panel the model can't delete. A delete becomes an
+  Approve/Cancel card; the server keeps a snapshot of what the card showed, and Approve deletes only that **version**
+  (checked in the `DELETE` statement itself). Each card decides once, in its own thread, within 15 minutes.
+- **Server-driven UI, safely:** cards and forms are **A2UI** descriptions (data, not HTML). The renderer maps an
+  allow-list of components to its own, refuses unknown catalogs, loops, runaway sizes and deep nesting, and puts
+  every card behind its own error boundary.
+- **Streaming you can follow:** replies stream as **AG-UI** events (text, tool calls with live status chips, state,
+  cards); the browser validates every event with AG-UI's own schemas, and a **Stop** button ends a run.
+- **Feature slices on the web:** `features/<name>/` owns its components, hooks, API calls and types and exports
+  through `index.ts`; `shared/` knows no feature; `app/` composes them. Lint rules enforce it.
+- **One contract, generated:** REST types (OpenAPI → `schema.gen.ts`) and protocol names, labels and limits
+  (`contracts.gen.ts`) come from the backend. No magic strings, nothing copied by hand.
+- **Correct by construction:** money as integer paise with `Decimal`, Alembic migrations (atomic on SQLite too),
+  RFC 9457 problem details for every error, a `Clock` instead of `date.today()`, and user data logged only at DEBUG.
+
+---
+
+## 📚 Documentation Index
+
+| Category | Guide | Description |
+|---|---|---|
+| **Overview & Architecture** | [**Overview**](./docs/overview.md) | What SpendWise does, its features, the tech stack and the roadmap. |
+| | [**Architecture**](./docs/architecture.md) | Module rules, CQRS and the bus, request flows, feature slices, the shared contract, adding a module. |
+| | [**Assistant Architecture**](./docs/assistant_architecture.md) | The agent loop, tools over MCP, AG-UI streaming, A2UI cards and forms, approvals, memory and cost. |
+| | [**How SpendWise Works**](./docs/how_spendwise_works.md) | The main flows as diagrams: recording, asking, deleting with approval, data staying in sync. |
+| | [**Architecture Review**](./docs/architecture-review.md) | Every finding of the architecture review and the code reviews, and how each was resolved. |
+| | [**Decision Log**](./docs/decisions.md) | Every design decision, with why, and when to revisit it. |
+| **Developer Onboarding** | [**Getting Started**](./docs/getting_started.md) | Setup from zero: Python, Node, `.env`, migrations, sample data, the web app, MCP clients. |
+| | [**Backend Onboarding**](./docs/backend_onboarding.md) | Working in the backend: adding a command, query, route, migration or MCP tool, step by step. |
+| | [**Frontend Onboarding**](./docs/frontend_onboarding.md) | Working in the web app: feature slices, TanStack Query, the generated client, the A2UI renderer. |
+| | [**Web README**](./web/README.md) | The web app's scripts and folders. |
+| **Contracts, Schema & Security** | [**API Endpoints**](./docs/api_endpoints.md) | Every REST route, the AG-UI stream, MCP tools and resources, the error format, with examples. |
+| | [**Database Schema**](./docs/database_schema.md) | Tables, columns, indexes, which module owns what, and the migrations. |
+| | [**Configuration**](./docs/configuration.md) | Every setting (backend `.env`, web `.env`), defaults, and the generated contract. |
+| | [**Security**](./docs/security.md) | What protects what (CORS, MCP token, approvals, prompt injection, the renderer), and known gaps. |
+| **Learning Notes** | [**Phase notes**](./docs/README.md) | Phases 1–18 and the refactor: concepts, what was built, how to test, questions. |
+| | [**Sources**](./docs/sources.md) | What the official docs, specs and library code say, with links. |
+| | [**Gemini**](./docs/gemini.md) · [**Troubleshooting**](./docs/troubleshooting.md) · [**Git**](./docs/git.md) | Models and the free tier; problems already hit; committing safely. |
+
+---
+
+## ⚡ Quick Start (Windows)
+
+### 1. Start the backend
 
 From the project folder (the repo root, where `run.ps1` is):
 
 ```powershell
 Copy-Item .env.example .env     # once, then paste your Gemini API key into .env
-.\run.ps1                       # creates .venv, installs requirements, starts the server
+.\run.ps1                       # creates .venv, installs requirements, runs the migrations, starts the server
 ```
 
-In a second terminal, add sample data (safe to run more than once):
+> [!IMPORTANT]
+> **A Gemini API key is needed for the assistant.** Get one at https://aistudio.google.com/apikey and put it after
+> `GEMINI_API_KEY=` in `.env`. Everything else (the Dashboard, the Expenses page, the REST API, MCP) works without it.
+
+### 2. Add sample data (optional, safe to run more than once)
 
 ```powershell
 .\.venv\Scripts\python.exe backend\seed.py
 ```
 
-`run.ps1` creates `.venv` on the first run, installs `requirements.txt` whenever that file has
-changed, and starts the server with auto-reload. No activation is needed. Extra arguments are
-passed to uvicorn, for example `.\run.ps1 --port 8001`.
-
-Get a Gemini API key at https://aistudio.google.com/apikey and put it after `GEMINI_API_KEY=` in `.env`.
-If PowerShell refuses to run the script, allow local scripts once with
-`Set-ExecutionPolicy -Scope CurrentUser RemoteSigned`, then try again.
-
-**The web app**, in another terminal, with the backend running:
+### 3. Start the web app
 
 ```powershell
 cd web
@@ -57,172 +175,101 @@ npm install      # first time, and after package.json changes
 npm run dev      # then open http://localhost:5173
 ```
 
-## Manual setup (any OS)
+Requirements: Python 3.11+ (developed on 3.14) and Node.js 20+ (developed on 24). Full setup, macOS/Linux commands
+and MCP clients: [docs/getting_started.md](docs/getting_started.md).
 
-What `run.ps1` does, step by step. From the project folder:
+---
 
-```powershell
-py -3 -m venv .venv                         # macOS/Linux: python3 -m venv .venv
-.\.venv\Scripts\Activate.ps1                # macOS/Linux: source .venv/bin/activate
-python -m pip install -r requirements.txt
-Copy-Item .env.example .env                 # macOS/Linux: cp .env.example .env
-python -m uvicorn app.main:app --app-dir backend --reload --reload-dir backend
-python backend/seed.py                      # in a second terminal
-```
+## 🌐 Local Access Points
 
-`--app-dir backend` is needed because the code imports itself as `app.…`, and the `app`
-package lives inside `backend/`.
+| Service | Local URL | Purpose |
+|---|---|---|
+| **Web app (React)** | `http://localhost:5173` | Dashboard, Expenses page, the Assistant panel |
+| **Backend API (FastAPI)** | `http://127.0.0.1:8000/api/v1` | REST API (expenses, categories, summaries, the assistant) |
+| **API docs (Swagger UI)** | `http://127.0.0.1:8000/docs` | Try every route in the browser; ReDoc at `/redoc` |
+| **OpenAPI document** | `http://127.0.0.1:8000/openapi.json` | The contract the web app's types are generated from |
+| **Health check** | `http://127.0.0.1:8000/health` | `{"status": "ok"}` when the server and its database are up |
+| **AG-UI stream** | `POST http://127.0.0.1:8000/api/v1/agent` | The assistant's streamed runs (Server-Sent Events) |
+| **MCP over HTTP** | `http://127.0.0.1:8000/mcp/` | Only when `MCP_TOKEN` is set; send `Authorization: Bearer <token>` |
+| **MCP over stdio** | `.\.venv\Scripts\python.exe backend\mcp_stdio.py` | For MCP Inspector and Claude Desktop; no web server needed |
 
-## Check it works
+---
 
-With the server running:
-
-- http://127.0.0.1:8000/health → `{"status":"ok"}`
-- http://127.0.0.1:8000/docs → interactive API docs (Swagger UI): try every route from here
-- http://127.0.0.1:8000/categories → the 8 categories
-- http://127.0.0.1:8000/expenses?search=grocer → expenses whose merchant or note contains "grocer"
-- http://127.0.0.1:8000/summary?month=2026-11 → that month's total and per-category totals
-- http://127.0.0.1:8000/summary/trend?months=6 → totals for each of the last 6 months (the Dashboard's line chart)
-- `POST /parse` in `/docs` with `{"text": "Paid 450.50 at Swiggy yesterday via GPay"}` → the parsed expense
-  and `missing_fields` (needs your Gemini key; nothing is saved)
-- `POST /chat` in `/docs` with `{"message": "How much did I spend on food this month?"}` → a reply plus the
-  tools the agent called; watch the server terminal to see each step (needs your Gemini key; `/chat` can change data).
-  Send the reply's `thread_id` with your next message to continue the same conversation, and view it with
-  `GET /threads/{thread_id}`
-- `POST /agent` streams the same agent's reply as AG-UI events (text, tool calls, state); watch it arrive with
-  `curl.exe -N` as shown in [docs/phases/phase-15-tool-progress.md](docs/phases/phase-15-tool-progress.md#test-it-by-hand)
-
-The full route list, filters, status codes and example requests are in
-[docs/phases/phase-4-expenses-api.md](docs/phases/phase-4-expenses-api.md).
-
-To try Gemini, open `/docs`, expand **POST /ask**, click **Try it out**, send
-`{"prompt": "Give me one tip to save money on groceries."}` and click **Execute**.
-A working setup returns `200` with `{"answer": "..."}`. A missing key returns `500` (the
-terminal says which setting is missing); a wrong key returns `502` with Google's error message.
-
-The seed script prints the 10 sample expenses it saved, each in rupees and in paise.
-The database is the file `backend/spendwise.db`; delete it to start from an empty database.
-
-## MCP server
-
-With the app running, MCP clients can connect to `http://127.0.0.1:8000/mcp/` (Streamable HTTP; keep the
-trailing slash). To explore it by hand in the MCP Inspector, over stdio (needs Node.js and uv):
-
-```powershell
-.\.venv\Scripts\mcp.exe dev backend\mcp_stdio.py
-```
-
-The assistant behind `POST /chat` and `POST /agent` uses this same server: it connects to `MCP_URL` (default
-`http://127.0.0.1:8000/mcp/`) to find and run its tools. If you start the app on another port, set
-`MCP_URL` in `.env` to match.
-
-Tools: `add_expense`, `list_expenses`, `get_summary`, `update_expense`, `delete_expense`. Resources:
-`expenses://categories`, `expenses://recent`. Inspector steps and Claude Desktop setup:
-[docs/phases/phase-9-mcp-module.md](docs/phases/phase-9-mcp-module.md).
-
-## Architecture: modular monolith
-
-One FastAPI app, one deployable, one database, split inside into **modules by business
-domain** (expenses, categories, assistant, ...). A module talks to another only through that
-module's public interface (`modules/<name>/__init__.py`) and never touches its tables.
-Full rules, request flow and how to add a module: [docs/architecture.md](docs/architecture.md).
-
-## Documentation
-
-[docs/](docs/README.md) has the learning notes for each phase, the decision log, Gemini setup
-and free-tier notes, and troubleshooting.
-
-## Project layout
+## 📁 Project Layout
 
 ```
 spendwise/
   backend/
     app/
-      main.py              composition root: creates the app, includes module routers
-      core/
-        config.py          settings from .env (pydantic-settings)
-        db.py              database engine, table creation, get_session / SessionDep
-        errors.py          NotFoundError -> 404, BusinessRuleError -> 422, ExternalServiceError -> 502
-        logging.py         console logging for SpendWise's own messages
-        money.py           rupees <-> paise helpers
-        llm.py             the one place that talks to Gemini (plain, structured output, streamed tool steps)
+      main.py             the web app: routes under /api/v1, /health, /mcp/, error handling, CORS
+      bootstrap.py        the composition root: modules, bus, LLM adapter, MCP server, routers
+      migrations.py       run or check the database migrations from code
+      core/               config, db, cqrs (the bus), errors, clock, months, money, logging, llm/ (port + Gemini)
       modules/
-        assistant/         POST /ask, /parse, /chat, /agent (AG-UI stream), GET /threads; ChatMessage table (+ parse, agent, mcp_client, a2ui/)
-        mcp/               MCP server: expense tools and resources for any MCP client, mounted at /mcp/
-        categories/        Category table, GET /categories, public interface
-        expenses/          Expense table, CRUD routes, GET /summary, public interface
-    seed.py                default categories and sample expenses
-    mcp_stdio.py           runs the MCP server over stdio (MCP Inspector, Claude Desktop)
-    spendwise.db           local SQLite database (git-ignored, created automatically)
-  web/                     React frontend (see web/README.md)
-    src/api.ts             every call to the backend
-    src/pages/expenses/    the Expenses page: table, filters, add dialog, inline edit
-    src/pages/dashboard/   the Dashboard: cards, charts, recent expenses
-    src/components/chat/   the Assistant chat panel (state in src/hooks/use-chat.ts)
-    src/components/a2ui/   the A2UI renderer: allowed components -> shadcn/ui (messages checked in src/lib/a2ui.ts)
-    src/components/ui/     shadcn/ui components (copied source, editable)
-  run.ps1                  one-command dev start (Windows)
-  requirements.txt         pinned direct dependencies
-  .env.example             names of the settings the app expects (no secret values)
-  .env                     your real settings and API key (git-ignored, you create it)
-  docs/                    learning notes, decisions, Gemini notes, troubleshooting
-  README.md
+        categories/       contracts, tables, commands, queries, api, module
+        expenses/         + domain rules and the write-side repository
+        conversations/    chat threads, stored as provider-neutral messages
+        assistant/        agent loop, use cases, approvals, AG-UI adapter, tools port, a2ui/ cards & forms
+        mcp/              MCP server: typed tool contract, tools, resources, HTTP endpoint
+    migrations/           Alembic: 0001 baseline, 0002 conversations + approvals, 0003 expense versions
+    scripts/              export_contracts.py: the contract for the web app
+    seed.py               sample categories and expenses
+    mcp_stdio.py          the MCP server over stdio
+  web/
+    src/app/              providers, routes, layout
+    src/features/         expenses, categories, dashboard, assistant
+    src/shared/           ui kit, typed API client + generated contract, config, formatting, theme
+  docs/                   learning notes, architecture, onboarding, API, schema, security, decisions
+  run.ps1                 one-command dev start (Windows)
+  requirements.txt        pinned backend dependencies
+  .env.example            every setting the app reads, with no secret values
 ```
 
-## Conventions
+---
+
+## 📏 Conventions
 
 ### Virtual environment
 
 - One venv per project, in `.venv` in the project folder. Never install project packages into the global Python.
-- Activate it before working. Your prompt should start with `(.venv)`.
-  To double-check, `python -c "import sys; print(sys.prefix)"` should print a path ending in `.venv`.
-- Run tools as `python -m pip` and `python -m uvicorn` rather than bare `pip` / `uvicorn`.
-  This guarantees the tool runs with the same Python that runs the app.
-- `.venv` is never committed. It can be deleted and rebuilt from `requirements.txt` at any time.
-- If you move or rename the project folder, delete `.venv` and create it again:
-  a venv stores absolute paths and stops working when moved.
+- Run tools as `python -m pip`, `python -m uvicorn`, `python -m alembic` rather than bare commands, so they run with
+  the same Python as the app. `run.ps1` calls the venv's Python directly, so no activation is needed.
+- `.venv` is never committed and can be rebuilt from `requirements.txt` at any time. If you move or rename the
+  project folder, delete `.venv` and create it again: a venv stores absolute paths.
 - In VS Code, the repo's `.vscode/settings.json` already points at `.venv`.
 
 ### Dependencies
 
-- `requirements.txt` lists direct dependencies only, pinned to exact versions (`package==x.y.z`),
-  so every machine installs the same thing.
-- To add a dependency:
-  1. With the venv active, run `python -m pip install <package>`.
-  2. Run `python -m pip show <package>` to read the installed version.
-  3. Add `<package>==<version>` to `requirements.txt`.
-  4. Commit `requirements.txt` in the same commit as the code that uses the package.
-- Upgrade deliberately: change the pin, reinstall, test again, then commit.
+- `requirements.txt` and `web/package.json` pin **exact** versions, so every machine installs the same thing.
+- To add a backend dependency: `python -m pip install <package>`, read the version with `python -m pip show
+  <package>`, add `<package>==<version>` to `requirements.txt`, and commit it with the code that uses it.
+- To add a web dependency: `npm install --save-exact <package>@<version>`.
 
 ### Configuration and secrets
 
-- Secrets and machine-specific settings (API keys, database URLs) live in `.env`, never in code.
-- `.env` is git-ignored. `.env.example` is committed and lists every setting name with no real values.
-- All settings are read in one place, `backend/app/core/config.py`. Real environment variables
-  override values in `.env`.
-- When a phase adds a new setting, add its name to `.env.example` in the same commit.
+- Secrets and machine-specific settings live in `.env`, never in code. `.env` is git-ignored; `.env.example` is
+  committed and lists every setting with no real values. All settings are read in `backend/app/core/config.py`;
+  real environment variables override `.env`. Details: [docs/configuration.md](docs/configuration.md).
 
 ### Money
 
-- Amounts are stored as whole **paise** (integer minor units) plus a currency code, default `INR`:
-  450.50 rupees is stored as `45050`.
-- Convert only with `app.core.money` (`rupees_to_paise`, `paise_to_rupees`), which use `Decimal`.
-  Never put money through a `float`.
+- Amounts are stored as whole **paise** (integer minor units) plus a currency code, default `INR`: 450.50 rupees is
+  stored as `45050`. Convert only with `app.core.money`, which uses `Decimal`. Never put money through a `float`.
 
-### Generated files
+### Database and generated files
 
-- `__pycache__/` folders hold compiled bytecode that Python creates and refreshes automatically on import.
-  They are git-ignored and safe to delete at any time; Python rebuilds them on the next run.
-- `backend/spendwise.db` is your local data. It's git-ignored and recreated (empty) when the server starts.
+- `backend/spendwise.db` is your local data (git-ignored). Its tables are created and changed only by **migrations**;
+  `.\run.ps1` and `seed.py` run them. To start from scratch, delete the file and run `seed.py`.
+- `web/src/shared/api/*.gen.ts` and `web/openapi.json` are generated from the backend: after changing an API, run
+  `.\.venv\Scripts\python.exe backend\scripts\export_contracts.py`, then `npm run gen:api` in `web/`, and commit them.
+- `__pycache__/` and `web/dist/` are build output: git-ignored and safe to delete.
 
 ### What gets committed
 
 | Commit | Never commit |
 |---|---|
-| Source code (`backend/`, ...) | `.venv/` |
-| `requirements.txt` | `__pycache__/`, `*.pyc` |
-| `.env.example` | `.env` |
-| `.gitignore`, `README.md`, `docs/`, `run.ps1` | `*.db` (your local database) |
+| Source code (`backend/`, `web/src/`), migrations, generated contracts | `.venv/`, `node_modules/`, `web/dist/` |
+| `requirements.txt`, `web/package.json`, `web/package-lock.json` | `__pycache__/`, `*.pyc` |
+| `.env.example`, `docs/`, `README.md`, `run.ps1` | `.env`, `*.db` (your local database) |
 
-Before each commit, check that `git status` lists none of the files in the right-hand column.
-Update `docs/` in the same commit as the code it describes (see [docs/README.md](docs/README.md)).
+Update `docs/` in the same commit as the code it describes ([docs/README.md](docs/README.md)).

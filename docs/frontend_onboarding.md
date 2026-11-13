@@ -1,0 +1,209 @@
+# Frontend Onboarding
+
+A working guide to the web app (`web/`): React 19, TypeScript 7, Vite 8, Tailwind 4 and shadcn/ui, organised as
+**feature slices**, with server data through **TanStack Query** and a client **generated from the backend**.
+
+## Running it
+
+```powershell
+cd web
+npm install          # first time, and after package.json changes
+npm run dev          # http://localhost:5173 (the backend must be running on :8000)
+npm run build        # type-check (tsc -b) and build into dist/
+npx oxlint           # lint, including the feature-slice import rules
+npm run gen:api      # regenerate API types from openapi.json (after the backend's export script)
+```
+
+## Folder structure: feature slices
+
+```
+src/
+  app/                  composes the app; the only place that knows every feature
+    main.tsx            entry: root error boundary, providers, <App />
+    providers.tsx       TanStack Query, theme, tooltips, router, the assistant, toasts
+    query-client.ts     the cache, retry rules, and THE "expenses changed" refresh rule
+    pages.tsx           every page once: path, title, icon, element (router and menu both use it)
+    app.tsx             the routes
+    layout/             sidebar, top bar, the page area (with its error boundary), the chat panel's place
+  features/
+    expenses/           Expenses page: table, edit row, add & delete dialogs, filters
+    categories/         categories API + queries, CategorySelect, category names
+    dashboard/          Dashboard page: stat cards, charts, recent list
+    assistant/          chat panel, conversation model, AG-UI stream, A2UI renderer
+  shared/               used by any feature; knows none of them
+    api/                typed HTTP client (http.ts) + generated contract (*.gen.ts)
+    ui/                 shadcn/ui components (generated source; edit freely)
+    components/         error boundary, section error, refresh notice, empty state, placeholder page
+    config/             app name, env, routes, locale, data scopes
+    hooks/, lib/        use-mobile, use-debounced-value; formatting, guards, errors, ids
+    theme/              theme constants, provider, toggle
+```
+
+### The rules (enforced by `npx oxlint`)
+
+| Rule | Why |
+|---|---|
+| A feature owns its components, hooks, API calls, types and constants | one place to look, and to change |
+| Other code imports a feature **only through its `index.ts`** (`@/features/expenses`) | the index is the feature's contract; its files can change freely |
+| Inside a feature, imports are **relative** (`../queries`) and never climb out of it | `@/features/x/...` from inside x would look like a deep import |
+| `shared/` imports no feature and nothing from `app/` | anything may use it, so it can't depend on anything above it |
+| Only `app/` wires features together | e.g. the assistant says "data changed"; `app/` decides what reloads |
+
+Cross-feature imports are allowed through the index, but keep them few (today: the Dashboard uses `useExpenses` and
+`useCategories`; Expenses uses `CategorySelect`).
+
+## Anatomy of a feature
+
+```
+features/expenses/
+  index.ts             public API: ExpensesPage, expenseKeys, useExpenses, type Expense
+  api.ts               typed API calls + the types (from the generated schema)
+  queries.ts           TanStack Query keys, hooks and mutations
+  expense-form.ts      a draft's rules: empty, from an expense, to a request, what changed
+  payment-methods.ts   labels and the list, from the generated contract
+  components/          the page and its parts
+```
+
+## Talking to the backend
+
+### The typed client
+
+`shared/api/http.ts` creates one **openapi-fetch** client typed by `schema.gen.ts`, which is generated from the
+backend's OpenAPI document. A path, parameter or body the API doesn't accept is a compile error:
+
+```ts
+// features/expenses/api.ts
+export type Expense = Schemas["ExpenseRead"]          // types come from the backend, never written by hand
+
+export function listExpenses(filters: ExpenseFilters, signal?: AbortSignal): Promise<ExpenseList> {
+  return unwrap(api.GET("/api/v1/expenses", { params: { query: filters }, signal }))
+}
+```
+
+- `unwrap()` returns the data, or throws an **`ApiError`** with the problem's `detail` (every backend error is an RFC
+  9457 problem). A dropped connection becomes "Can't reach the SpendWise API…".
+- `unwrapEmpty()` is for 204 answers (deletes).
+- An aborted request (the page was left, Stop was pressed) is re-thrown as is, so TanStack Query can ignore it.
+
+### Server state: TanStack Query
+
+Each feature defines **keys** and **hooks** in `queries.ts`:
+
+```ts
+export const expenseKeys = {
+  all: ["expenses"] as const,
+  list: (filters: ExpenseFilters) => [...expenseKeys.all, "list", filters] as const,
+}
+
+export function useExpenses(filters: ExpenseFilters) {
+  return useQuery({
+    queryKey: expenseKeys.list(filters),
+    queryFn: ({ signal }) => listExpenses(filters, signal),   // cancelled when no longer needed
+    placeholderData: keepPreviousData,                        // keep old rows while new filters load
+  })
+}
+```
+
+**Mutations declare what they changed**, and the app decides what that makes stale:
+
+```ts
+export function useCreateExpense() {
+  return useMutation({ mutationFn: createExpense, meta: { changes: DATA_SCOPES.expenses } })
+}
+// app/query-client.ts: a MutationCache onSettled → refreshExpenseData() → invalidate expenses + dashboard
+```
+
+The assistant uses the same rule: on a `STATE_SNAPSHOT` it calls `onDataChanged`, which `app/providers.tsx` wires to
+`refreshExpenseData()`. So no feature needs to know which pages show expenses.
+
+Never fetch in a `useEffect` by hand: use a query.
+
+### Loading and errors on a page
+
+| State | Show |
+|---|---|
+| nothing loaded yet | a skeleton (`DashboardSkeleton`) or "Loading…" |
+| nothing loaded, request failed | `<SectionError>` with **Try again** (retrying only what failed) |
+| data on screen, a reload failed | keep the data, add `<RefreshNotice>` ("Couldn't refresh, so this may be out of date") |
+| a mutation failed | a toast with the problem's message (`messageOf(error)`); keep the user's input |
+
+## The generated contract
+
+| File | Holds | Use it for |
+|---|---|---|
+| `shared/api/schema.gen.ts` | every route's types, plus enum value lists (`paymentMethodValues`) | `Schemas["ExpenseRead"]`, `paths`, enums |
+| `shared/api/contracts.gen.ts` | `API_PREFIX`, `LIMITS`, `PAYMENT_METHOD_LABELS`, `UNKNOWN_CATEGORY`, `CURRENCY_SYMBOLS`, `A2UI` (catalogs, components, chart types, actions), `AGUI` (event names, metadata keys) | any value the backend also uses |
+
+Never edit them. After a backend change: run `backend\scripts\export_contracts.py`, then `npm run gen:api`.
+
+## UI
+
+- **shadcn/ui** components live in `shared/ui/` as source (`components.json` points the shadcn CLI there:
+  `npx shadcn@latest add <name>`). They're the only files the lint rules don't hold to app standards.
+- **Tailwind 4** with CSS variables (`app/index.css`); dark mode is a `dark` class on `<html>`, set before the first
+  paint by a script generated from `shared/theme/theme-constants.ts`.
+- **Formatting** goes through `shared/lib/format.ts`: `formatMoney("1250.5", "INR")` → `₹1,250.50` (the same rule as
+  the backend's cards), `formatDate`, `formatMonth`, `plural`.
+- **Charts:** shadcn charts (Recharts 3). A chart config's keys become CSS variables; keep configs fixed.
+
+## The assistant feature
+
+| File | Job |
+|---|---|
+| `model/assistant-provider.tsx`, `model/assistant-context.ts` | holds the conversation above the pages (it survives closing the panel); `useAssistant()` |
+| `model/use-chat.ts` | the conversation: messages, tool chips, cards, sending, **Stop**, form values and submits |
+| `api/agent-stream.ts` | `runAgent()`: POST the run, read the SSE stream, validate each event with `@ag-ui/core`'s schemas |
+| `components/` | chat panel, message bubble, tool chip |
+| `a2ui/` | the A2UI renderer: `protocol.ts` (messages, data model, size check), `a2ui-surface.tsx` (the component switch), inputs, insights (Chart, Stat), `basic-catalog.ts` (the spec's vocabulary and limits) |
+
+How it works end to end: [assistant_architecture.md](assistant_architecture.md).
+
+## Recipes
+
+### Add a page
+
+1. Build it in its feature (`features/budgets/components/budgets-page.tsx`) and export it from the feature's
+   `index.ts`.
+2. Add its address to `shared/config/routes.ts`.
+3. Add one entry to `PAGES` in `app/pages.tsx` (path, title, icon, element). The router and the sidebar both follow.
+
+### Add a feature
+
+`features/<name>/` with `index.ts`, `api.ts` (calls through `api` + `unwrap`), `queries.ts` (keys, hooks; mutations
+with `meta.changes`), and `components/`. If its changes should refresh other data, add a scope to
+`shared/config/data-scopes.ts` and a rule to `app/query-client.ts`.
+
+### Add an API call
+
+1. The backend route exists and the contract is regenerated.
+2. A function in the feature's `api.ts`: `unwrap(api.GET("/api/v1/...", { params, signal }))`.
+3. A hook in `queries.ts` with a key under the feature's `all`.
+
+### Draw a new A2UI component
+
+1. The backend allows it (a model in `assistant/a2ui/models.py`, added to `Component`), so it's in
+   `A2UI.components` after regenerating.
+2. A `case A2UI.components.X:` in `a2ui-surface.tsx` (or `a2ui-insights.tsx` for the insights catalog) that reads
+   each property defensively (`typeof`, `pick()`, `textOf()`), never trusting the shape.
+
+## Conventions
+
+- **Types, not casts:** network data is checked (`isObject`, schema validation) rather than asserted with `as`.
+- **No magic strings or numbers:** a value used twice, or shared with the backend, is a named constant: in the
+  feature, in `shared/config`, or from the generated contract.
+- **Effects only for the outside world** (subscriptions, timers, the DOM); derive everything else during render.
+  `useSyncExternalStore` for browser state like media queries.
+- **Error boundaries** around the app, the page area, the chat panel and every A2UI card.
+- **Accessibility:** every control has a label (a `<Label>`, or an `aria-label` naming its row: "Edit #14"); sortable
+  headers set `aria-sort`; the chat transcript is a `role="log"` live region; real list and status elements over ARIA
+  roles; `npx oxlint` runs jsx-a11y.
+- **Comments say why**, in plain words.
+
+## Checking your change
+
+There are no automated tests yet (the owner adds them later). Before asking for a review:
+
+1. `npx tsc -b` and `npx oxlint` are clean (warnings only inside `shared/ui`).
+2. `npm run build` passes.
+3. Try it in the browser with the backend running: the happy path, an error (stop the backend), and a narrow window.
+4. If the backend changed: the contract is regenerated and committed.

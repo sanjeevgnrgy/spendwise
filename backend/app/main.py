@@ -4,7 +4,9 @@ from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
+from fastapi.middleware.cors import CORSMiddleware
 
+from app.core.config import settings
 from app.core.db import create_db_and_tables
 from app.core.errors import register_error_handlers
 from app.core.logging import setup_logging
@@ -32,8 +34,18 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
 
 
 setup_logging()
-app = FastAPI(title="SpendWise API", version="0.9.0", lifespan=lifespan)
+app = FastAPI(title="SpendWise API", version="0.11.0", lifespan=lifespan)
 register_error_handlers(app)
+
+# The web app (Vite, port 5173) is a different origin from this API (port 8000), so browsers
+# block it from reading our responses unless we say it's allowed. Only the listed origins are;
+# any other website a user visits still can't use this API through their browser.
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=settings.cors_origins,
+    allow_methods=["GET", "POST", "PATCH", "DELETE"],
+    allow_headers=["Content-Type"],
+)
 
 
 @app.get("/health")

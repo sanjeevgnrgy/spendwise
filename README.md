@@ -2,7 +2,9 @@
 
 An agentic expense tracker, built one small phase at a time as a learning project.
 
-**Current state (Phase 8):** a modular-monolith FastAPI backend with a REST API for expenses
+**Current state (Phase 11):** a React web app (`web/`) with a sidebar layout, light/dark theme and an
+Expenses page (sortable table, filters, add/edit/delete), on top of a modular-monolith FastAPI
+backend with a REST API for expenses
 (create, list with filters, read, update, delete), a monthly summary, a categories list,
 `POST /ask` (sends a prompt to Gemini), `POST /parse` (turns a note like "Paid 450 at Swiggy
 yesterday" into a structured expense, without saving it) and `POST /chat` (a Gemini agent that
@@ -14,6 +16,7 @@ data.
 ## Requirements
 
 - Python 3.11 or newer (developed on 3.14)
+- Node.js 20 or newer, for the web app (developed on 24)
 - Commands below are for Windows PowerShell. macOS/Linux equivalents are noted where they differ.
 
 ## Quick start (Windows)
@@ -38,6 +41,14 @@ passed to uvicorn, for example `.\run.ps1 --port 8001`.
 Get a Gemini API key at https://aistudio.google.com/apikey and put it after `GEMINI_API_KEY=` in `.env`.
 If PowerShell refuses to run the script, allow local scripts once with
 `Set-ExecutionPolicy -Scope CurrentUser RemoteSigned`, then try again.
+
+**The web app**, in another terminal, with the backend running:
+
+```powershell
+cd web
+npm install      # first time, and after package.json changes
+npm run dev      # then open http://localhost:5173
+```
 
 ## Manual setup (any OS)
 
@@ -133,6 +144,10 @@ spendwise/
     seed.py                default categories and sample expenses
     mcp_stdio.py           runs the MCP server over stdio (MCP Inspector, Claude Desktop)
     spendwise.db           local SQLite database (git-ignored, created automatically)
+  web/                     React frontend (see web/README.md)
+    src/api.ts             every call to the backend
+    src/pages/expenses/    the Expenses page: table, filters, add dialog, inline edit
+    src/components/ui/     shadcn/ui components (copied source, editable)
   run.ps1                  one-command dev start (Windows)
   requirements.txt         pinned direct dependencies
   .env.example             names of the settings the app expects (no secret values)

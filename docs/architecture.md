@@ -40,7 +40,7 @@ spendwise/
     mcp_stdio.py        runs the MCP server over stdio (Inspector, Claude Desktop)
   agents/               (planned) A2A agents: receipt, insights, currency; separate services
   skills/               (planned) Agent Skills
-  web/                  (planned) React frontend
+  web/                  React + Vite + TypeScript, Tailwind, shadcn/ui (talks to the backend over HTTP)
 ```
 
 Modules and folders are added only in the phase that needs them.

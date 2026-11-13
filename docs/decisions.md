@@ -461,3 +461,55 @@ is natural. It's still a soft, model-judged guard.
 
 ### D77. Running on another port needs `MCP_URL`
 - The default assumes port 8000. With `--port 8001`, set `MCP_URL=http://localhost:8001/mcp`.
+
+---
+
+## Frontend (Phase 11)
+
+> Checked with `npm run build` (type-check and bundle); not yet opened in a browser.
+
+### D78. The frontend stack, as set up by the current tools
+- `web/` was created with `create-vite` 9 (`react-ts`): React 19, Vite 8, TypeScript 7, oxlint.
+- Tailwind CSS 4 via `@tailwindcss/vite`; the `@/` import alias in `vite.config.ts` and the tsconfig files
+  (`paths` only: TypeScript 7 dropped `baseUrl`).
+- shadcn/ui via `shadcn init -b radix -p nova` (Radix primitives, "Nova" preset: lucide icons, Geist font,
+  neutral colours, CSS variables).
+- React Router 8 (`BrowserRouter` + nested `Routes`) and TanStack Table 9.
+
+### D79. TanStack Table 9's opt-in features
+- `tableFeatures({ rowSortingFeature, rowSelectionFeature, sortedRowModel: createSortedRowModel() })` and
+  `useTable({ features, columns, data })`. Sort functions are passed per column (`sortFn: sortFn_basic` etc.),
+  which needs no registration. Cells come from `row.getAllCells()`.
+
+### D80. Filtering on the server, sorting in the browser
+- Filters go to the API as query parameters (one source of truth, and fine for large data later). Sorting is done
+  by TanStack on the rows returned, because the API has no sort parameter yet.
+- Search waits 300 ms after typing stops, and stale responses are ignored (effect clean-up).
+
+### D81. Validation stays on the server
+- The form only checks that required fields are filled. Rules like amount > 0 come back from the API and are shown
+  as toasts, so they're written once for REST, chat and MCP.
+
+### D82. Theme with `next-themes`
+- shadcn's toast component already depends on it, and it works outside Next.js. `attribute="class"` toggles `.dark`
+  on `<html>`, matching the `dark` variant shadcn put in `index.css`. Saves the choice; "System" follows the OS.
+
+### D83. All backend calls in `web/src/api.ts`
+- Typed functions per endpoint; one `request()` turns failures into `ApiError` with the backend's message
+  (`detail` string or validation list), or "Can't reach the SpendWise API" when there's no response at all.
+- The base URL is `VITE_API_URL` (default `http://localhost:8000`). Nothing secret may go in `web/.env`:
+  `VITE_` variables are visible to anyone using the app.
+
+### D84. CORS allows only the Vite dev server
+- `CORSMiddleware` with `settings.cors_origins` (default `http://localhost:5173`, `http://127.0.0.1:5173`), methods
+  GET/POST/PATCH/DELETE, header `Content-Type`, no credentials. `CORS_ORIGINS` in `.env` changes the list.
+- Not authentication: it only governs what browsers let other pages read.
+- **Revisit when:** the frontend is served from another address, or in production (then maybe serve both from one origin).
+
+### D85. Deleting always asks first
+- An AlertDialog confirms single and bulk deletes, naming the expense for single ones (project safety rule).
+  Bulk deletes run one request each with `Promise.allSettled`, and the toast reports successes and failures separately.
+
+### D86. Known warnings
+- oxlint warns about four generated shadcn files (`only-export-components`, one `set-state-in-effect`), left as shadcn ships them.
+- Vite warns the bundle is over 500 kB. **Revisit when:** more pages exist; then split routes with lazy imports.

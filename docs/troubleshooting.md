@@ -80,6 +80,27 @@ on your tier, or temporarily overloaded).
 ### `/parse` returns 422 "There are no categories yet"
 - **Fix:** run `.\.venv\Scripts\python.exe backend\seed.py`. Parsing needs the category list to choose from.
 
+## Web app
+
+### Red toast "Can't reach the SpendWise API at http://localhost:8000"
+- **Cause:** the backend isn't running, runs on another port, or the browser blocked the response (CORS).
+- **Fix:** start it with `.\run.ps1`. On another port, set `VITE_API_URL` in `web/.env` and restart `npm run dev`.
+  If the backend *is* running, check the browser console for a CORS error (next entry).
+
+### Browser console: "blocked by CORS policy: No 'Access-Control-Allow-Origin' header"
+- **Cause:** the page's address isn't in the backend's allowed origins (default `http://localhost:5173` and
+  `http://127.0.0.1:5173`). Common when Vite picks another port because 5173 is busy (it prints the URL it uses).
+- **Fix:** open the app at `http://localhost:5173`, or add its address to `CORS_ORIGINS` in `.env`
+  (a JSON list) and restart the backend.
+
+### `npm run dev`: "Cannot find module" or a blank page after pulling changes
+- **Cause:** `package.json` changed but `node_modules` wasn't updated.
+- **Fix:** run `npm install` in `web/`, then `npm run dev` again.
+
+### A shadcn component looks wrong, or I want to change it
+- shadcn/ui components are source files in `web/src/components/ui/`. Edit them like any other file.
+  `npx shadcn@latest add <name>` adds new ones; re-adding an existing one asks before overwriting.
+
 ## MCP
 
 ### `No module named 'mcp.server.fastmcp'` / tutorials say `FastMCP`

@@ -10,3 +10,5 @@ sqlmodel==0.0.49
 google-genai==3.3.0
 # The official MCP SDK. [cli] adds the `mcp` command (mcp dev, mcp install).
 mcp[cli]==2.3.0
+# AG-UI event and run-input types for POST /agent (the streaming chat).
+ag-ui-protocol==1.0.0

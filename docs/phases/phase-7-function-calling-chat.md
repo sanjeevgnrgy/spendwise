@@ -3,6 +3,8 @@
 > **Later changes:** in Phase 8, `/chat` gained a `thread_id` and memory, `agent.run()` returns an `AgentResult`
 > including every step of the turn, and the single-turn limitation described below no longer applies.
 > After Phase 8, the tests mentioned below were removed ([decisions.md](../decisions.md) D64).
+> In Phase 14, Gemini is always called with streaming: `llm.stream_gemini_with_tools()` replaces
+> `ask_gemini_with_tools()`, and the loop lives in `agent.stream()`, which `agent.run()` waits on (D102).
 > This page records Phase 7 as it was built.
 
 **Goal:** `POST /chat {"message": "..."}` lets you talk to SpendWise in plain language. Gemini decides

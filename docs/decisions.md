@@ -287,6 +287,7 @@ add a new entry and mark the old one **Superseded by D<n>**.
   Measured: an outage now returns 502 in about 32 s.
 - **Revisit when:** responses legitimately take longer than 30 s (e.g. long reports); then raise the limit for those calls.
 - **Updated by D56:** the per-attempt limit is now 60 s.
+- **Updated by D108:** only 5xx errors are retried; a 429 fails at once.
 
 ---
 
@@ -328,6 +329,7 @@ add a new entry and mark the old one **Superseded by D<n>**.
   Bookkeeping tasks don't need deep reasoning.
 - **Where:** `agent.THINKING_LEVEL`, passed through `llm.ask_gemini_with_tools(..., thinking_level)` as
   `generation_config={"thinking_level": ...}`.
+- **Updated by D102:** the function is now `llm.stream_gemini_with_tools()`; the setting is unchanged.
 
 ### D56. Gemini attempts time out after 60 s (was 30 s)
 - A function-calling step can take 20–30 s. With 2 attempts, a total outage still ends in a 502 within about 2 minutes.
@@ -597,3 +599,76 @@ is natural. It's still a soft, model-judged guard.
 
 ### D100. The inner content wrapper is a `<div>`, not `<main>`
 - `SidebarInset` already renders `<main>`; the nested `<main>` from Phase 11 was invalid HTML.
+
+---
+
+## AG-UI streaming (Phase 14)
+
+> Checked offline with a scripted fake Gemini stream (TestClient, a real uvicorn server, and the web app's
+> `runAgent()` in Node), plus `npm run build`. Not yet run against real Gemini or in a browser.
+
+### D101. `POST /agent` speaks AG-UI over SSE, with FastAPI's own SSE support
+- **Types:** `ag-ui-protocol` 1.0.0 (`ag_ui.core`): `RunAgentInput` as the request body, and the event classes. Each event
+  is sent as `model_dump_json(by_alias=True)` (camelCase, empty fields left out), which is exactly what the package's
+  `EventEncoder` writes.
+- **Transport:** `response_class=EventSourceResponse` (FastAPI 0.162) on a **sync generator** route, not a hand-made
+  `StreamingResponse`. FastAPI runs the generator in a worker thread, which keeps D74 (the agent calls this app's own `/mcp`,
+  so nothing may block the event loop). It also keeps `SessionDep` open until the stream ends, sends `: ping` every 15 s,
+  and sets `Cache-Control: no-cache` and `X-Accel-Buffering: no`.
+- **Revisit when:** the agent becomes async end to end; then an `async def` generator would avoid tying up a worker thread per run.
+
+### D102. One agent loop for both endpoints; Gemini is always streamed
+- `agent.stream()` yields text pieces and finally the `AgentResult`. `/agent` forwards the pieces; `agent.run()` (`/chat`)
+  just waits for the result. One loop means the two endpoints can't drift apart.
+- `llm.stream_gemini_with_tools()` replaces `ask_gemini_with_tools()`. With `stream=True`, the final
+  `interaction.completed` event has **no steps**, so `GeminiStream` rebuilds them from `step.start` + `step.delta` by index:
+  `text` → `content`, `arguments_delta` → JSON-parsed `arguments`, `thought_signature` → `signature`. Other deltas are skipped,
+  as Google's streaming docs advise.
+- **Trade-off:** `/chat` now also depends on that rebuilding code. **Revisit when:** the SDK offers a "final interaction"
+  helper for streams; then use it instead.
+
+### D103. The client names the thread; only the newest user message is read
+- AG-UI clients choose `threadId` (the web app uses a random 32-hex id), so an unknown id starts a new thread, while
+  `/chat` answers 404. Ids over 32 characters are rejected (the `ChatMessage.thread_id` column).
+- The server stores the history itself (with thoughts and tool results the browser never sees), so it reads only the last
+  `role: "user"` message from `messages` (text parts only, 1–2000 characters, the same limit as `/chat`). The web app
+  sends just that one message.
+
+### D104. Errors: an HTTP status before the stream, `RUN_ERROR` after it
+- A body FastAPI can't validate (no `threadId`, ...) is a normal 422. Once `RUN_STARTED` has gone out, the 200 can't change,
+  so every failure (`BusinessRuleError`, `GeminiError`, anything else) ends the run with `RUN_ERROR`.
+- `message` is the error's own text for our expected errors and a generic sentence for anything else (the traceback goes to the
+  server log). `code` is the exception class name, or `InternalError`.
+- A failed run isn't saved, as with `/chat`. **Known limitation:** if a tool had already changed data before the failure,
+  the change stays, but the thread doesn't record it and the page isn't refreshed. **Revisit when:** partial turns can be
+  stored, or tools report their effects separately.
+
+### D105. Tool calls ride in `RUN_FINISHED.result`, not `TOOL_CALL_*` events
+- This phase streams text only. The tool calls the badges and the page refresh need (D95) are sent once, as
+  `RUN_FINISHED.result = {"toolCalls": [...]}`. That is AG-UI's free-form slot for a run's outcome.
+- **Revisit when:** the panel should show tools live ("Adding expense…"); then emit `TOOL_CALL_START/ARGS/END/RESULT`.
+
+### D106. One assistant message per run, started lazily
+- `TEXT_MESSAGE_START` is sent with the first piece of text, so the panel shows "Thinking…" until there is something to read.
+- Text from a later Gemini step (after a tool call) continues the same message, starting a new paragraph (`\n\n`).
+  `AgentResult.reply` (used by `/chat`) is the same joined text.
+
+### D107. The browser reads the stream with `fetch()`, without an AG-UI client library
+- `EventSource` only does GET without a body, so `api.ts` POSTs with `fetch()` and reads `response.body` through a
+  `TextDecoderStream`. It splits events on blank lines, keeps the `data:` lines (pings have none), and `JSON.parse`s each.
+  `RUN_ERROR` throws; a stream that ends without `RUN_FINISHED` throws too.
+- **Why not `@ag-ui/client`:** about 40 lines of our own code show exactly how SSE works, without another dependency.
+  **Revisit when:** we adopt an AG-UI frontend framework (e.g. CopilotKit) or need more event types.
+
+### D108. Gemini calls never retry a 429; only 5xx errors are retried
+- **Found:** after a few test questions the chat hung forever ("Thinking…", the request pending). Two live probes showed
+  Gemini answering every request, streamed or not, with **429 (quota used up)** within a second. The SDK then retried:
+  before retrying it sleeps for as long as Google's `retry-after-ms` header says, with **no upper limit** (our 60 s timeout
+  only covers the HTTP request itself, not that sleep).
+- **Knock-on effect:** with `--reload`, a code change waits for open requests to finish, so the sleeping request also
+  blocked the reload, and the server stopped answering every new request.
+- **How:** `HttpRetryOptions(attempts=2, http_status_codes=[500, 502, 503, 504])`. The list replaces the SDK's default
+  (`408, 409, 429, 5XX`). Checked offline with a mock transport: a 429 with `retry-after-ms: 600000` now fails in under
+  1 s with Google's message (before: still waiting after 20 s); a 503 is still retried once.
+- **Trade-off:** a momentary per-minute rate limit is no longer retried automatically; the user sees the quota message and
+  sends again. **Revisit when:** short automatic waits are wanted; then retry 429 ourselves with a capped delay.

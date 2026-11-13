@@ -22,6 +22,12 @@ the project folder (the repo root, where `run.ps1` is) unless noted.
 - **Cause:** another server (often an old SpendWise one) is still running on port 8000.
 - **Fix:** stop it with Ctrl+C in its terminal, or start on another port: `.\run.ps1 --port 8001`.
 
+### Every request stays "(pending)" after I changed backend code
+- **Cause:** with `--reload` (which `run.ps1` uses), a code change starts a reload that first waits for every open request
+  to finish, with no time limit. Until then the old server answers nothing new, not even `/health`. One request that never
+  finishes (like the 429 sleep below, before D108) blocks the reload, and with it the whole server.
+- **Fix:** Ctrl+C in the `run.ps1` terminal (press it again if it doesn't stop), then `.\run.ps1`.
+
 ### Changed `.env` but nothing changed
 - **Cause:** settings are read once at startup, and auto-reload only watches `.py` files.
 - **Fix:** stop the server (Ctrl+C) and run `.\run.ps1` again.
@@ -47,6 +53,15 @@ on your tier, or temporarily overloaded).
 ### `502` "... is currently experiencing high demand ... Please try again later."
 - **Cause:** Google returned `503 Service Unavailable`: that model is overloaded right now. Not a problem in our code.
 - **Fix:** wait a few minutes and retry, or set `GEMINI_MODEL=gemini-4-hydrogen` (also free tier) in `.env` and restart.
+
+### The assistant shows "Thinking…" forever / `/chat` never answers
+- **Cause (fixed in Phase 14, D108):** the free-tier quota was used up, so Gemini answered **429**, and the SDK quietly
+  slept for as long as Google asked before retrying, with no upper limit. Nothing reported an error.
+- **Now:** the reply is a red bubble (or a `502` from `/chat`) with "Error code: 429 ... RESOURCE_EXHAUSTED" and Google's
+  quota message.
+- **Fix:** wait for the quota to reset (per-minute limits clear within a minute; daily limits reset at midnight Pacific, see
+  [gemini.md](gemini.md)), or set another free-tier model in `GEMINI_MODEL` and restart. Every agent step is one Gemini
+  request, so a single chat message can use 2–5 of them.
 
 ### `/ask`, `/parse` or `/chat` takes a very long time
 - **Cause (fixed in Phase 6):** the SDK used to retry up to 5 times, up to 60 s apart, while Gemini was down.
@@ -105,9 +120,31 @@ on your tier, or temporarily overloaded).
 - **Fix:** already removed from SpendWise (decisions D87). Put scripts in `index.html` instead.
 
 ### Assistant panel: the reply bubble is red
-- **Cause:** the `/chat` request failed. The text says why: backend not running ("Can't reach the SpendWise API"),
-  Gemini overloaded or the key invalid (a 502 message), or the MCP tools unreachable ("Sorry, I can't reach the expense tools").
+- **Cause:** the run (`POST /agent`) failed. The text says why: backend not running ("Can't reach the SpendWise API"), or
+  Gemini overloaded or the key invalid (Gemini's own message, sent as a `RUN_ERROR` event). "Sorry, I can't reach the
+  expense tools" is a normal (grey) reply, not a red bubble.
 - **Fix:** see the Gemini and MCP sections below for each message.
+
+### Assistant panel: a red bubble right under half a reply
+- **Cause:** the run failed after it had started streaming (a `RUN_ERROR` event, e.g. Gemini became overloaded). The text
+  that had already arrived stays. The failed turn isn't saved, so the assistant won't remember that exchange.
+- **Fix:** ask again. If a tool had already run (e.g. an expense was added before the failure), that change stays even
+  though the page didn't refresh, so check the Expenses page before repeating an "add".
+
+### Assistant panel: "The connection closed before the reply was finished."
+- **Cause:** the stream ended without `RUN_FINISHED` or `RUN_ERROR`: the backend stopped mid-run (Ctrl+C, a crash, or a
+  forced restart). An auto-reload doesn't cut a run; it waits for it to finish (see "Every request stays pending" above).
+- **Fix:** send the message again (same caveat as above if a tool had already run).
+
+### Assistant panel: the reply appears all at once instead of word by word
+- **Cause:** Gemini decides how big each piece is; a short reply may come in one or two pieces. Otherwise, something
+  between the backend and the browser is buffering the response (a proxy, or an antivirus "web shield" that scans traffic).
+- **Fix:** watch the raw stream with `curl.exe -N` (see [phases/phase-14-agui-streaming.md](phases/phase-14-agui-streaming.md)).
+  If the events arrive spread out there, the backend streams correctly and the buffering is on the browser's side.
+
+### Swagger UI (`/docs`) shows nothing for `POST /agent` until the run ends
+- **Cause:** Swagger UI waits for the whole response before displaying it. The stream itself is fine.
+- **Fix:** use `curl.exe -N` to watch the events arrive, or `POST /chat` for a plain JSON reply.
 
 ### Assistant panel: the assistant added an expense but the page didn't update
 - **Cause:** the page refreshes only when a tool call that changes data **succeeded** (green badge). A red badge means

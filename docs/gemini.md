@@ -28,7 +28,7 @@ Never paste the key into chat, code, or any committed file.
 | Model | Free tier | Notes |
 |---|---|---|
 | `gemini-3.8-flash` | ✅ | **SpendWise uses this.** Labelled stable. |
-| `gemini-3.6-flash`, `gemini-3.5-flash-lite` | ✅ | Labelled stable |
+| `gemini-3.6-flash`, `gemini-3.5-flash-lite` | ✅ | Labelled stable. On 2026-11-13, when both flash models answered 503 "high demand", flash-lite still answered (in about 4 s) |
 | `gemini-4-hydrogen` | ✅ | Model used in Google's quickstart |
 | `gemini-4-argon`, `gemini-4-carbon` | ❌ | "not available on the Free tier" |
 | `gemini-2.5-flash`, `gemini-2.5-pro` | — | Deprecated; rerouted to newer models from 2026-12-01 |
@@ -82,12 +82,19 @@ response_format={"type": "text", "mime_type": "application/json", "schema": Some
 
 ## Function calling
 
-`ask_gemini_with_tools(history, tools, system_instruction, thinking_level)` runs one step of a tool-using
-conversation (used by `POST /chat`, see [phases/phase-7-function-calling-chat.md](phases/phase-7-function-calling-chat.md)):
+`stream_gemini_with_tools(history, tools, system_instruction, thinking_level)` runs one step of a tool-using
+conversation, streamed (used by `POST /chat` and `POST /agent`, see
+[phases/phase-7-function-calling-chat.md](phases/phase-7-function-calling-chat.md) and
+[phases/phase-14-agui-streaming.md](phases/phase-14-agui-streaming.md)):
 
 - **Declarations:** `{"type": "function", "name", "description", "parameters": <JSON schema>}`, passed as `tools=[...]`.
-- **Calls:** steps in `interaction.steps` with `type == "function_call"`, plus `name`, `arguments` (a dict) and `id`.
+- **Calls:** steps with `type == "function_call"`, plus `name`, `arguments` (a dict) and `id`.
   Gemini can request several calls in one step.
+- **Streaming (`stream=True`):** the SDK yields `interaction.created`, then for each step `step.start` (index, type;
+  a function call's name and id with empty arguments), `step.delta` pieces (`text`, `arguments_delta` JSON fragments,
+  `thought_signature`, `thought_summary`) and `step.stop`, then `interaction.completed` (status and usage, **no steps**),
+  or an `error` event. `GeminiStream` yields the `text` pieces and rebuilds the steps from the deltas, because the
+  next request must resend them unchanged.
 - **Results (stateless, `store=False`):** resend the whole history every time. That means the `user_input`, then
   every step Gemini returned **unchanged**, then one `{"type": "function_result", "name", "call_id", "is_error",
   "result": [{"type": "text", "text": "<json>"}]}` per call.
@@ -106,11 +113,15 @@ console shows `tokens: N in, M out` for each step.
 
 ## Timeouts and retries
 
-The client gives up on an attempt after **60 s** and makes **at most 2 attempts**
-(`HttpOptions(timeout=60_000, retry_options=HttpRetryOptions(attempts=2))` in `core/llm.py`):
+The client gives up on an attempt after **60 s** and makes **at most 2 attempts**, retrying **only 5xx errors**
+(`HttpOptions(timeout=60_000, retry_options=HttpRetryOptions(attempts=2, http_status_codes=[500, 502, 503, 504]))`
+in `core/llm.py`):
 - The SDK's defaults (5 attempts, up to 60 s apart) made requests hang for many minutes while Gemini was down.
 - The limit was 30 s in Phase 6, but function-calling steps can legitimately take 20–30 s.
 - Google's quick "high demand" errors still fail fast; only a hung connection takes up to about 2 minutes.
+- **Never retry 429 (quota used up).** The SDK retries 429 by default, and before retrying it sleeps for as long as
+  Google's `retry-after-ms` header asks, with no upper limit and no timeout. With an exhausted quota that looked like a
+  request hanging forever (found in Phase 14; D108). Now a 429 fails at once with Google's quota message.
 
 ## When something goes wrong
 

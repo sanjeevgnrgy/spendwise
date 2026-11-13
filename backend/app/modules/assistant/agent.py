@@ -6,6 +6,7 @@ shows them to Gemini, and sends every tool call back to the MCP server to be run
 
 import json
 import logging
+from collections.abc import Iterator
 from dataclasses import dataclass
 from datetime import date
 from typing import Any
@@ -66,9 +67,8 @@ def _text_step(kind: str, text: str) -> dict[str, Any]:
     return {"type": kind, "content": [{"type": "text", "text": text}]}
 
 
-def _log_usage(interaction: Any) -> None:
+def _log_usage(usage: Any) -> None:
     # Every request resends the whole history, so input tokens grow as a conversation gets longer.
-    usage = getattr(interaction, "usage", None)
     if usage is not None:
         logger.info("  tokens: %s in, %s out", usage.total_input_tokens, usage.total_output_tokens)
 
@@ -86,11 +86,17 @@ def _run_tool(name: str, arguments: dict[str, Any]) -> mcp_client.ToolResult:
     return result
 
 
-def run(message: str, today: date, history: list[dict[str, Any]] | None = None) -> AgentResult:
-    """Answer one user message. `history` is the earlier conversation in this thread (oldest first)."""
+def stream(message: str, today: date, history: list[dict[str, Any]] | None = None) -> Iterator[str | AgentResult]:
+    """Answer one user message, streaming.
+
+    Yields the reply's text in pieces, as Gemini writes it, and then, as the very last item, an
+    AgentResult with the whole reply, the tools used and the steps to store.
+    `history` is the earlier conversation in this thread (oldest first).
+    """
     earlier = history or []
     turn: list[dict[str, Any]] = [_text_step("user_input", message)]
     tool_calls: list[ToolCall] = []
+    reply = ""  # all the text the user has been shown so far, across steps
     logger.info("user: %s  (%d earlier steps sent as history)", message, len(earlier))
 
     try:
@@ -101,37 +107,44 @@ def run(message: str, today: date, history: list[dict[str, Any]] | None = None) 
         # Without tools the model could only guess, so answer honestly without asking it.
         logger.warning("MCP unavailable, not calling Gemini: %s", exc)
         turn.append(_text_step("model_output", TOOLS_UNAVAILABLE))
-        return AgentResult(reply=TOOLS_UNAVAILABLE, tool_calls=tool_calls, steps=turn)
+        yield TOOLS_UNAVAILABLE
+        yield AgentResult(reply=TOOLS_UNAVAILABLE, tool_calls=tool_calls, steps=turn)
+        return
 
     for step in range(1, MAX_STEPS + 1):
         logger.info("step %d/%d: asking Gemini", step, MAX_STEPS)
         # Stateless (store=False): every request carries the earlier history plus this turn so far.
-        interaction = llm.ask_gemini_with_tools(earlier + turn, declarations, instruction, THINKING_LEVEL)
-        _log_usage(interaction)
-        steps = [s.model_dump() for s in (interaction.steps or [])]
-        calls = [s for s in (interaction.steps or []) if s.type == "function_call"]
+        response = llm.stream_gemini_with_tools(earlier + turn, declarations, instruction, THINKING_LEVEL)
+        first_piece = True
+        for text in response:
+            if first_piece and reply:
+                # Gemini already said something in an earlier step (e.g. "Let me check."): new paragraph.
+                text = "\n\n" + text
+            first_piece = False
+            reply += text
+            yield text
+        _log_usage(response.usage)
+
+        # Everything Gemini produced (thoughts, calls, text) goes into the history unchanged, as the API requires.
+        turn += response.steps
+        calls = [s for s in response.steps if s["type"] == "function_call"]
 
         if not calls:
-            if not interaction.output_text:
+            if not response.text:
                 raise llm.GeminiError("Gemini returned neither text nor a tool call.")
-            # Keep Gemini's answer in the history, so the next message can refer back to it.
-            if not any(s["type"] == "model_output" for s in steps):
-                steps.append(_text_step("model_output", interaction.output_text))
-            turn += steps
             logger.info("step %d: Gemini answered in text, done", step)
-            return AgentResult(reply=interaction.output_text, tool_calls=tool_calls, steps=turn)
+            yield AgentResult(reply=reply, tool_calls=tool_calls, steps=turn)
+            return
 
-        # Everything Gemini produced (its thoughts and its calls) goes back unchanged, as the API requires.
-        turn += steps
         for call in calls:
-            arguments = call.arguments or {}
-            result = _run_tool(call.name, arguments)
-            tool_calls.append(ToolCall(name=call.name, arguments=arguments, ok=result.ok))
+            arguments = call.get("arguments") or {}
+            result = _run_tool(call["name"], arguments)
+            tool_calls.append(ToolCall(name=call["name"], arguments=arguments, ok=result.ok))
             turn.append(
                 {
                     "type": "function_result",
-                    "name": call.name,
-                    "call_id": call.id,
+                    "name": call["name"],
+                    "call_id": call["id"],
                     # An MCP isError result (e.g. "Unknown category") is passed on as an error,
                     # so the model can correct its call or explain the problem.
                     "is_error": not result.ok,
@@ -142,4 +155,14 @@ def run(message: str, today: date, history: list[dict[str, Any]] | None = None) 
     logger.warning("stopped after %d steps without a final answer", MAX_STEPS)
     # Store the apology as the model's answer, so the turn ends cleanly for the next message.
     turn.append(_text_step("model_output", TOO_MANY_STEPS))
-    return AgentResult(reply=TOO_MANY_STEPS, tool_calls=tool_calls, steps=turn)
+    apology = ("\n\n" if reply else "") + TOO_MANY_STEPS
+    yield apology
+    yield AgentResult(reply=reply + apology, tool_calls=tool_calls, steps=turn)
+
+
+def run(message: str, today: date, history: list[dict[str, Any]] | None = None) -> AgentResult:
+    """The same loop without streaming (POST /chat): wait for the end and return the whole result."""
+    for item in stream(message, today, history):
+        if isinstance(item, AgentResult):
+            return item
+    raise RuntimeError("The agent loop ended without a result.")  # can't happen: stream() always ends with one

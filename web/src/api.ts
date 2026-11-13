@@ -155,7 +155,15 @@ export function deleteExpense(id: number): Promise<void> {
   return request<void>(`/expenses/${id}`, { method: "DELETE" })
 }
 
-// ---------- chat ----------
+export function getMonthlySummary(month: string): Promise<MonthlySummary> {
+  return request<MonthlySummary>(`/summary?month=${month}`)
+}
+
+export function getMonthlyTrend(months = 6): Promise<MonthlyTrend> {
+  return request<MonthlyTrend>(`/summary/trend?months=${months}`)
+}
+
+// ---------- the assistant: AG-UI events streamed from POST /agent ----------
 
 export interface ToolCall {
   name: string
@@ -163,21 +171,70 @@ export interface ToolCall {
   ok: boolean
 }
 
-export interface ChatReply {
-  thread_id: string // send it back with the next message to continue the same conversation
-  reply: string
-  tool_calls: ToolCall[]
+// The AG-UI events the backend sends, in the order they arrive. Only the fields we use are listed.
+export type AgentEvent =
+  | { type: "RUN_STARTED"; threadId: string; runId: string }
+  | { type: "TEXT_MESSAGE_START"; messageId: string; role: "assistant" }
+  | { type: "TEXT_MESSAGE_CONTENT"; messageId: string; delta: string }
+  | { type: "TEXT_MESSAGE_END"; messageId: string }
+  | { type: "RUN_FINISHED"; threadId: string; runId: string; result?: { toolCalls: ToolCall[] } }
+  | { type: "RUN_ERROR"; message: string; code?: string }
+
+// A random id of 32 hex characters, the length the backend allows for a thread id.
+export function newId(): string {
+  return crypto.randomUUID().replaceAll("-", "")
 }
 
-export function sendChatMessage(message: string, threadId?: string): Promise<ChatReply> {
-  // thread_id left out (undefined is dropped by JSON.stringify) = start a new conversation.
-  return request<ChatReply>("/chat", { method: "POST", body: JSON.stringify({ message, thread_id: threadId }) })
-}
+/**
+ * Runs the assistant on one message, calling `onEvent` for each event as soon as it arrives.
+ * Resolves on RUN_FINISHED. Throws on RUN_ERROR, or if the connection ends before the run does.
+ */
+export async function runAgent(threadId: string, message: string, onEvent: (event: AgentEvent) => void) {
+  // AG-UI's run input. The browser names the thread; the server only needs the newest message,
+  // because it keeps the conversation's history itself.
+  const input = { threadId, runId: newId(), messages: [{ id: newId(), role: "user", content: message }] }
+  let response: Response
+  try {
+    // fetch, not EventSource: EventSource can only send GET requests, and a run needs a POST body.
+    response = await fetch(`${API_URL}/agent`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", Accept: "text/event-stream" },
+      body: JSON.stringify(input),
+    })
+  } catch {
+    throw new ApiError(`Can't reach the SpendWise API at ${API_URL}. Is the backend running?`, 0)
+  }
+  // Problems found before the stream starts (like a malformed body) are ordinary HTTP errors.
+  if (!response.ok || !response.body) throw new ApiError(await errorMessage(response), response.status)
 
-export function getMonthlySummary(month: string): Promise<MonthlySummary> {
-  return request<MonthlySummary>(`/summary?month=${month}`)
-}
-
-export function getMonthlyTrend(months = 6): Promise<MonthlyTrend> {
-  return request<MonthlyTrend>(`/summary/trend?months=${months}`)
+  // Read the body piece by piece as it arrives, instead of waiting for all of it like response.json().
+  const reader = response.body.pipeThrough(new TextDecoderStream()).getReader()
+  let buffer = ""
+  try {
+    for (;;) {
+      const { value, done } = await reader.read()
+      if (done) break
+      buffer += value
+      // Each SSE event ends with a blank line. A piece can end mid-event, so keep the unfinished tail.
+      const blocks = buffer.split("\n\n")
+      buffer = blocks.pop() ?? ""
+      for (const block of blocks) {
+        // Keep the `data:` lines. FastAPI's ": ping" keep-alive comments have none and are skipped.
+        const data = block
+          .split("\n")
+          .filter((line) => line.startsWith("data:"))
+          .map((line) => line.slice(5).trimStart())
+          .join("\n")
+        if (!data) continue
+        const event = JSON.parse(data) as AgentEvent
+        if (event.type === "RUN_ERROR") throw new Error(event.message)
+        onEvent(event)
+        if (event.type === "RUN_FINISHED") return
+      }
+    }
+  } finally {
+    // Stop reading and close the connection, however we got here (nothing to do if it already ended).
+    reader.cancel().catch(() => {})
+  }
+  throw new Error("The connection closed before the reply was finished.")
 }

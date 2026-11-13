@@ -1,23 +1,44 @@
 import json
+import logging
+from collections.abc import Iterator
 from datetime import date
 from typing import Any
 from uuid import uuid4
 
+from ag_ui.core import (
+    BaseEvent,
+    RunAgentInput,
+    RunErrorEvent,
+    RunFinishedEvent,
+    RunStartedEvent,
+    TextMessageContentEvent,
+    TextMessageEndEvent,
+    TextMessageStartEvent,
+)
 from sqlmodel import Session
 
 from app.core import llm
-from app.core.errors import BusinessRuleError, NotFoundError
+from app.core.errors import BusinessRuleError, ExternalServiceError, NotFoundError
 
 # Another module's public interface: the only way in to it.
 from app.modules import categories
 from app.modules.assistant import agent, parse, repository
 from app.modules.assistant.models import ChatMessage
-from app.modules.assistant.schemas import ChatResponse, ParseResponse, ThreadMessage, ThreadRead
+from app.modules.assistant.schemas import (
+    MAX_MESSAGE_LENGTH,
+    MAX_THREAD_ID_LENGTH,
+    ChatResponse,
+    ParseResponse,
+    ThreadMessage,
+    ThreadRead,
+)
 
 # How many earlier turns (user message + everything up to the reply) are sent with each new
 # message. Every one is paid for again on every step of the agent loop, so the cap trades memory
 # for cost: enough for follow-ups like "make that 300", without resending a whole day's chat.
 MAX_HISTORY_TURNS = 10
+
+logger = logging.getLogger("spendwise.assistant")
 
 
 def answer(prompt: str) -> str:
@@ -36,6 +57,13 @@ def parse_expense_text(session: Session, text: str) -> ParseResponse:
     return ParseResponse(expense=parsed, missing_fields=parse.missing_fields(parsed))
 
 
+def _history(session: Session, thread_id: str, turn: int) -> list[dict[str, Any]]:
+    # Only the last few turns are sent. Older ones stay stored (see GET /threads), but the
+    # model no longer sees them. Whole turns, so a tool call is never cut off from its result.
+    rows = repository.messages(session, thread_id, from_turn=turn - MAX_HISTORY_TURNS)
+    return [row.content for row in rows]
+
+
 def chat(session: Session, message: str, thread_id: str | None = None) -> ChatResponse:
     if thread_id is None:
         thread_id, turn, history = uuid4().hex, 1, []
@@ -45,15 +73,82 @@ def chat(session: Session, message: str, thread_id: str | None = None) -> ChatRe
             # A typo'd id should be an error, not a silent new conversation.
             raise NotFoundError(f"Thread {thread_id} not found")
         turn = last + 1
-        # Only the last few turns are sent. Older ones stay stored (see GET /threads), but the
-        # model no longer sees them. Whole turns, so a tool call is never cut off from its result.
-        rows = repository.messages(session, thread_id, from_turn=turn - MAX_HISTORY_TURNS)
-        history = [row.content for row in rows]
+        history = _history(session, thread_id, turn)
 
     # The agent gets no database session: it reaches expense data only through the MCP server.
     result = agent.run(message, date.today(), history)
     repository.add_turn(session, thread_id, turn, result.steps)
     return ChatResponse(thread_id=thread_id, reply=result.reply, tool_calls=result.tool_calls)
+
+
+def _newest_user_text(run: RunAgentInput) -> str:
+    """The text of the newest user message, checked like POST /chat checks its `message`.
+
+    Only that message is used, even if the client sends the whole conversation: the server keeps
+    the thread's history itself, including Gemini's thoughts and tool results the browser never sees.
+    """
+    if not 1 <= len(run.thread_id) <= MAX_THREAD_ID_LENGTH:
+        raise BusinessRuleError(f"threadId must be 1 to {MAX_THREAD_ID_LENGTH} characters long.")
+    user_messages = [m for m in run.messages if m.role == "user"]
+    if not user_messages:
+        raise BusinessRuleError("The run has no user message to answer.")
+    content = user_messages[-1].content
+    # Content is either a string or a list of parts (text, images...). Only text is used.
+    if not isinstance(content, str):
+        content = "".join(part.text for part in content if part.type == "text")
+    text = content.strip()
+    if not 1 <= len(text) <= MAX_MESSAGE_LENGTH:
+        raise BusinessRuleError(f"The message must be 1 to {MAX_MESSAGE_LENGTH} characters long.")
+    return text
+
+
+def agent_run(session: Session, run: RunAgentInput) -> Iterator[BaseEvent]:
+    """POST /agent: one AG-UI run, answering the newest user message as a stream of events.
+
+    RUN_STARTED, then the reply as TEXT_MESSAGE_START / _CONTENT (one per piece) / _END, then
+    RUN_FINISHED with the tools used. Once the stream has started, the HTTP status (200) has already
+    been sent and can't change, so any failure is reported as a RUN_ERROR event instead.
+    """
+    yield RunStartedEvent(thread_id=run.thread_id, run_id=run.run_id)
+    message_id = uuid4().hex  # every piece of the reply says which message it belongs to
+    started = False  # TEXT_MESSAGE_START goes out with the first piece of text
+    tool_calls: list[dict[str, Any]] = []
+    try:
+        message = _newest_user_text(run)
+        # AG-UI clients name their threads themselves, so an unknown id starts a new
+        # conversation here (POST /chat answers 404 instead, because there the server names them).
+        turn = (repository.last_turn(session, run.thread_id) or 0) + 1
+        history = _history(session, run.thread_id, turn)
+
+        for item in agent.stream(message, date.today(), history):
+            if isinstance(item, str):
+                if not started:
+                    yield TextMessageStartEvent(message_id=message_id, role="assistant")
+                    started = True
+                yield TextMessageContentEvent(message_id=message_id, delta=item)
+            else:
+                # The last item: the whole turn. Saved only when the run succeeds, like POST /chat.
+                repository.add_turn(session, run.thread_id, turn, item.steps)
+                tool_calls = [call.model_dump(mode="json") for call in item.tool_calls]
+    # RUN_ERROR ends the run. The client keeps whatever text already arrived and shows the error.
+    except (BusinessRuleError, ExternalServiceError) as exc:
+        # Expected problems (e.g. Gemini's "high demand") carry a message meant for the user.
+        logger.warning("agent run %s failed: %s", run.run_id, exc)
+        yield RunErrorEvent(message=str(exc), code=type(exc).__name__)
+        return
+    except Exception:
+        # A bug or a setup problem: the details go to the server log, not to the browser.
+        logger.exception("agent run %s failed", run.run_id)
+        yield RunErrorEvent(
+            message="Something went wrong on the server. The server log has the details.", code="InternalError"
+        )
+        return
+
+    if started:
+        yield TextMessageEndEvent(message_id=message_id)
+    # `result` is AG-UI's free-form slot for the run's outcome. The chat panel uses the tool calls
+    # for its badges, and to refresh the page when the assistant changed expenses.
+    yield RunFinishedEvent(thread_id=run.thread_id, run_id=run.run_id, result={"toolCalls": tool_calls})
 
 
 def _readable_text(step: dict[str, Any]) -> str:

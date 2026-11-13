@@ -95,7 +95,8 @@ export function ChatPanel({ chat, onClose }: ChatPanelProps) {
             <ChatMessageBubble key={message.id} message={message} />
           ))}
 
-          {chat.sending && (
+          {/* Only until the reply starts arriving; after that, the growing reply shows progress. */}
+          {chat.sending && chat.messages.at(-1)?.role === "user" && (
             <div className="flex items-center gap-2 text-sm text-muted-foreground">
               <Loader2 className="size-4 animate-spin" /> Thinking…
             </div>

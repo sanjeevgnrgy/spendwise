@@ -30,9 +30,9 @@ spendwise/
         errors.py       NotFoundError (404), BusinessRuleError (422), ExternalServiceError (502), handlers
         logging.py      console logging for spendwise.* loggers
         money.py        rupees <-> paise
-        llm.py          ask_gemini(), ask_gemini_for_json(), ask_gemini_with_tools()
+        llm.py          ask_gemini(), ask_gemini_for_json(), stream_gemini_with_tools()
       modules/
-        assistant/      POST /ask, /parse, /chat, GET /threads; ChatMessage table (parse, agent, mcp_client)
+        assistant/      POST /ask, /parse, /chat, /agent (AG-UI stream), GET /threads; ChatMessage table (parse, agent, mcp_client)
         mcp/            MCP server "spendwise": 5 tools, 2 resources; mounted at /mcp/ (no tables)
         categories/     Category table, GET /categories, public interface
         expenses/       Expense table, CRUD routes + GET /summary, /summary/trend, public interface
@@ -141,12 +141,25 @@ HTTP request
   -> modules/assistant/router.py        validates the body (ChatRequest: message, optional thread_id)
   -> modules/assistant/service.py       chat(): new thread, or load its last 10 turns
        -> assistant/repository.py       ChatMessage rows (the assistant module's own table)
-  -> modules/assistant/agent.py         the loop, at most 5 Gemini calls, sending history + this turn:
+  -> modules/assistant/agent.py         run(): waits for agent.stream(), the loop (at most 5 Gemini calls):
        -> assistant/mcp_client.py              lists the tools and categories from the MCP server (MCP_URL)
-       -> core/llm.ask_gemini_with_tools()     Gemini answers with text, or with function calls
+       -> core/llm.stream_gemini_with_tools()  Gemini streams text and/or function calls; steps rebuilt from the pieces
        -> assistant/mcp_client.call_tool()     HTTP to /mcp/ -> modules/mcp/server.py -> expenses/categories services
   -> assistant/repository.add_turn()    saves every step of this turn, in one commit
   <- ChatResponse(thread_id, reply, tool_calls)   every step, tool call and token count is logged
+```
+
+`POST /agent` (AG-UI over Server-Sent Events; the chat panel uses this one):
+
+```
+HTTP request
+  -> modules/assistant/router.py        validates the body (ag_ui RunAgentInput) -> 422 if malformed; then a 200 stream
+       (a sync generator with EventSourceResponse: FastAPI runs it in a worker thread and pings every 15 s)
+  -> modules/assistant/service.py       agent_run(): RUN_STARTED; newest user message; load the thread (new if unknown)
+  -> modules/assistant/agent.py         stream(): the same loop as /chat, yielding text pieces as Gemini writes them
+       each piece                         -> TEXT_MESSAGE_START (first piece only), TEXT_MESSAGE_CONTENT
+  -> assistant/repository.add_turn()    saves the turn when the loop ends
+  <- TEXT_MESSAGE_END, RUN_FINISHED(result={"toolCalls": [...]})   or RUN_ERROR on any failure (nothing saved)
 ```
 
 If a service raises `NotFoundError`, `BusinessRuleError` or `ExternalServiceError` (e.g. `GeminiError`), the

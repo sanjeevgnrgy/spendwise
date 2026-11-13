@@ -1,6 +1,10 @@
 """HTTP routes for the assistant. Gemini failures become 502 in core/errors.py, so no try/except here."""
 
+from collections.abc import Iterator
+
+from ag_ui.core import RunAgentInput
 from fastapi import APIRouter
+from fastapi.sse import EventSourceResponse, ServerSentEvent
 
 from app.core.db import SessionDep
 from app.modules.assistant import service
@@ -38,6 +42,20 @@ def chat(body: ChatRequest, session: SessionDep) -> ChatResponse:
     # It must stay a plain `def` (run in a worker thread): the agent calls this same app's /mcp
     # endpoint, and an `async def` that blocked the server's event loop while waiting would deadlock.
     return service.chat(session, body.message, body.thread_id)
+
+
+# The same agent as /chat, but the reply is streamed as AG-UI events over Server-Sent Events,
+# so the browser can show it while Gemini is still writing. A missing or malformed field in the
+# body is still a normal 422; anything that goes wrong once streaming has begun is a RUN_ERROR event.
+@router.post("/agent", response_class=EventSourceResponse)
+def agent_run(body: RunAgentInput, session: SessionDep) -> Iterator[ServerSentEvent]:
+    # A plain (sync) generator, for the same reason /chat is a plain `def`: FastAPI runs it in a
+    # worker thread, so the agent's calls to this app's own /mcp endpoint can't deadlock.
+    # FastAPI keeps the database session open until the stream ends, and adds a ": ping" comment
+    # every 15 s while the agent is quiet (e.g. running tools), so proxies don't close the connection.
+    for event in service.agent_run(session, body):
+        # AG-UI's JSON (camelCase field names, empty fields left out) as the event's `data:` line.
+        yield ServerSentEvent(raw_data=event.model_dump_json(by_alias=True))
 
 
 @router.get("/threads/{thread_id}")

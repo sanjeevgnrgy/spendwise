@@ -1,5 +1,10 @@
 # Phase 13: Chat panel
 
+> **Later changes:** in Phase 14 the panel switched from `POST /chat` to the streaming `POST /agent` (AG-UI over SSE).
+> `sendChatMessage` and `ChatReply` were replaced by `runAgent()`. The reply now appears as it's written, the tool calls
+> arrive with `RUN_FINISHED`, and the browser picks the thread id. See
+> [phase-14-agui-streaming.md](phase-14-agui-streaming.md). This page records Phase 13 as it was built.
+
 **Goal:** an Assistant chat panel available on every page: a resizable side panel on desktop, a Sheet on mobile.
 It keeps a `thread_id`, sends messages to `POST /chat`, shows replies with the tools used, and refreshes the current
 page when the assistant changes data.

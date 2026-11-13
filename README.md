@@ -2,16 +2,17 @@
 
 An agentic expense tracker, built one small phase at a time as a learning project.
 
-**Current state (Phase 13):** a React web app (`web/`) with a sidebar layout, light/dark theme, a
+**Current state (Phase 14):** a React web app (`web/`) with a sidebar layout, light/dark theme, a
 Dashboard (this month's total, category and 6-month trend charts, recent expenses), an
 Expenses page (sortable table, filters, add/edit/delete) and an Assistant chat panel on every page
-that talks to the agent and refreshes the page when it changes data, on top of a modular-monolith FastAPI
+that shows the agent's reply as it's written and refreshes the page when it changes data, on top of a modular-monolith FastAPI
 backend with a REST API for expenses
 (create, list with filters, read, update, delete), a monthly summary, a categories list,
 `POST /ask` (sends a prompt to Gemini), `POST /parse` (turns a note like "Paid 450 at Swiggy
-yesterday" into a structured expense, without saving it) and `POST /chat` (a Gemini agent that
+yesterday" into a structured expense, without saving it), `POST /chat` (a Gemini agent that
 adds, finds, summarises, updates and deletes expenses through tools, and remembers the conversation
-per `thread_id`; see it with `GET /threads/{id}`). The same expense tools are also exposed to any MCP client (MCP Inspector, Claude
+per `thread_id`; see it with `GET /threads/{id}`) and `POST /agent` (the same agent, streaming its reply as
+AG-UI events over Server-Sent Events; the chat panel uses this one). The same expense tools are also exposed to any MCP client (MCP Inspector, Claude
 Desktop) by an MCP server at `/mcp/` and over stdio. `backend/seed.py` fills the database with sample
 data.
 
@@ -84,6 +85,8 @@ With the server running:
   tools the agent called; watch the server terminal to see each step (needs your Gemini key; `/chat` can change data).
   Send the reply's `thread_id` with your next message to continue the same conversation, and view it with
   `GET /threads/{thread_id}`
+- `POST /agent` streams the same agent's reply as AG-UI events; watch it arrive with `curl.exe -N` as shown in
+  [docs/phases/phase-14-agui-streaming.md](docs/phases/phase-14-agui-streaming.md#test-it-by-hand)
 
 The full route list, filters, status codes and example requests are in
 [docs/phases/phase-4-expenses-api.md](docs/phases/phase-4-expenses-api.md).
@@ -105,7 +108,7 @@ trailing slash). To explore it by hand in the MCP Inspector, over stdio (needs N
 .\.venv\Scripts\mcp.exe dev backend\mcp_stdio.py
 ```
 
-The assistant behind `POST /chat` uses this same server: it connects to `MCP_URL` (default
+The assistant behind `POST /chat` and `POST /agent` uses this same server: it connects to `MCP_URL` (default
 `http://localhost:8000/mcp`) to find and run its tools. If you start the app on another port, set
 `MCP_URL` in `.env` to match.
 
@@ -138,9 +141,9 @@ spendwise/
         errors.py          NotFoundError -> 404, BusinessRuleError -> 422, ExternalServiceError -> 502
         logging.py         console logging for SpendWise's own messages
         money.py           rupees <-> paise helpers
-        llm.py             the one place that talks to Gemini (plain, structured output, tools)
+        llm.py             the one place that talks to Gemini (plain, structured output, streamed tool steps)
       modules/
-        assistant/         POST /ask, /parse, /chat, GET /threads; ChatMessage table (+ parse, agent, mcp_client)
+        assistant/         POST /ask, /parse, /chat, /agent (AG-UI stream), GET /threads; ChatMessage table (+ parse, agent, mcp_client)
         mcp/               MCP server: expense tools and resources for any MCP client, mounted at /mcp/
         categories/        Category table, GET /categories, public interface
         expenses/          Expense table, CRUD routes, GET /summary, public interface

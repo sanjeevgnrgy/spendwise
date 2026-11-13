@@ -53,10 +53,17 @@ class ParseResponse(BaseModel):
     missing_fields: list[str]
 
 
+# Shared by POST /chat and POST /agent. A thread id is stored in ChatMessage.thread_id (max 32).
+MAX_MESSAGE_LENGTH = 2000
+MAX_THREAD_ID_LENGTH = 32
+
+
 class ChatRequest(BaseModel):
-    message: str = Field(min_length=1, max_length=2000, examples=["I spent 250 on lunch at Subway today, paid by UPI"])
+    message: str = Field(
+        min_length=1, max_length=MAX_MESSAGE_LENGTH, examples=["I spent 250 on lunch at Subway today, paid by UPI"]
+    )
     # Leave it out to start a new conversation; send the thread_id from a reply to continue that one.
-    thread_id: str | None = Field(default=None, max_length=32)
+    thread_id: str | None = Field(default=None, max_length=MAX_THREAD_ID_LENGTH)
 
 
 class ToolCall(BaseModel):

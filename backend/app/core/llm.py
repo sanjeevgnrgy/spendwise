@@ -1,10 +1,13 @@
 """The only code that talks to Gemini. Everything else calls the functions below."""
 
+import json
+from collections import defaultdict
+from collections.abc import Iterator
 from functools import lru_cache
 from typing import Any
 
 from google import genai
-from google.genai import interactions, types
+from google.genai import types
 
 from app.core.config import settings
 from app.core.errors import ExternalServiceError
@@ -29,13 +32,20 @@ def _client() -> genai.Client:
         # twice. 60 s, not less: a function-calling step can take 20-30 s while the model thinks.
         http_options=types.HttpOptions(
             timeout=60_000,  # milliseconds
-            retry_options=types.HttpRetryOptions(attempts=2),
+            retry_options=types.HttpRetryOptions(
+                attempts=2,
+                # Retry only when Google's side failed (5xx), e.g. "high demand". Never on 429 (quota used
+                # up): the SDK then sleeps for as long as Google's retry-after-ms header asks, with no upper
+                # limit and no timeout, so the request looked hung. Failing at once shows the quota message.
+                http_status_codes=[500, 502, 503, 504],
+            ),
         ),
     )
 
 
-def _create(**request: Any) -> interactions.Interaction:
-    """Send one request to Gemini and return the whole interaction (text and any function calls)."""
+def _create(**request: Any) -> Any:
+    """Send one request to Gemini. Returns the whole interaction (text and any function calls),
+    or with stream=True, an iterator of streaming events."""
     # Outside the try below: a missing setting is our misconfiguration, not a Gemini failure.
     client = _client()
     if not settings.gemini_model:
@@ -79,20 +89,85 @@ def ask_gemini_for_json(prompt: str, schema: dict[str, Any], system_instruction:
     )
 
 
-def ask_gemini_with_tools(
+class GeminiStream:
+    """One Gemini response, streamed.
+
+    Loop over it to get the answer's text piece by piece, as Gemini writes it. Gemini streams every
+    step of its response in pieces (thoughts and function calls too), so this also puts the steps
+    back together: once the loop has ended, `.steps` holds them in the same form a non-streamed
+    response has, ready to be resent as history, and `.usage` holds the token counts.
+    """
+
+    def __init__(self, events: Any) -> None:
+        self._events = events  # the SDK's event stream: one parsed Server-Sent Event per item
+        self.text = ""
+        self.steps: list[dict[str, Any]] = []
+        self.usage: Any = None
+
+    def __iter__(self) -> Iterator[str]:
+        steps: dict[int, dict[str, Any]] = {}  # each step under its index; every delta names the index it extends
+        pieces: dict[int, list[str]] = defaultdict(list)
+        try:
+            # `with` closes the HTTP connection even if the caller stops reading early.
+            with self._events:
+                for event in self._events:
+                    kind = getattr(event, "event_type", None)
+                    if kind == "step.start":
+                        # The step's outline: its type and, for a function call, the name and id.
+                        steps[event.index] = event.step.model_dump()
+                    elif kind == "step.delta":
+                        delta = event.delta
+                        if delta.type == "text" and delta.text:
+                            # The answer itself. Thoughts arrive as other delta types, so they never reach the user.
+                            pieces[event.index].append(delta.text)
+                            self.text += delta.text
+                            yield delta.text
+                        elif delta.type == "arguments_delta":
+                            # A function call's arguments arrive as fragments of one JSON string.
+                            pieces[event.index].append(delta.arguments or "")
+                        elif delta.type == "thought_signature":
+                            # Gemini needs this back in the history to carry on reasoning after a tool call.
+                            pieces[event.index].append(delta.signature or "")
+                        # Other deltas (e.g. thought summaries, which we don't ask for) are skipped, as Google advises.
+                    elif kind == "interaction.completed":
+                        # Unlike a non-streamed response, this final event doesn't repeat the steps.
+                        self.usage = event.interaction.usage
+                    elif kind == "error":
+                        raise GeminiError(event.error.message if event.error else "Gemini reported an error.")
+            self.steps = [_finish_step(steps[index], "".join(pieces[index])) for index in sorted(steps)]
+        except GeminiError:
+            raise
+        except Exception as exc:
+            # The connection broke mid-answer, or the arguments weren't valid JSON.
+            raise GeminiError(str(exc)) from exc
+
+
+def _finish_step(step: dict[str, Any], streamed: str) -> dict[str, Any]:
+    """Put a step's streamed pieces where a non-streamed response has them."""
+    if step["type"] == "model_output" and streamed:
+        step["content"] = [{"type": "text", "text": streamed}]
+    elif step["type"] == "function_call" and streamed:
+        step["arguments"] = json.loads(streamed)
+    elif step["type"] == "thought" and streamed:
+        step["signature"] = streamed
+    return step
+
+
+def stream_gemini_with_tools(
     history: list[dict[str, Any]],
     tools: list[dict[str, Any]],
     system_instruction: str,
     thinking_level: str | None = None,
-) -> interactions.Interaction:
-    """One step of a function-calling conversation.
+) -> GeminiStream:
+    """One step of a function-calling conversation, streamed.
 
     `history` is the whole conversation so far (we don't let Google store it, so it's resent every
-    time). Returns the whole interaction, because the answer may be function calls
-    (`interaction.steps`) rather than text (`interaction.output_text`).
+    time). The answer may be text, function calls, or both: loop over the result for the text as it
+    arrives, then read `.steps` for everything, including any function calls.
     `thinking_level` ("minimal", "low", "medium", "high", "xhigh") trades reasoning depth for speed.
     """
     request: dict[str, Any] = {"input": history, "tools": tools, "system_instruction": system_instruction}
     if thinking_level:
         request["generation_config"] = {"thinking_level": thinking_level}
-    return _create(**request)
+    # The request is sent now; the answer is read as the caller loops over the stream.
+    return GeminiStream(_create(stream=True, **request))

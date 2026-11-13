@@ -1,6 +1,8 @@
 // Every call to the SpendWise backend goes through this file, so the rest of the app never
 // deals with URLs, JSON or HTTP status codes directly.
 
+import type { A2uiAction } from "@/lib/a2ui"
+
 // Where the backend runs. Override it with VITE_API_URL in web/.env if it moves.
 const API_URL: string = import.meta.env.VITE_API_URL ?? "http://localhost:8000"
 
@@ -165,6 +167,9 @@ export function getMonthlyTrend(months = 6): Promise<MonthlyTrend> {
 
 // ---------- the assistant: AG-UI events streamed from POST /agent ----------
 
+// What starts a run: something typed, or a form's Save (an A2UI `action`, see lib/a2ui.ts).
+export type AgentPrompt = { text: string } | { action: A2uiAction }
+
 // The agent's shared state (AG-UI): sent with every run, sent back in STATE_SNAPSHOT events.
 export interface AgentState {
   dataVersion: number // goes up each time a tool changed expenses
@@ -196,13 +201,21 @@ export function newId(): string {
  */
 export async function runAgent(
   threadId: string,
-  message: string,
+  prompt: AgentPrompt,
   state: AgentState,
   onEvent: (event: AgentEvent) => void,
 ) {
   // AG-UI's run input. The browser names the thread; the server only needs the newest message,
   // because it keeps the conversation's history itself. `state` is the shared state, as we know it.
-  const input = { threadId, runId: newId(), state, messages: [{ id: newId(), role: "user", content: message }] }
+  const input = {
+    threadId,
+    runId: newId(),
+    state,
+    messages: "text" in prompt ? [{ id: newId(), role: "user", content: prompt.text }] : [],
+    // A form's Save is an A2UI action message. AG-UI has no official place for one, so it goes in
+    // forwardedProps, AG-UI's field for extra data from the client (decisions D124).
+    forwardedProps: "action" in prompt ? { a2uiAction: { version: "1.0", action: prompt.action } } : undefined,
+  }
   let response: Response
   try {
     // fetch, not EventSource: EventSource can only send GET requests, and a run needs a POST body.

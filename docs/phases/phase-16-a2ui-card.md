@@ -1,5 +1,9 @@
 # Phase 16: A2UI card
 
+> **Later changes:** in Phase 17 the catalog gained TextField, ChoicePicker and DateTimeInput with data bindings,
+> Text can be bound too, Button actions work, and Columns space their children a little more (`gap-2`).
+> See [phase-17-a2ui-forms.md](phase-17-a2ui-forms.md).
+
 **Goal:** after the assistant saves an expense, the chat panel shows a small "Expense saved" card (amount, merchant,
 category, date). The card isn't HTML from the server. It's an **A2UI** description, which the browser draws with its
 own shadcn/ui components.

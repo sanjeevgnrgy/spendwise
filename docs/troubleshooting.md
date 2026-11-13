@@ -181,6 +181,28 @@ on your tier, or temporarily overloaded).
 - **Fix:** none needed in the browser. If a card from SpendWise's own backend shows this, its card builder
   (`modules/assistant/a2ui/cards.py`) has a bug.
 
+### Assistant panel: "add lunch" got questions in text, not a form
+- **Cause:** the model chose to ask instead of calling `show_expense_form`. It's guided by its instructions, not
+  forced, and smaller models (like flash-lite) follow them less reliably. `POST /chat` never shows forms (D123).
+- **Fix:** answer the questions; that works too. Or say "show me the form". If it never shows a form, check that the
+  backend reloaded after the update.
+
+### Assistant panel: the form's Save button is greyed out
+- **Cause:** the form was already sent (one submission only), or another run is still in progress (all forms lock
+  while the assistant works). If the send failed, the form unlocks again.
+- **Fix:** wait for the reply. To change something after sending, just say so in the chat ("make it 300").
+
+### The form shows, but not the model's own: the backend logs "the model's form was rejected"
+- **Cause:** the form the model wrote didn't pass the checks: an unknown component, a property the catalog doesn't
+  have, a broken child id, a bad binding path, or no Save button. The log line says which. The built-in form was sent
+  instead (`metadata.source: "fallback"`). That's the design (D125), not an error.
+- **Fix:** nothing needed. If it happens nearly every time, the model is struggling with the catalog text in
+  `a2ui/forms.py`.
+
+### A form field says "Can't show a time picker" or "a multiple-choice picker"
+- **Cause:** only date pickers and single-choice pickers are supported (D121). A form asking for a time or several
+  choices gets a placeholder for that field.
+
 ### Assistant panel: a tool ran but no card appeared
 - **Cause:** a card is only sent after a **successful** tool call (a ✓ chip); a red ✗ chip never gets one. If the tool's
   result couldn't be read, the card is skipped on purpose and the text reply still arrives. The backend terminal then

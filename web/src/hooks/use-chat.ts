@@ -1,7 +1,7 @@
 import { useRef, useState } from "react"
 
-import { newId, runAgent } from "@/api"
-import { applyA2uiMessage, type A2uiSurface } from "@/lib/a2ui"
+import { newId, runAgent, type AgentPrompt } from "@/api"
+import { applyA2uiMessage, setAt, type A2uiAction, type A2uiSurface } from "@/lib/a2ui"
 import { useDataSync } from "@/lib/data-sync"
 
 // One tool call the assistant made, as the panel shows it: a chip that changes as events arrive.
@@ -42,8 +42,41 @@ export function useChat() {
     setMessages((current) => current.map((message) => (message.id === id ? change(message) : message)))
   }
 
-  async function send(text: string) {
-    add({ role: "user", text })
+  // Change one surface (card or form), wherever it is in the conversation.
+  function updateSurface(surfaceId: string, change: (surface: A2uiSurface) => A2uiSurface) {
+    setMessages((current) =>
+      current.map((message) =>
+        message.surfaces?.some((surface) => surface.id === surfaceId)
+          ? { ...message, surfaces: message.surfaces.map((s) => (s.id === surfaceId ? change(s) : s)) }
+          : message,
+      ),
+    )
+  }
+
+  // Typing in a form: the value lands in that form's data model, in the browser only.
+  function setFormValue(surfaceId: string, path: string, value: unknown) {
+    updateSurface(surfaceId, (surface) => ({ ...surface, data: setAt(surface.data, path, value) }))
+  }
+
+  // A form's Save: lock the form (one submission only), then send its action as the next run.
+  async function submitForm(action: A2uiAction) {
+    updateSurface(action.surfaceId, (surface) => ({ ...surface, submitted: true }))
+    // Your side of the chat shows what was sent, e.g. "Sent: 250 · Food · Subway · 2026-11-13 · upi".
+    const values = Object.values(action.context)
+      .map((value) => (Array.isArray(value) ? value.join(", ") : value))
+      .filter((value) => value !== "" && value !== null && value !== undefined)
+    const ok = await run(`Sent: ${values.join(" · ")}`, { action })
+    // If the run failed, unlock the form so it can be sent again.
+    if (!ok) updateSurface(action.surfaceId, (surface) => ({ ...surface, submitted: false }))
+  }
+
+  function send(text: string) {
+    return run(text, { text })
+  }
+
+  // One run of the agent. `shown` is what appears in your bubble. Returns whether the run succeeded.
+  async function run(shown: string, prompt: AgentPrompt): Promise<boolean> {
+    add({ role: "user", text: shown })
     setSending(true)
     // With AG-UI the client names the thread; the server starts it when the first message arrives.
     const thread = threadId ?? newId()
@@ -59,7 +92,7 @@ export function useChat() {
       }))
 
     try {
-      await runAgent(thread, text, { dataVersion }, (event) => {
+      await runAgent(thread, prompt, { dataVersion }, (event) => {
         switch (event.type) {
           case "TEXT_MESSAGE_START":
             reply()
@@ -96,6 +129,7 @@ export function useChat() {
             break
         }
       })
+      return true
     } catch (error) {
       // The run failed: a tool still spinning will never finish, so don't leave it spinning.
       update(replyId, (message) => ({
@@ -104,6 +138,7 @@ export function useChat() {
       }))
       // Any text that already arrived stays; the error appears as its own red bubble below it.
       add({ role: "assistant", text: error instanceof Error ? error.message : String(error), failed: true })
+      return false
     } finally {
       setSending(false)
     }
@@ -115,7 +150,7 @@ export function useChat() {
     setThreadId(null)
   }
 
-  return { messages, threadId, sending, send, reset }
+  return { messages, threadId, sending, send, setFormValue, submitForm, reset }
 }
 
 export type ChatState = ReturnType<typeof useChat>

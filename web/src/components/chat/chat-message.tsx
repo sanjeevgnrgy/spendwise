@@ -1,11 +1,19 @@
 import { A2uiSurfaceView } from "@/components/a2ui/a2ui-surface"
 import { ToolChip } from "@/components/chat/tool-chip"
 import type { ChatMessage } from "@/hooks/use-chat"
+import type { A2uiRenderContext } from "@/lib/a2ui"
 import { cn } from "@/lib/utils"
 
+interface ChatMessageBubbleProps {
+  message: ChatMessage
+  formsLocked?: boolean // while a run is in progress, forms can't be changed or sent
+  onFormChange?: A2uiRenderContext["onChange"]
+  onFormSubmit?: A2uiRenderContext["onAction"]
+}
+
 // One bubble: yours on the right, the assistant's on the left. The assistant's tool activity and
-// any cards are shown above its text, because the tools run before it answers.
-export function ChatMessageBubble({ message }: { message: ChatMessage }) {
+// any cards or forms are shown above its text, because the tools run before it answers.
+export function ChatMessageBubble({ message, formsLocked, onFormChange, onFormSubmit }: ChatMessageBubbleProps) {
   const isUser = message.role === "user"
 
   return (
@@ -23,7 +31,13 @@ export function ChatMessageBubble({ message }: { message: ChatMessage }) {
       {message.surfaces && message.surfaces.length > 0 && (
         <div className="flex w-full max-w-[85%] flex-col gap-2">
           {message.surfaces.map((surface) => (
-            <A2uiSurfaceView key={surface.id} surface={surface} />
+            <A2uiSurfaceView
+              key={surface.id}
+              surface={surface}
+              locked={formsLocked}
+              onChange={onFormChange}
+              onAction={onFormSubmit}
+            />
           ))}
         </div>
       )}
@@ -33,7 +47,7 @@ export function ChatMessageBubble({ message }: { message: ChatMessage }) {
         <div
           className={cn(
             // whitespace-pre-wrap: keep the line breaks in the assistant's text.
-            "max-w-[85%] rounded-lg px-3 py-2 text-sm break-words whitespace-pre-wrap",
+            "max-w-[85%] rounded-lg px-3 py-2 text-sm wrap-break-word whitespace-pre-wrap",
             isUser && "bg-primary text-primary-foreground",
             !isUser && !message.failed && "bg-muted",
             message.failed && "border border-destructive/40 bg-destructive/10 text-destructive",

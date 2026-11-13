@@ -12,7 +12,7 @@ from datetime import date
 from typing import Any
 
 from app.core import llm
-from app.modules.assistant import mcp_client
+from app.modules.assistant import a2ui, mcp_client
 from app.modules.assistant.schemas import ToolCall
 
 # Each step is one round trip to Gemini. A cap stops a confused model from looping forever,
@@ -24,6 +24,7 @@ MAX_STEPS = 5
 THINKING_LEVEL = "low"
 
 TOO_MANY_STEPS = "Sorry, that took too many steps, so I stopped. Could you try a simpler or more specific request?"
+FORM_SHOWN = "Please check the details in the form and press Save."
 TOOLS_UNAVAILABLE = (
     "Sorry, I can't reach the expense tools right now, so I can't look up or change anything. "
     "Please try again in a moment."
@@ -63,7 +64,22 @@ class ToolFinished:
     changed_data: bool
 
 
-def _system_instruction(today: date, category_names: list[str]) -> str:
+@dataclass
+class FormShown:
+    """stream() put a form on the user's screen (the model's own, or the built-in fallback)."""
+
+    message: a2ui.CreateSurfaceMessage
+    source: str  # "model" or "fallback"
+
+
+def _system_instruction(today: date, category_names: list[str], forms: bool) -> str:
+    # With forms (the web panel), missing details are asked for with a form; otherwise (POST /chat) in text.
+    missing = (
+        a2ui.form_instructions(category_names)
+        if forms
+        else "If something needed is missing (amount, category, merchant or payment method), ask the user "
+        "instead of guessing."
+    )
     return "\n".join(
         [
             "You are SpendWise, a friendly assistant that helps one person track their expenses.",
@@ -72,8 +88,7 @@ def _system_instruction(today: date, category_names: list[str]) -> str:
             "Amounts are in Indian rupees (INR) unless the user says otherwise. Show them like ₹450.50.",
             f"Expense categories: {', '.join(category_names)}.",
             "Use the tools to read or change expenses. Never make up numbers you haven't looked up.",
-            "If something needed is missing (amount, category, merchant or payment method), ask the user "
-            "instead of guessing.",
+            missing,
             "Before deleting, call delete_expense with confirmed=false, tell the user what would be deleted, "
             "and ask them to confirm. Never set confirmed=true unless the user's message clearly confirms it.",
             # The app shows ids this way (cards, the Expenses table), so users can point at one exactly.
@@ -110,14 +125,28 @@ def _run_tool(name: str, arguments: dict[str, Any]) -> mcp_client.ToolResult:
     return result
 
 
+def _function_result(call: dict[str, Any], text: str, ok: bool) -> dict[str, Any]:
+    return {
+        "type": "function_result",
+        "name": call["name"],
+        "call_id": call["id"],
+        # An MCP isError result (e.g. "Unknown category") is passed on as an error,
+        # so the model can correct its call or explain the problem.
+        "is_error": not ok,
+        "result": [{"type": "text", "text": text}],
+    }
+
+
 def stream(
-    message: str, today: date, history: list[dict[str, Any]] | None = None
-) -> Iterator[str | ToolStarted | ToolFinished | AgentResult]:
+    message: str, today: date, history: list[dict[str, Any]] | None = None, forms: bool = True
+) -> Iterator[str | ToolStarted | ToolFinished | FormShown | AgentResult]:
     """Answer one user message, streaming.
 
     Yields, as they happen: the reply's text in pieces (str), a ToolStarted before and a ToolFinished
-    after each tool call, and finally, as the very last item, an AgentResult with the whole reply,
-    the tools used and the steps to store. `history` is the earlier conversation (oldest first).
+    after each tool call, a FormShown when the model asks for details with a form, and finally, as the
+    very last item, an AgentResult with the whole reply, the tools used and the steps to store.
+    `history` is the earlier conversation (oldest first). `forms=False` (POST /chat, which can't show
+    a form) makes the model ask for missing details in text instead.
     """
     earlier = history or []
     turn: list[dict[str, Any]] = [_text_step("user_input", message)]
@@ -128,7 +157,7 @@ def stream(
     try:
         # What the assistant can do comes from the MCP server, not from this code.
         declarations = mcp_client.tool_declarations()
-        instruction = _system_instruction(today, mcp_client.category_names())
+        category_names = mcp_client.category_names()
     except mcp_client.McpUnavailableError as exc:
         # Without tools the model could only guess, so answer honestly without asking it.
         logger.warning("MCP unavailable, not calling Gemini: %s", exc)
@@ -136,6 +165,10 @@ def stream(
         yield TOOLS_UNAVAILABLE
         yield AgentResult(reply=TOOLS_UNAVAILABLE, tool_calls=tool_calls, steps=turn)
         return
+    if forms:
+        # The assistant's one tool of its own: it shows a form and touches no data (data tools are MCP's).
+        declarations = [*declarations, a2ui.SHOW_FORM_TOOL]
+    instruction = _system_instruction(today, category_names, forms)
 
     for step in range(1, MAX_STEPS + 1):
         logger.info("step %d/%d: asking Gemini", step, MAX_STEPS)
@@ -162,8 +195,18 @@ def stream(
             yield AgentResult(reply=reply, tool_calls=tool_calls, steps=turn)
             return
 
+        form_shown = False
         for call in calls:
             arguments = call.get("arguments") or {}
+            if call["name"] == a2ui.SHOW_FORM_TOOL_NAME:
+                # The model's own form if it passes the checks, else the built-in one.
+                form, source = a2ui.expense_form_from_call(arguments, category_names, today)
+                logger.info("  form shown (%s)", source)
+                yield FormShown(message=form, source=source)
+                form_shown = True
+                turn.append(_function_result(call, "The form is on the user's screen; they will submit it.", True))
+                continue
+
             yield ToolStarted(call_id=call["id"], name=call["name"], arguments=arguments)
             result = _run_tool(call["name"], arguments)
             changed = result.ok and mcp_client.changes_data(call["name"])
@@ -171,17 +214,16 @@ def stream(
                 call_id=call["id"], name=call["name"], ok=result.ok, text=result.text, changed_data=changed
             )
             tool_calls.append(ToolCall(name=call["name"], arguments=arguments, ok=result.ok))
-            turn.append(
-                {
-                    "type": "function_result",
-                    "name": call["name"],
-                    "call_id": call["id"],
-                    # An MCP isError result (e.g. "Unknown category") is passed on as an error,
-                    # so the model can correct its call or explain the problem.
-                    "is_error": not result.ok,
-                    "result": [{"type": "text", "text": result.text}],
-                }
-            )
+            turn.append(_function_result(call, result.text, result.ok))
+
+        if form_shown:
+            # The user answers with the form now, not in words. End the turn here instead of asking Gemini
+            # again, which would only say "please fill in the form" (and use up a request).
+            ending = ("\n\n" if reply else "") + FORM_SHOWN
+            turn.append(_text_step("model_output", FORM_SHOWN))
+            yield ending
+            yield AgentResult(reply=reply + ending, tool_calls=tool_calls, steps=turn)
+            return
 
     logger.warning("stopped after %d steps without a final answer", MAX_STEPS)
     # Store the apology as the model's answer, so the turn ends cleanly for the next message.
@@ -193,7 +235,8 @@ def stream(
 
 def run(message: str, today: date, history: list[dict[str, Any]] | None = None) -> AgentResult:
     """The same loop without streaming (POST /chat): wait for the end and return the whole result."""
-    for item in stream(message, today, history):
+    # JSON replies can't carry a form, so the model asks for missing details in text.
+    for item in stream(message, today, history, forms=False):
         if isinstance(item, AgentResult):
             return item
     raise RuntimeError("The agent loop ended without a result.")  # can't happen: stream() always ends with one

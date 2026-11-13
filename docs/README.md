@@ -10,7 +10,7 @@ covers setup and running; this folder explains **why** things are the way they a
 | [architecture.md](architecture.md) | The modular monolith: layout, rules, how a request flows, how to add a module |
 | [decisions.md](decisions.md) | Every design decision so far, with the reason and when to revisit it |
 | [gemini.md](gemini.md) | Gemini setup, models and the free tier, privacy, errors, tokens |
-| [sources.md](sources.md) | What the official docs, specs and library code say, with links, for the facts Phases 14–16 rely on |
+| [sources.md](sources.md) | What the official docs, specs and library code say, with links, for the facts Phases 14–17 rely on |
 | [troubleshooting.md](troubleshooting.md) | Problems already hit and how to fix them |
 | [git.md](git.md) | Repo-specific git identity, committing safely, the GitHub remote |
 | [concepts/python-tooling.md](concepts/python-tooling.md) | Virtual environments, `.env`, `__pycache__`, `python -m`, pinned dependencies |
@@ -30,6 +30,7 @@ covers setup and running; this folder explains **why** things are the way they a
 | [phases/phase-14-agui-streaming.md](phases/phase-14-agui-streaming.md) | SSE vs normal HTTP, the AG-UI events, streaming Gemini with tools in the loop, reading a stream in the browser |
 | [phases/phase-15-tool-progress.md](phases/phase-15-tool-progress.md) | Why tool activity builds trust, AG-UI tool events, shared state and `dataVersion`, MCP tool annotations, status chips (not run live yet) |
 | [phases/phase-16-a2ui-card.md](phases/phase-16-a2ui-card.md) | Why agents send UI as data not HTML, A2UI v1.0 messages and catalog, a card for each tool result, a safe renderer (not run live yet) |
+| [phases/phase-17-a2ui-forms.md](phases/phase-17-a2ui-forms.md) | Data binding, why model-written UI is validated, a form instead of questions, Save as an A2UI action (not run live yet) |
 
 Each phase file has the concepts, what was built, how to run and test it, and the
 "check your understanding" questions. Answers are hidden; click to reveal them.

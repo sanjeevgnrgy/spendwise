@@ -99,7 +99,13 @@ export function ChatPanel({ chat, onClose }: ChatPanelProps) {
           )}
 
           {chat.messages.map((message) => (
-            <ChatMessageBubble key={message.id} message={message} />
+            <ChatMessageBubble
+              key={message.id}
+              message={message}
+              formsLocked={chat.sending}
+              onFormChange={chat.setFormValue}
+              onFormSubmit={chat.submitForm}
+            />
           ))}
 
           {/* Only while nothing else shows progress: not while a tool chip spins or text is arriving. */}

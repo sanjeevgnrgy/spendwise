@@ -19,6 +19,9 @@ ComponentId = Annotated[str, Field(pattern=r"^[A-Za-z_][A-Za-z0-9_]*$")]
 Justify = Literal["start", "center", "end", "spaceBetween", "spaceAround", "spaceEvenly", "stretch"]
 Align = Literal["start", "center", "end", "stretch"]
 
+# The only actions a button may trigger. A form the model writes can't invent new ones.
+ActionName = Literal["save_expense"]
+
 
 class _A2uiModel(BaseModel):
     # Python names in snake_case, JSON in camelCase as the spec writes it (surfaceId, createSurface).
@@ -26,14 +29,29 @@ class _A2uiModel(BaseModel):
     model_config = ConfigDict(alias_generator=to_camel, populate_by_name=True, extra="forbid")
 
 
-# ---------- the allowed catalog: Text, Card, Row, Column, List, Button, Divider ----------
-# Values are plain literals. The spec also allows data bindings ({"@path": ...}); not needed yet.
+class DataBinding(_A2uiModel):
+    """A value that lives in the surface's data model, found by a JSON Pointer such as "/expense/amount".
+
+    Inputs show the value at the path and write what the user types back to it (in the browser only).
+    We allow only absolute paths made of simple names, which also keeps "__proto__"-style tricks out.
+    """
+
+    path: str = Field(alias="@path", pattern=r"^(/[A-Za-z_][A-Za-z0-9_]*)+$")
+
+
+# A plain string, or a binding to one in the data model.
+DynamicString = str | DataBinding
+
+
+# ---------- the allowed catalog ----------
+# Display: Text, Card, Row, Column, List, Divider. Input: TextField, ChoicePicker, DateTimeInput.
+# Action: Button.
 
 
 class Text(_A2uiModel):
     id: ComponentId
     component: Literal["Text"] = "Text"
-    text: str
+    text: DynamicString
     variant: Literal["caption", "body"] = "body"  # the spec's only two text styles
 
 
@@ -73,13 +91,51 @@ class Divider(_A2uiModel):
     axis: Literal["horizontal", "vertical"] | None = None
 
 
+class TextField(_A2uiModel):
+    id: ComponentId
+    component: Literal["TextField"] = "TextField"
+    label: str
+    value: DynamicString  # bind it, so what the user types lands in the data model
+    placeholder: str | None = None
+    variant: Literal["shortText", "longText", "number", "obscured"] | None = None
+
+
+class ChoiceOption(_A2uiModel):
+    label: str
+    value: str
+
+
+class ChoicePicker(_A2uiModel):
+    """Pick from a list. A2UI's basic catalog has no "Select": this is it, drawn as a dropdown.
+
+    Its value is a list of strings even for a single choice (the spec's rule), e.g. ["Food"].
+    """
+
+    id: ComponentId
+    component: Literal["ChoicePicker"] = "ChoicePicker"
+    label: str
+    options: list[ChoiceOption] = Field(min_length=1)
+    value: DataBinding
+    variant: Literal["mutuallyExclusive"] | None = None  # one choice only; multi-select isn't supported
+
+
+class DateTimeInput(_A2uiModel):
+    id: ComponentId
+    component: Literal["DateTimeInput"] = "DateTimeInput"
+    label: str
+    value: DataBinding  # an ISO 8601 date, "2026-11-13"
+    enable_date: Literal[True] = True  # the spec's default is false, so a date picker must say true
+    enable_time: Literal[False] | None = None  # dates only: there's no time on an expense
+
+
 class EventAction(_A2uiModel):
-    name: str
-    context: dict[str, Any] | None = None
+    name: ActionName
+    # What to send with the action: bindings are read from the data model at the moment of the click.
+    context: dict[str, DataBinding | str | float | bool] | None = None
 
 
 class Action(_A2uiModel):
-    # When clicked, the renderer sends this event back to the agent (a later phase handles it).
+    # When clicked, the renderer sends this event back to the agent as an `action` message.
     event: EventAction
 
 
@@ -92,7 +148,10 @@ class Button(_A2uiModel):
 
 
 # The "component" field says which model applies, so Pydantic checks each one against the right rules.
-Component = Annotated[Text | Card | Row | Column | List | Button | Divider, Field(discriminator="component")]
+Component = Annotated[
+    Text | Card | Row | Column | List | Button | Divider | TextField | ChoicePicker | DateTimeInput,
+    Field(discriminator="component"),
+]
 
 
 def _referenced_ids(component: BaseModel) -> list[str]:
@@ -107,6 +166,8 @@ class CreateSurface(_A2uiModel):
     surface_id: str
     catalog_id: str = BASIC_CATALOG_ID
     components: list[Component] = Field(min_length=1)
+    # The surface's starting data, e.g. a form pre-filled with what the agent understood.
+    data_model: dict[str, Any] | None = None
 
     @model_validator(mode="after")
     def _complete(self) -> "CreateSurface":
@@ -154,3 +215,22 @@ class DeleteSurfaceMessage(_Message):
 
 
 A2uiMessage = CreateSurfaceMessage | UpdateComponentsMessage | DeleteSurfaceMessage
+
+
+# ---------- messages (renderer to agent) ----------
+
+
+class UserAction(_A2uiModel):
+    """A button was clicked. `context` holds the values its bindings pointed at, read at the click."""
+
+    name: ActionName
+    surface_id: str
+    source_component_id: str
+    timestamp: str  # ISO 8601, when it was clicked
+    # Strings, or lists of strings from a ChoicePicker. Never trusted: it's what the user typed.
+    context: dict[str, str | list[str] | float | bool | None]
+
+
+class ActionMessage(_A2uiModel):
+    version: Literal["1.0"]
+    action: UserAction

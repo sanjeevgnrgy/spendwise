@@ -33,7 +33,8 @@ spendwise/
         llm.py          ask_gemini(), ask_gemini_for_json(), stream_gemini_with_tools()
       modules/
         assistant/      POST /ask, /parse, /chat, /agent (AG-UI stream), GET /threads; ChatMessage table (parse, agent, mcp_client)
-          a2ui/         A2UI v1.0 models (the allowed catalog) and ready-made cards, sent as AG-UI CUSTOM events
+          a2ui/         A2UI v1.0 models (the allowed catalog), ready-made cards, and the expense form
+                        (model-written, checked, or the built-in one), sent as AG-UI CUSTOM events
         mcp/            MCP server "spendwise": 5 tools (with read-only/destructive annotations), 2 resources; mounted at /mcp/ (no tables)
         categories/     Category table, GET /categories, public interface
         expenses/       Expense table, CRUD routes + GET /summary, /summary/trend, public interface
@@ -156,13 +157,16 @@ HTTP request
 HTTP request
   -> modules/assistant/router.py        validates the body (ag_ui RunAgentInput) -> 422 if malformed; then a 200 stream
        (a sync generator with EventSourceResponse: FastAPI runs it in a worker thread and pings every 15 s)
-  -> modules/assistant/service.py       agent_run(): RUN_STARTED; newest user message; load the thread (new if unknown)
+  -> modules/assistant/service.py       agent_run(): RUN_STARTED; the input: forwardedProps.a2uiAction (a form's Save,
+                                          checked and written as a message) or the newest user message;
+                                          load the thread (new if unknown)
   -> modules/assistant/agent.py         stream(): the same loop as /chat, yielding as things happen:
        text pieces                        -> TEXT_MESSAGE_START (if none open), TEXT_MESSAGE_CONTENT
        ToolStarted (before an MCP call)   -> TEXT_MESSAGE_END (if open), TOOL_CALL_START, TOOL_CALL_ARGS, TOOL_CALL_END
        ToolFinished (after it)            -> TOOL_CALL_RESULT (metadata.ok); if it changed data (MCP annotations,
                                              mcp_client.changes_data): STATE_SNAPSHOT {"dataVersion": state + 1};
                                              if a2ui.card_for(tool) has a card: CUSTOM {"name": "a2ui", "value": <A2UI message>}
+       FormShown (show_expense_form)      -> CUSTOM "a2ui" with the form and metadata.source (model | fallback); the turn ends
   -> assistant/repository.add_turn()    saves the turn when the loop ends
   <- TEXT_MESSAGE_END, RUN_FINISHED   or RUN_ERROR on any failure (nothing saved)
 ```

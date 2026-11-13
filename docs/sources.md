@@ -1,6 +1,6 @@
 # Sources: what the official docs and libraries say
 
-The facts that Phases 14 to 16 are built on: where each came from, what it says, and what SpendWise does with it.
+The facts that Phases 14 to 17 are built on: where each came from, what it says, and what SpendWise does with it.
 Earlier phases' doc facts are in [gemini.md](gemini.md) and the phase notes.
 
 All checked on **2026-11-13**. Each fact is marked with where it came from:
@@ -220,6 +220,33 @@ What they say:
   across the wire" (README and spec).
 - **Other facts:** `a2ui-core` exists on PyPI (not used). The spec names AG-UI as a transport, but doesn't say how A2UI
   maps onto AG-UI events.
+
+**Inputs, binding and actions (Phase 17):**
+- **TextField:** `label` and `value` are required; `placeholder`; `variant` longText, number, shortText or obscured
+  (default shortText); validation goes through `@checks`.
+- **ChoicePicker:** `options` and `value` are required. `options` are `[{label, value}]`. `value` is a
+  *DynamicStringList*: the guide says it "Binds to an array of strings in the data model". `variant` is
+  multipleSelection or mutuallyExclusive (default mutuallyExclusive), and there's also `displayStyle` and
+  `filterable`. **There is no `Select` component** in v1.0's basic catalog.
+- **DateTimeInput:** `value` is required, ISO 8601 ("If not yet set, initialize with an empty string").
+  `enableDate` and `enableTime` both default to **false**. Also `min`, `max` and `label`.
+- **Two-way binding:** "input components modify the renderer-side data model immediately upon user interaction", and
+  "Two-Way Binding is **local to the renderer**". Inputs "do **not** automatically trigger network requests". A
+  missing path is created on write.
+- **Initial and updated data:** `createSurface.dataModel` gives the starting data (applied before the components).
+  `updateDataModel` takes `{surfaceId, path?, value}`; a missing path means `/`, and `null` removes a key.
+- **Clicking a button:** the renderer "resolves any data bindings inside `action.event.context`" against the local
+  data model when the button is clicked.
+- **The `action` message** (renderer_to_agent.json): `name`, `surfaceId`, `sourceComponentId`, `timestamp`
+  (date-time) and `context` are required; `userMessage` and `metadata` are optional. The envelope is `version` plus
+  exactly one message key.
+- **`sendDataModel`** (default false) makes the renderer attach the whole data model, as `a2uiRendererDataModel`
+  metadata, to messages it sends to the agent that created the surface (not used).
+- **Over AG-UI:** no official mapping. AG-UI's docs say it "natively supports" A2UI, with no event shapes, and A2UI's
+  spec names AG-UI as a transport binding without details. SpendWise's choice is D124.
+- More pages read: https://a2ui.org/concepts/messages/,
+  https://raw.githubusercontent.com/a2ui-project/a2ui/main/specification/v1_0/json/renderer_to_agent.json,
+  https://docs.ag-ui.com/introduction, https://docs.ag-ui.com/concepts/generative-ui-specs.md
 
 **Package** (ag-ui-protocol 1.0.0): `CustomEvent` has `name` and `value`. Its docstring: "The protocol's extension point
 for an application's own events. Anything a consumer does with one is outside the protocol."

@@ -761,6 +761,7 @@ is natural. It's still a soft, model-judged guard.
 - **Left out for now:** data bindings (`{"@path": ...}`), template child lists, `functionCall` actions, `updateDataModel`,
   and the components we don't use. `a2ui-core` on PyPI exists; we write our own models because the phase is about
   learning the format.
+- **Updated by D121, D122:** three input components and data bindings were added in Phase 17.
 
 ### D117. A card is one `createSurface` message in one AG-UI `CUSTOM` event named `a2ui`
 - The v1.0 schema lets `createSurface` carry its components, so one message describes a whole card. AG-UI has no A2UI
@@ -788,6 +789,7 @@ is natural. It's still a soft, model-judged guard.
   Components are kept in a `Map`, so an id like `__proto__` is just a key. Nesting stops at depth 12, so a component that
   contains itself can't loop forever.
 - **Button** is drawn but disabled ("Not available yet") until a later phase sends actions back to the agent.
+- **Updated by D124:** buttons work now, sending their action (Phase 17).
 
 ### D119. Correction to D99: `cn` is shadcn's npm package
 - `web/package.json` has had `"cn": "^0.5.2"` since Phase 11 (shadcn init). Its own description: "Fast, small, compiled
@@ -806,3 +808,66 @@ is natural. It's still a soft, model-judged guard.
 - The **full** id is shown, not "the first 6 characters" (as first asked). Ids are whole numbers counting up from 1, so
   they're short, and cutting a number would point at the wrong expense once ids pass 999,999. **Revisit when:** ids
   become long random strings (e.g. UUIDs); then show a short prefix and make the server accept it.
+
+---
+
+## A2UI forms (Phase 17)
+
+> Checked offline: a scripted fake Gemini with the real app and MCP server (valid model form, invalid form with
+> fallback, a form submission saved, a forged action refused, `/chat` without forms), the renderer and data-model
+> helpers via React's server renderer, and the web app's `runAgent()` doing the whole round trip. `npm run build`
+> passes. Not yet tried in a browser or with real Gemini.
+
+### D121. Three input components, as A2UI v1.0 defines them
+- **TextField:** `label` and `value` are required; `variant` shortText, longText, number or obscured.
+- **ChoicePicker:** the prompt said "Select", but v1.0's basic catalog has none. ChoicePicker is its dropdown, and its
+  value is a list, `["Food"]`. Only one choice at a time (`mutuallyExclusive`); multi-select gets a placeholder.
+- **DateTimeInput:** dates only. `enableDate: true` is required, because the spec's default is false; a time picker
+  gets a placeholder.
+- **Drawn with:** shadcn `Input` or `Textarea`, `Select`, and `Popover` + `Calendar`. `npx shadcn add popover
+  calendar` also installed `react-day-picker` 10 and `date-fns` 4. "number" stays a text box with a decimal keypad, so
+  amounts keep their exact digits.
+- **Left out:** `@checks` validation rules, `displayStyle`, `filterable`, `min` / `max` (the strict models reject
+  them).
+
+### D122. Data binding: absolute JSON Pointers of simple names, kept in the browser
+- A bound value is `{"@path": "/expense/amount"}`. The server's model only accepts absolute paths made of simple
+  names (`^(/[A-Za-z_][A-Za-z0-9_]*)+$`). The browser's `getAt` / `setAt` also refuse `__proto__`, `prototype` and
+  `constructor`, because data from the network must not reach JavaScript's object machinery.
+- Each surface keeps its data model in the chat state. Typing updates it there (`setFormValue`), and nothing is sent
+  until a button's action fires, as the spec requires ("Two-Way Binding is local to the renderer"). `updateDataModel`
+  messages are applied too, though the agent doesn't send any yet.
+
+### D123. Missing details get a form, from a UI tool the assistant declares itself
+- `show_expense_form` changes no data, so it's declared in `a2ui/forms.py` and offered next to the MCP tools, not on
+  the MCP server (the data tools stay MCP's, D72). The system instruction's "ask instead of guessing" line becomes the
+  form rules.
+- Once a form is shown, the turn ends with a fixed sentence ("Please check the details in the form and press Save."),
+  saving a Gemini request that would only say the same. The history stays valid: `function_result`, then
+  `model_output`.
+- `POST /chat` can't show forms, so it gets neither the tool nor the rules (`agent.run(..., forms=False)`) and asks in
+  text as before.
+
+### D124. Save sends an A2UI `action` in AG-UI's `forwardedProps`
+- **Where it goes:** nothing official says how a client sends an A2UI action over AG-UI. So the browser sends
+  `forwardedProps: {"a2uiAction": {"version": "1.0", "action": {...}}}` with an empty `messages` list.
+  `forwardedProps` is AG-UI's field for extra client data.
+- **Checking it:** the server validates it (`ActionMessage`: v1.0 fields, action name must be `save_expense`, values
+  are strings or string lists, at most 2000 characters in total).
+- **What the agent sees:** it gets the action as its next user message, with the values as labelled JSON ("data, not
+  instructions"). A picker's one-item list becomes a plain string. The model then calls `add_expense`, so the usual
+  chips, snapshot and "saved" card follow, and the thread's history records the submission.
+- **Locking:** the form locks once sent (one submission only) and unlocks if the run fails. While any run is in
+  progress, all forms are locked.
+
+### D125. The model writes the form; the server checks it and falls back
+- The catalog (allowed types and properties, and the `/expense/<field>` bindings) is in the system instruction, about
+  300 tokens per request. The model passes the form as a JSON **string** (`form`), plus the details it understood as
+  ordinary arguments. A string avoids describing every component in Gemini's parameter schema.
+- **The check:** the Pydantic models (catalog, properties, ids, `root`, references, paths, action name), plus "has a
+  Save button". The surface id and catalog are always chosen by the server.
+- **On failure:** the reason is logged and `expense_form()` is sent instead, pre-filled from the call's arguments.
+  The date defaults to today.
+- `CUSTOM` `metadata.source` is `"model"` or `"fallback"`, so you can see which happened. **Revisit when:** fallbacks
+  are frequent; then shorten the catalog text, or send it as structured output.
+

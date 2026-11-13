@@ -21,6 +21,7 @@ from ag_ui.core import (
     ToolCallResultEvent,
     ToolCallStartEvent,
 )
+from pydantic import ValidationError
 from sqlmodel import Session
 
 from app.core import llm
@@ -93,8 +94,6 @@ def _newest_user_text(run: RunAgentInput) -> str:
     Only that message is used, even if the client sends the whole conversation: the server keeps
     the thread's history itself, including Gemini's thoughts and tool results the browser never sees.
     """
-    if not 1 <= len(run.thread_id) <= MAX_THREAD_ID_LENGTH:
-        raise BusinessRuleError(f"threadId must be 1 to {MAX_THREAD_ID_LENGTH} characters long.")
     user_messages = [m for m in run.messages if m.role == "user"]
     if not user_messages:
         raise BusinessRuleError("The run has no user message to answer.")
@@ -108,6 +107,35 @@ def _newest_user_text(run: RunAgentInput) -> str:
     return text
 
 
+def _form_action(run: RunAgentInput) -> a2ui.UserAction | None:
+    """A form submission sent with the run, if any.
+
+    Nothing official says how an A2UI action travels over AG-UI, so SpendWise puts the A2UI `action`
+    message in RunAgentInput.forwardedProps (AG-UI's field for extra data from the client) as
+    "a2uiAction". It's checked like any other input: it holds what the user typed.
+    """
+    props = run.forwarded_props
+    if not isinstance(props, dict) or "a2uiAction" not in props:
+        return None
+    try:
+        return a2ui.ActionMessage.model_validate(props["a2uiAction"]).action
+    except ValidationError as exc:
+        raise BusinessRuleError("The form submission isn't valid.") from exc
+
+
+def _agent_input(run: RunAgentInput) -> str:
+    """What the agent should respond to: a form submission if there is one, else the newest message."""
+    if not 1 <= len(run.thread_id) <= MAX_THREAD_ID_LENGTH:
+        raise BusinessRuleError(f"threadId must be 1 to {MAX_THREAD_ID_LENGTH} characters long.")
+    action = _form_action(run)
+    if action is None:
+        return _newest_user_text(run)
+    text = a2ui.describe_action(action)
+    if len(text) > MAX_MESSAGE_LENGTH:
+        raise BusinessRuleError(f"The form's values must be under {MAX_MESSAGE_LENGTH} characters in total.")
+    return text
+
+
 def _data_version(state: Any) -> int:
     """dataVersion from the state the client sent with the run; 0 if it's missing or not a number."""
     value = state.get("dataVersion") if isinstance(state, dict) else None
@@ -115,12 +143,13 @@ def _data_version(state: Any) -> int:
 
 
 def agent_run(session: Session, run: RunAgentInput) -> Iterator[BaseEvent]:
-    """POST /agent: one AG-UI run, answering the newest user message as a stream of events.
+    """POST /agent: one AG-UI run, answering the newest user message (or a form submission) as events.
 
     RUN_STARTED; then, as they happen, the reply's text as TEXT_MESSAGE_START / _CONTENT / _END, each
     tool call as TOOL_CALL_START / _ARGS / _END / _RESULT, a STATE_SNAPSHOT after a tool changed data,
-    and a CUSTOM "a2ui" event with a card for tools that have one; then RUN_FINISHED. Once the stream has started, the HTTP status (200) has already been sent
-    and can't change, so any failure is reported as a RUN_ERROR event instead.
+    and a CUSTOM "a2ui" event for each card or form; then RUN_FINISHED. Once the stream has started,
+    the HTTP status (200) has already been sent and can't change, so any failure is reported as a
+    RUN_ERROR event instead.
     """
     yield RunStartedEvent(thread_id=run.thread_id, run_id=run.run_id)
     text_id: str | None = None  # the text message currently open, if any
@@ -128,7 +157,7 @@ def agent_run(session: Session, run: RunAgentInput) -> Iterator[BaseEvent]:
     # after every tool that changed data. A new number is what makes the pages reload.
     data_version = _data_version(run.state)
     try:
-        message = _newest_user_text(run)
+        message = _agent_input(run)
         # AG-UI clients name their threads themselves, so an unknown id starts a new
         # conversation here (POST /chat answers 404 instead, because there the server names them).
         turn = (repository.last_turn(session, run.thread_id) or 0) + 1
@@ -165,6 +194,10 @@ def agent_run(session: Session, run: RunAgentInput) -> Iterator[BaseEvent]:
                 if card is not None:
                     # A2UI has no event of its own in AG-UI, so it travels in AG-UI's extension event.
                     yield CustomEvent(name="a2ui", value=card.to_json())
+
+            elif isinstance(item, agent.FormShown):
+                # metadata.source says whose form this is: "model" (it passed the checks) or "fallback".
+                yield CustomEvent(name="a2ui", value=item.message.to_json(), metadata={"source": item.source})
 
             else:
                 # The last item: the whole turn. Saved only when the run succeeds, like POST /chat.

@@ -25,6 +25,7 @@ covers setup and running; this folder explains **why** things are the way they a
 | [phases/phase-10-agent-uses-mcp.md](phases/phase-10-agent-uses-mcp.md) | The agent as an MCP client: discovering tools, schema conversion, error handling, what decoupling buys (not run yet) |
 | [phases/phase-11-frontend.md](phases/phase-11-frontend.md) | React components, props, useState/useEffect, shadcn/ui vs a component library, CORS, the Expenses page |
 | [phases/phase-12-dashboard.md](phases/phase-12-dashboard.md) | Why the backend aggregates, the trend endpoint, shadcn charts, loading / empty / error states |
+| [phases/phase-13-chat-panel.md](phases/phase-13-chat-panel.md) | The chat panel, keeping panel and pages in sync with a shared context, resizable panel vs Sheet |
 
 Each phase file has the concepts, what was built, how to run and test it, and the
 "check your understanding" questions. Answers are hidden; click to reveal them.

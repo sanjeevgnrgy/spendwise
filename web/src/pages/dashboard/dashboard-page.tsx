@@ -14,6 +14,7 @@ import {
 } from "@/api"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
+import { useDataSync } from "@/lib/data-sync"
 import { currentMonth } from "@/lib/format"
 import { CategoryChart } from "@/pages/dashboard/category-chart"
 import { DashboardSkeleton } from "@/pages/dashboard/dashboard-skeleton"
@@ -33,6 +34,8 @@ export function DashboardPage() {
   const [data, setData] = useState<DashboardData | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [reloadCount, setReloadCount] = useState(0)
+  // Goes up when the chat assistant changes expenses: the effect below reloads the numbers.
+  const { dataVersion } = useDataSync()
   const month = currentMonth()
 
   useEffect(() => {
@@ -53,7 +56,7 @@ export function DashboardPage() {
     return () => {
       cancelled = true
     }
-  }, [month, reloadCount])
+  }, [month, reloadCount, dataVersion])
 
   function retry() {
     setError(null)

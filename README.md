@@ -2,9 +2,10 @@
 
 An agentic expense tracker, built one small phase at a time as a learning project.
 
-**Current state (Phase 12):** a React web app (`web/`) with a sidebar layout, light/dark theme, a
-Dashboard (this month's total, category and 6-month trend charts, recent expenses) and an
-Expenses page (sortable table, filters, add/edit/delete), on top of a modular-monolith FastAPI
+**Current state (Phase 13):** a React web app (`web/`) with a sidebar layout, light/dark theme, a
+Dashboard (this month's total, category and 6-month trend charts, recent expenses), an
+Expenses page (sortable table, filters, add/edit/delete) and an Assistant chat panel on every page
+that talks to the agent and refreshes the page when it changes data, on top of a modular-monolith FastAPI
 backend with a REST API for expenses
 (create, list with filters, read, update, delete), a monthly summary, a categories list,
 `POST /ask` (sends a prompt to Gemini), `POST /parse` (turns a note like "Paid 450 at Swiggy
@@ -149,6 +150,8 @@ spendwise/
   web/                     React frontend (see web/README.md)
     src/api.ts             every call to the backend
     src/pages/expenses/    the Expenses page: table, filters, add dialog, inline edit
+    src/pages/dashboard/   the Dashboard: cards, charts, recent expenses
+    src/components/chat/   the Assistant chat panel (state in src/hooks/use-chat.ts)
     src/components/ui/     shadcn/ui components (copied source, editable)
   run.ps1                  one-command dev start (Windows)
   requirements.txt         pinned direct dependencies

@@ -104,6 +104,24 @@ on your tier, or temporarily overloaded).
 - **Cause:** a component rendered a `<script>` (e.g. `next-themes`), which never runs in a browser-rendered React app.
 - **Fix:** already removed from SpendWise (decisions D87). Put scripts in `index.html` instead.
 
+### Assistant panel: the reply bubble is red
+- **Cause:** the `/chat` request failed. The text says why: backend not running ("Can't reach the SpendWise API"),
+  Gemini overloaded or the key invalid (a 502 message), or the MCP tools unreachable ("Sorry, I can't reach the expense tools").
+- **Fix:** see the Gemini and MCP sections below for each message.
+
+### Assistant panel: the assistant added an expense but the page didn't update
+- **Cause:** the page refreshes only when a tool call that changes data **succeeded** (green badge). A red badge means
+  the backend refused it; a `delete expense` badge before you confirmed changes nothing yet.
+- **Fix:** read the reply. If it says it was saved but the page didn't change, reload the page and report it.
+
+### Assistant panel: the conversation disappeared
+- **Cause:** a browser reload clears it (it's kept in memory across pages and panel toggles, not across reloads), or
+  **New conversation** was clicked. The thread itself is still on the server: `GET /threads/{id}`.
+
+### Build error: `Cannot find module 'cn'` in `components/ui/resizable.tsx`
+- **Cause:** shadcn's generated file imports `cn` from `"cn"`. This happens again if the component is re-added with the CLI.
+- **Fix:** change it to `import { cn } from "@/lib/utils"`.
+
 ### Dashboard shows "Couldn't load the dashboard"
 - **Cause:** one of its four requests failed, most often because the backend isn't running.
 - **Fix:** start the backend (`.\run.ps1`) and click **Try again**. The message under the title is the actual error.

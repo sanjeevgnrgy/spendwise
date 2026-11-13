@@ -23,6 +23,7 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog"
+import { useDataSync } from "@/lib/data-sync"
 import { formatDate, formatMoney } from "@/lib/format"
 import { AddExpenseDialog } from "@/pages/expenses/add-expense-dialog"
 import { ExpensesTable } from "@/pages/expenses/expenses-table"
@@ -43,6 +44,8 @@ export function ExpensesPage() {
   const [reloadCount, setReloadCount] = useState(0)
   // The expenses waiting for "are you sure?"; null means the confirmation dialog is closed.
   const [pendingDelete, setPendingDelete] = useState<Expense[] | null>(null)
+  // Goes up when the chat assistant changes expenses; the effect below then reloads the list.
+  const { dataVersion } = useDataSync()
 
   // Load the categories once, when the page first appears ([] = no dependencies, run once).
   useEffect(() => {
@@ -51,7 +54,7 @@ export function ExpensesPage() {
       .catch((error) => toast.error(messageOf(error)))
   }, [])
 
-  // Load the expenses whenever the filters change (or a reload is asked for).
+  // Load the expenses whenever the filters change, a reload is asked for, or the assistant changed data.
   useEffect(() => {
     let cancelled = false
     // Wait 300 ms after the last change, so typing in Search doesn't call the API on every key.
@@ -74,7 +77,7 @@ export function ExpensesPage() {
       cancelled = true
       clearTimeout(timer)
     }
-  }, [filters, reloadCount])
+  }, [filters, reloadCount, dataVersion])
 
   const reload = () => setReloadCount((count) => count + 1)
 

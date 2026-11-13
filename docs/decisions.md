@@ -556,3 +556,44 @@ is natural. It's still a soft, model-judged guard.
   variables, set to `var(--primary)` so charts follow the theme. Category breakdown is a horizontal bar chart
   (readable with many categories); the trend is a line.
 - Chart values are rupees as numbers, converted from paise **for display only**.
+
+---
+
+## Chat panel (Phase 13)
+
+> Checked with `npm run build`; not yet used in a browser, and no live chat calls were made.
+
+### D94. Pages refresh through a shared "data version" context
+- `DataSyncProvider` (in `main.tsx`) holds `dataVersion` and `notifyDataChanged()`. Pages list `dataVersion` in their
+  loading effects; the chat bumps it when the assistant changed data.
+- **Why not more:** no global store library, no websocket. One number is enough to say "reload", and the backend
+  remains the source of truth.
+- **Revisit when:** changes can come from outside this browser tab (other devices, background jobs); then the server
+  must push updates (e.g. the later AG-UI / SSE work).
+
+### D95. "Did the assistant change data?" is decided in the browser from the tool calls
+- `add_expense` / `update_expense` that succeeded, or `delete_expense` with `confirmed: true`, in `hooks/use-chat.ts`.
+- **Trade-off:** the tool names are repeated here. **Revisit when:** tools grow; then have `/chat` report
+  `data_changed` (e.g. from MCP tool annotations like `readOnlyHint`).
+
+### D96. The conversation lives in a `useChat()` hook in the layout
+- So it survives closing the panel, switching between desktop panel and mobile sheet, and changing pages.
+- It doesn't survive a browser reload; the thread stays on the server (`GET /threads/{id}`). **Revisit when:**
+  reloading should restore the chat; then save `thread_id` in localStorage and load the thread on start.
+
+### D97. Desktop: resizable panel with ids; mobile: Sheet
+- `ResizablePanelGroup orientation="horizontal"`; the page panel (`id="page"`, min 40%) and the chat panel
+  (`id="chat"`, default 32%, 22–50%) are added and removed by `chatOpen` without remounting the page.
+- react-resizable-panels v4: **string sizes are percentages, numbers are pixels**.
+- Below 768 px (`useIsMobile`), the chat is a right-side `Sheet` (its own close button turned off; a screen-reader-only
+  title for accessibility).
+
+### D98. Assistant replies are plain text
+- The panel renders text as-is (line breaks kept), so the agent's system instruction now asks for no Markdown.
+- **Revisit when:** rich formatting is wanted; then render Markdown safely, or use A2UI components (later phase).
+
+### D99. Fixed shadcn's generated `resizable.tsx`
+- It imported `cn` from `"cn"`; changed to `"@/lib/utils"`. Re-adding the component with the CLI could bring the bug back.
+
+### D100. The inner content wrapper is a `<div>`, not `<main>`
+- `SidebarInset` already renders `<main>`; the nested `<main>` from Phase 11 was invalid HTML.

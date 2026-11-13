@@ -155,6 +155,25 @@ export function deleteExpense(id: number): Promise<void> {
   return request<void>(`/expenses/${id}`, { method: "DELETE" })
 }
 
+// ---------- chat ----------
+
+export interface ToolCall {
+  name: string
+  arguments: Record<string, unknown>
+  ok: boolean
+}
+
+export interface ChatReply {
+  thread_id: string // send it back with the next message to continue the same conversation
+  reply: string
+  tool_calls: ToolCall[]
+}
+
+export function sendChatMessage(message: string, threadId?: string): Promise<ChatReply> {
+  // thread_id left out (undefined is dropped by JSON.stringify) = start a new conversation.
+  return request<ChatReply>("/chat", { method: "POST", body: JSON.stringify({ message, thread_id: threadId }) })
+}
+
 export function getMonthlySummary(month: string): Promise<MonthlySummary> {
   return request<MonthlySummary>(`/summary?month=${month}`)
 }

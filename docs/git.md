@@ -30,11 +30,12 @@ The `LF will be replaced by CRLF` warnings when staging are harmless on Windows.
 
 ## GitHub
 
-The repo is pushed to a private GitHub repo, `sanjeevgnrgy/spendwise` (see [decisions.md](decisions.md) D37):
+The remote `origin` points to a private GitHub repo, `sanjeevgnrgy/spendwise` (see [decisions.md](decisions.md) D37).
+Nothing has been pushed yet; commits stay local until you push.
 
 ```powershell
-git remote -v      # shows https://sanjeevgnrgy@github.com/sanjeevgnrgy/spendwise.git
-git push           # after committing; main tracks origin/main
+git remote -v              # shows https://sanjeevgnrgy@github.com/sanjeevgnrgy/spendwise.git
+git push -u origin main    # first push: run it in your own terminal, so the sign-in window can open
 ```
 
 **Why the username is in the URL:** Git Credential Manager remembers one login per GitHub account. This

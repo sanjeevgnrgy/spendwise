@@ -12,3 +12,10 @@ google-genai==3.3.0
 mcp[cli]==2.3.0
 # AG-UI event and run-input types for POST /agent (the streaming chat).
 ag-ui-protocol==1.0.0
+# Database migrations: numbered steps that create and change the tables (backend/migrations).
+alembic==1.20.1
+# Imported directly (queries, migrations, middleware, the MCP client's HTTP), so pinned here even
+# though other packages bring them: their behaviour is part of ours.
+sqlalchemy==2.1.8
+starlette==1.10.0
+httpx2==2.16.0

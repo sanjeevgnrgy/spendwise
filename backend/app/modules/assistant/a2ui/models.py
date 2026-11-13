@@ -5,27 +5,65 @@ the one with id "root". The browser draws each one with its own trusted componen
 never sends HTML or code. Spec facts and links: docs/sources.md, section 8.
 """
 
+from enum import StrEnum
 from typing import Annotated, Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 from pydantic.alias_generators import to_camel
 
+from app.modules import categories
+
 A2UI_VERSION = "1.0"
-# The catalog our components come from. A surface names it so the renderer knows how to read them.
-BASIC_CATALOG_ID = "https://a2ui.org/specification/v1_0/catalogs/basic/catalog.json"
-# SpendWise's own catalog, for what the basic one doesn't have (Chart, Stat). A catalog can't extend
-# another, so its components sit on basic-catalog surfaces and name their catalog with "@catalogId".
-# The id is just a name ("not a resolvable URI", says the spec); a URN doesn't pose as a web address.
-INSIGHTS_CATALOG_ID = "urn:spendwise:catalog:insights:v1"
+# Rendering starts at the component with this id (the spec's rule).
+ROOT_ID = "root"
+
+
+class Catalog(StrEnum):
+    """The component catalogs this app knows. A catalog id is a name, not something to download."""
+
+    # The spec's basic catalog: layout, text, inputs, buttons.
+    BASIC = "https://a2ui.org/specification/v1_0/catalogs/basic/catalog.json"
+    # SpendWise's own, for what the basic one doesn't have (Chart, Stat). A catalog can't extend
+    # another, so its components sit on basic-catalog surfaces and name their catalog with "@catalogId".
+    # "Not a resolvable URI", says the spec; a URN doesn't pose as a web address.
+    INSIGHTS = "urn:spendwise:catalog:insights:v1"
+
+
+class ActionName(StrEnum):
+    """The only actions a button may trigger. A form the model writes may only use SAVE_EXPENSE."""
+
+    SAVE_EXPENSE = "save_expense"
+    APPROVE_DELETE = "approve_delete"
+    CANCEL_DELETE = "cancel_delete"
+
+
+class ChartType(StrEnum):
+    BAR = "bar"
+    LINE = "line"
+    DONUT = "donut"
+
+
+class Trend(StrEnum):
+    """Which arrow a Stat shows next to its change."""
+
+    UP = "up"
+    DOWN = "down"
+    FLAT = "flat"
+
+
+# Limits the browser applies too (it gets them from the generated contracts).
+MAX_CHART_POINTS = 24
+MAX_UNIT_LENGTH = 4
+MAX_STAT_TEXT_LENGTH = 60
+# Surface ids are ours (card prefix + random hex, or an approval id); anything longer is refused.
+SURFACE_ID_MAX_LENGTH = 64
+SurfaceId = Annotated[str, Field(min_length=1, max_length=SURFACE_ID_MAX_LENGTH)]
 
 # The spec asks for identifier-style ids: letters, digits and underscores, no hyphens.
 ComponentId = Annotated[str, Field(pattern=r"^[A-Za-z_][A-Za-z0-9_]*$")]
 Justify = Literal["start", "center", "end", "spaceBetween", "spaceAround", "spaceEvenly", "stretch"]
 Align = Literal["start", "center", "end", "stretch"]
-
-# The only actions a button may trigger. A form the model writes can't invent new ones (and may only
-# use save_expense: the approval buttons are the server's alone, see forms.py).
-ActionName = Literal["save_expense", "approve_delete", "cancel_delete"]
+MAX_USER_MESSAGE_LENGTH = 200
 
 
 class _A2uiModel(BaseModel):
@@ -140,7 +178,7 @@ class EventAction(_A2uiModel):
     context: dict[str, DataBinding | str | bool | int | float] | None = None
     # How the click reads in the chat, e.g. "Approve deleting #14" (the spec's userMessage).
     # Capped like UserAction.user_message, so a form can't carry a message its own Save would be refused for.
-    user_message: str | None = Field(None, max_length=200)
+    user_message: str | None = Field(None, max_length=MAX_USER_MESSAGE_LENGTH)
 
 
 class Action(_A2uiModel):
@@ -161,17 +199,17 @@ class Button(_A2uiModel):
 
 
 class ChartPoint(_A2uiModel):
-    label: str = Field(max_length=50)  # a category name can be up to 50 characters
+    label: str = Field(max_length=categories.MAX_NAME_LENGTH)  # points are categories, so: as long as their names
     value: float = Field(allow_inf_nan=False)  # NaN or infinity isn't valid JSON, nor a sensible bar
 
 
 class Chart(_A2uiModel):
     id: ComponentId
     component: Literal["Chart"] = "Chart"
-    catalog_id: Literal["urn:spendwise:catalog:insights:v1"] = Field(INSIGHTS_CATALOG_ID, alias="@catalogId")
-    chart_type: Literal["bar", "line", "donut"]
-    data: list[ChartPoint] = Field(min_length=1, max_length=24)
-    unit: str | None = Field(None, max_length=4)  # shown before values, e.g. "₹"
+    catalog_id: Literal[Catalog.INSIGHTS] = Field(Catalog.INSIGHTS, alias="@catalogId")
+    chart_type: ChartType
+    data: list[ChartPoint] = Field(min_length=1, max_length=MAX_CHART_POINTS)
+    unit: str | None = Field(None, max_length=MAX_UNIT_LENGTH)  # shown before values, e.g. "₹"
 
 
 class Stat(_A2uiModel):
@@ -179,11 +217,11 @@ class Stat(_A2uiModel):
 
     id: ComponentId
     component: Literal["Stat"] = "Stat"
-    catalog_id: Literal["urn:spendwise:catalog:insights:v1"] = Field(INSIGHTS_CATALOG_ID, alias="@catalogId")
-    label: str = Field(max_length=60)
-    value: str = Field(max_length=60)
-    change: str | None = Field(None, max_length=60)
-    trend: Literal["up", "down", "flat"] | None = None  # which arrow to show next to `change`
+    catalog_id: Literal[Catalog.INSIGHTS] = Field(Catalog.INSIGHTS, alias="@catalogId")
+    label: str = Field(max_length=MAX_STAT_TEXT_LENGTH)
+    value: str = Field(max_length=MAX_STAT_TEXT_LENGTH)
+    change: str | None = Field(None, max_length=MAX_STAT_TEXT_LENGTH)
+    trend: Trend | None = None  # which arrow to show next to `change`
 
 
 # The "component" field says which model applies, so Pydantic checks each one against the right rules.
@@ -202,8 +240,8 @@ def _referenced_ids(component: BaseModel) -> list[str]:
 
 
 class CreateSurface(_A2uiModel):
-    surface_id: str
-    catalog_id: str = BASIC_CATALOG_ID
+    surface_id: SurfaceId
+    catalog_id: str = Catalog.BASIC
     components: list[Component] = Field(min_length=1)
     # The surface's starting data, e.g. a form pre-filled with what the agent understood.
     data_model: dict[str, Any] | None = None
@@ -214,8 +252,8 @@ class CreateSurface(_A2uiModel):
         ids = [c.id for c in self.components]
         if len(ids) != len(set(ids)):
             raise ValueError("component ids must be unique")
-        if "root" not in ids:
-            raise ValueError('a surface needs a component with id "root": rendering starts there')
+        if ROOT_ID not in ids:
+            raise ValueError(f'a surface needs a component with id "{ROOT_ID}": rendering starts there')
         missing = {ref for c in self.components for ref in _referenced_ids(c)} - set(ids)
         if missing:
             raise ValueError(f"components refer to ids that don't exist: {sorted(missing)}")
@@ -225,19 +263,21 @@ class CreateSurface(_A2uiModel):
 
 def _check_no_cycles(children: dict[str, list[str]]) -> None:
     """Refuse a component that contains itself, directly or through its children: it would draw forever."""
-    state: dict[str, str] = {}  # "open" while its children are being checked, "done" afterwards
+    open_ids: set[str] = set()  # being checked: meeting one again means a loop
+    done: set[str] = set()  # checked already (a child shared by two parents is fine)
 
     def visit(component_id: str) -> None:
-        if state.get(component_id) == "done":
-            return  # shared by two parents: fine, and already checked
-        if state.get(component_id) == "open":
+        if component_id in done:
+            return
+        if component_id in open_ids:
             raise ValueError(f"component '{component_id}' contains itself")
-        state[component_id] = "open"
+        open_ids.add(component_id)
         for child in children.get(component_id, []):
             visit(child)
-        state[component_id] = "done"
+        open_ids.discard(component_id)
+        done.add(component_id)
 
-    visit("root")
+    visit(ROOT_ID)
 
 
 class UpdateComponents(_A2uiModel):
@@ -281,12 +321,12 @@ class UserAction(_A2uiModel):
     """A button was clicked. `context` holds the values its bindings pointed at, read at the click."""
 
     name: ActionName
-    surface_id: str
-    source_component_id: str
+    surface_id: SurfaceId
+    source_component_id: ComponentId
     timestamp: str  # ISO 8601, when it was clicked
     # Strings, or lists of strings from a ChoicePicker. Never trusted: it's what the user typed.
     context: dict[str, str | list[str] | bool | int | float | None]
-    user_message: str | None = Field(None, max_length=200)
+    user_message: str | None = Field(None, max_length=MAX_USER_MESSAGE_LENGTH)
 
 
 class ActionMessage(_A2uiModel):

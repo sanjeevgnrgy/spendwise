@@ -1,99 +1,124 @@
-"""Human in the loop: actions the assistant may only take after the user approves them.
+"""Human in the loop: deletes the assistant may only carry out after the user approves them.
 
-Today that's deleting an expense: it can't be undone. In the web panel the model isn't offered a way
-to delete at all: whatever it asks, a delete runs as a preview, and its card shows Approve and Cancel.
-The real delete happens when the user presses Approve, and the server decides WHAT gets deleted from
-its own record of that card (a snapshot of the expense), never from what the browser sends.
+In the web panel the model can't delete at all: whatever it asks, the expense is only looked up and
+shown with Approve and Cancel (agent.py). The real delete happens when the user presses Approve,
+and the server decides WHAT gets deleted from its own record of that card (a snapshot of the
+expense), never from what the browser sends.
 """
 
-import logging
-import threading
-import time
-from dataclasses import dataclass
-from typing import Any, Final
+from datetime import datetime, timedelta
+from typing import Annotated
 
-logger = logging.getLogger("spendwise.approvals")
+from pydantic import BaseModel, ConfigDict, Field
+from sqlalchemy import delete
+from sqlmodel import col, select
 
-DELETE_TOOL: Final = "delete_expense"
-APPROVE: Final = "approve_delete"
-CANCEL: Final = "cancel_delete"
-DECISIONS = (APPROVE, CANCEL)
+from app.core.cqrs import Command, Context
+from app.modules.assistant.tables import APPROVAL_ID_LENGTH, PendingApproval
+from app.modules.conversations import ThreadId
+from app.modules.mcp import ExpenseView
 
 # An unanswered card stops working after this long, and at most this many are remembered.
-TTL_SECONDS = 15 * 60
+TTL_MINUTES = 15
 MAX_PENDING = 200
 
-
-@dataclass
-class _Pending:
-    expense: dict[str, Any]  # the expense exactly as the card showed it
-    created: float
+# The card's surface id (what the browser sends back with a click).
+ApprovalId = Annotated[str, Field(min_length=1, max_length=APPROVAL_ID_LENGTH)]
 
 
-# Cards waiting for a decision: (thread id, card's surface id) -> what it would delete. Kept in memory:
-# a restart forgets them, and the user simply asks again. Runs happen in worker threads, hence the lock.
-_pending: dict[tuple[str, str], _Pending] = {}
-_lock = threading.Lock()
+class ExpenseSnapshot(BaseModel):
+    """The expense exactly as a card showed it, in the assistant's own terms.
 
-
-def without_confirmation(declarations: list[dict[str, Any]]) -> list[dict[str, Any]]:
-    """The tool declarations the model sees in the web panel: delete_expense without `confirmed`.
-
-    The model isn't even offered a way to delete by itself, so it has nothing to get wrong.
+    A copy, not the MCP contract's ExpenseView: rows stored here must keep reading correctly even if
+    that contract changes later.
     """
-    changed = []
-    for declaration in declarations:
-        if declaration["name"] == DELETE_TOOL:
-            parameters = declaration["parameters"]
-            declaration = {
-                **declaration,
-                "description": "Ask to delete an expense. Nothing is deleted: the user sees it with Approve and "
-                "Cancel buttons, and only their Approve deletes it.",
-                "parameters": {
-                    **parameters,
-                    "properties": {k: v for k, v in parameters["properties"].items() if k != "confirmed"},
-                    "required": [r for r in parameters.get("required", []) if r != "confirmed"],
-                },
-            }
-        changed.append(declaration)
-    return changed
+
+    model_config = ConfigDict(frozen=True, extra="ignore")
+
+    id: int
+    version: int  # Approve deletes only this version (DeleteExpense.expected_version)
+    amount: str
+    currency: str
+    category: str
+    merchant: str
+    note: str | None
+    spent_on: str
+    payment_method: str
+
+    @classmethod
+    def of(cls, expense: ExpenseView) -> "ExpenseSnapshot":
+        return cls.model_validate(expense.model_dump(mode="json"))
 
 
-def guard(arguments: dict[str, Any]) -> dict[str, Any]:
-    """A delete call's arguments as they may actually run: always a preview, whatever was sent.
+class PendingCard(BaseModel):
+    model_config = ConfigDict(frozen=True)
 
-    Only `confirmed=False` is safe to pass on. The MCP tool reads more than just `true` as yes
-    (e.g. "true"), so anything else, not only `True`, is replaced.
-    """
-    if arguments.get("confirmed", False) is not False:
-        logger.warning("the model asked to delete without the user's approval; running the preview instead")
-    return {**arguments, "confirmed": False}
+    expense: ExpenseSnapshot
+    created_at: datetime
 
 
-def _prune() -> None:
-    """Forget expired cards, then the oldest ones beyond MAX_PENDING. Call with the lock held."""
-    now = time.monotonic()
-    for key in [key for key, entry in _pending.items() if now - entry.created > TTL_SECONDS]:
-        del _pending[key]
-    while len(_pending) > MAX_PENDING:
-        del _pending[next(iter(_pending))]  # dicts keep insertion order: the first is the oldest
-
-
-def request(thread_id: str, surface_id: str, expense: dict[str, Any]) -> None:
+class RequestApproval(Command[None]):
     """Remember that this card's Approve may delete this expense, as shown (in this conversation only)."""
-    with _lock:
-        _pending[(thread_id, surface_id)] = _Pending(expense=expense, created=time.monotonic())
-        _prune()
+
+    thread_id: ThreadId
+    approval_id: ApprovalId
+    expense: ExpenseSnapshot
 
 
-def take(thread_id: str, surface_id: str) -> dict[str, Any] | None:
-    """The expense a card was waiting on, forgotten as it's returned: each card decides once."""
-    with _lock:
-        _prune()
-        entry = _pending.pop((thread_id, surface_id), None)
-        return entry.expense if entry else None
+class TakeApproval(Command[PendingCard | None]):
+    """The card's record, forgotten as it's returned: each card decides once.
+
+    None if it was already answered, has expired, or belongs to another conversation.
+
+    A deliberate exception to "commands return at most an id": reading and removing the record must be
+    one step (like taking a message off a queue), or two clicks could both get it.
+    """
+
+    thread_id: ThreadId
+    approval_id: ApprovalId
 
 
-def restore(thread_id: str, surface_id: str, expense: dict[str, Any]) -> None:
-    """Put a card back after a run that failed before anything was deleted, so Approve works again."""
-    request(thread_id, surface_id, expense)
+class RestoreApproval(Command[None]):
+    """Put a taken card back, unchanged (same snapshot, same age), after the decision failed midway."""
+
+    thread_id: ThreadId
+    approval_id: ApprovalId
+    card: PendingCard
+
+
+def _forget_expired(ctx: Context) -> None:
+    cutoff = ctx.clock.now() - timedelta(minutes=TTL_MINUTES)
+    ctx.session.execute(delete(PendingApproval).where(col(PendingApproval.created_at) < cutoff))
+
+
+def _store(ctx: Context, thread_id: str, approval_id: str, expense: ExpenseSnapshot, created_at: datetime) -> None:
+    _forget_expired(ctx)
+    # merge: insert, or replace the same card's record.
+    ctx.session.merge(
+        PendingApproval(
+            approval_id=approval_id, thread_id=thread_id, expense=expense.model_dump(mode="json"), created_at=created_at
+        )
+    )
+    ctx.session.flush()
+    # Keep at most MAX_PENDING: forget the oldest beyond that.
+    keep = select(PendingApproval.approval_id).order_by(col(PendingApproval.created_at).desc()).limit(MAX_PENDING)
+    ctx.session.execute(delete(PendingApproval).where(col(PendingApproval.approval_id).not_in(keep)))
+
+
+def request_approval(ctx: Context, command: RequestApproval) -> None:
+    _store(ctx, command.thread_id, command.approval_id, command.expense, ctx.clock.now())
+
+
+def restore_approval(ctx: Context, command: RestoreApproval) -> None:
+    # The original time, so a card that keeps failing still expires TTL_MINUTES after it was shown.
+    _store(ctx, command.thread_id, command.approval_id, command.card.expense, command.card.created_at)
+
+
+def take_approval(ctx: Context, command: TakeApproval) -> PendingCard | None:
+    _forget_expired(ctx)
+    pending = ctx.session.get(PendingApproval, command.approval_id)
+    # Another conversation's card is treated as unknown, and left alone.
+    if pending is None or pending.thread_id != command.thread_id:
+        return None
+    ctx.session.delete(pending)
+    return PendingCard(expense=ExpenseSnapshot.model_validate(pending.expense), created_at=pending.created_at)

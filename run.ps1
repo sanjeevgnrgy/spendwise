@@ -29,6 +29,11 @@ try {
         Set-Content -Path $marker -Value (Get-Date -Format o)
     }
 
+    # Bring the database's tables up to date (backend/migrations). The app refuses to start on an
+    # out-of-date database, so this always runs first. Already up to date: it does nothing.
+    & $python -m alembic -c backend\alembic.ini upgrade head
+    if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
     # Calling the venv's python directly means no activation is needed.
     # --app-dir backend: the code imports itself as "app.…", which lives inside backend/.
     # --reload-dir backend: watch only our code, not the thousands of files in .venv.

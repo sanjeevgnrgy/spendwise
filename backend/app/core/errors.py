@@ -1,36 +1,133 @@
-"""Errors that services raise for expected problems, and how the API reports them.
+"""Errors that handlers raise for expected problems, and how the API reports them.
 
-Services raise these without knowing anything about HTTP. One place below turns them
-into status codes, so routers don't need a try/except in every endpoint.
+Handlers raise these without knowing anything about HTTP. One place below turns every error into an
+RFC 9457 "problem details" response (application/problem+json), so all errors have one shape:
+
+    {"type": "urn:spendwise:problem:not-found", "title": "Not found", "status": 404,
+     "detail": "Expense 14 not found", "instance": "/api/v1/expenses/14"}
+
+Validation errors (422) add "errors": [{"location": "body", "field": "amount", "message": "..."}].
 """
 
+import logging
+from typing import Any, ClassVar
+
 from fastapi import FastAPI, Request
+from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
+from starlette.exceptions import HTTPException
+from starlette.types import ASGIApp, Message, Receive, Scope, Send
+
+logger = logging.getLogger(__name__)
+
+PROBLEM_JSON = "application/problem+json"
+# Problem "type" URIs identify the kind of error. RFC 9457 allows a non-resolvable URI: a stable name
+# (there's no public documentation site to point them at yet).
+PROBLEM_TYPE_PREFIX = "urn:spendwise:problem:"
 
 
-class NotFoundError(Exception):
-    """The thing asked for doesn't exist. Reported as 404."""
+class AppError(Exception):
+    """An expected problem. Subclasses say which HTTP status and problem type it becomes."""
+
+    status: ClassVar[int] = 500
+    slug: ClassVar[str] = "internal"
+    title: ClassVar[str] = "Internal error"
 
 
-class BusinessRuleError(Exception):
-    """The request is well-formed but breaks a business rule. Reported as 422."""
+class NotFoundError(AppError):
+    """The thing asked for doesn't exist."""
+
+    status = 404
+    slug = "not-found"
+    title = "Not found"
 
 
-class ExternalServiceError(Exception):
-    """A service we depend on (like Gemini) failed or gave an unusable answer. Reported as 502."""
+class BusinessRuleError(AppError):
+    """The request is well-formed but breaks a business rule."""
+
+    status = 422
+    slug = "business-rule"
+    title = "Business rule broken"
+
+
+class ExternalServiceError(AppError):
+    """A service we depend on (the model, a remote MCP server) failed or gave an unusable answer."""
+
+    # 502 means "a service we depend on failed", which is different from a bug here (500).
+    status = 502
+    slug = "external-service"
+    title = "A service we depend on failed"
+
+
+VALIDATION_SLUG = "validation"
+HTTP_SLUG = "http"
+UNAUTHORIZED_SLUG = "unauthorized"
+UNEXPECTED_DETAIL = "Something went wrong on the server."
+
+
+def problem_response(
+    status: int, slug: str, title: str, detail: str, instance: str, headers: dict[str, str] | None = None, **extra: Any
+) -> JSONResponse:
+    """One problem-details response. Used here and by any other adapter (e.g. the MCP endpoint's 401)."""
+    body = {"type": PROBLEM_TYPE_PREFIX + slug, "title": title, "status": status, "detail": detail, "instance": instance}
+    return JSONResponse(status_code=status, content={**body, **extra}, media_type=PROBLEM_JSON, headers=headers)
+
+
+class UnexpectedErrorMiddleware:
+    """Turns an unexpected exception (a bug) into a 500 problem response.
+
+    Added *inside* CORS (main.py), so even this response carries the CORS headers and the browser can
+    read it. (FastAPI's catch-all handler runs outside every middleware, where CORS can't reach it.)
+    A streaming response that has already started can't be replaced, so then the error is re-raised.
+    """
+
+    def __init__(self, app: ASGIApp) -> None:
+        self._app = app
+
+    async def __call__(self, scope: Scope, receive: Receive, send: Send) -> None:
+        if scope["type"] != "http":
+            await self._app(scope, receive, send)
+            return
+        started = False
+
+        async def tracking_send(message: Message) -> None:
+            nonlocal started
+            started = started or message["type"] == "http.response.start"
+            await send(message)
+
+        try:
+            await self._app(scope, receive, tracking_send)
+        except Exception:
+            if started:
+                raise
+            # A bug: the details go to the server log, never to the client (they can leak internals).
+            logger.exception("unhandled error on %s %s", scope.get("method"), scope.get("path"))
+            response = problem_response(500, AppError.slug, AppError.title, UNEXPECTED_DETAIL, scope.get("path", ""))
+            await response(scope, receive, send)
 
 
 def register_error_handlers(app: FastAPI) -> None:
-    async def not_found(request: Request, exc: Exception) -> JSONResponse:
-        return JSONResponse(status_code=404, content={"detail": str(exc)})
+    async def app_error(request: Request, exc: Exception) -> JSONResponse:
+        error = exc if isinstance(exc, AppError) else AppError()
+        return problem_response(error.status, error.slug, error.title, str(error), request.url.path)
 
-    async def rule_broken(request: Request, exc: Exception) -> JSONResponse:
-        return JSONResponse(status_code=422, content={"detail": str(exc)})
+    async def invalid_request(request: Request, exc: Exception) -> JSONResponse:
+        assert isinstance(exc, RequestValidationError)
+        errors = [
+            # loc is ("body", "amount") or ("query", "month"): where the bad value was, then which one.
+            {"location": str(e["loc"][0]), "field": ".".join(str(part) for part in e["loc"][1:]), "message": e["msg"]}
+            for e in exc.errors()
+        ]
+        summary = "; ".join(f"{e['field'] or e['location']}: {e['message']}" for e in errors)
+        return problem_response(422, VALIDATION_SLUG, "Invalid request", summary, request.url.path, errors=errors)
 
-    async def bad_gateway(request: Request, exc: Exception) -> JSONResponse:
-        # 502 means "a service we depend on failed", which is different from a bug here (500).
-        return JSONResponse(status_code=502, content={"detail": str(exc)})
+    async def http_error(request: Request, exc: Exception) -> JSONResponse:
+        # FastAPI's own errors (404 for an unknown URL, 405 for a wrong method), in the same shape. Their
+        # headers are kept: a 405 must say which methods are allowed (Allow), a 401 how to authenticate.
+        assert isinstance(exc, HTTPException)
+        detail = str(exc.detail)
+        return problem_response(exc.status_code, HTTP_SLUG, detail, detail, request.url.path, headers=exc.headers)
 
-    app.add_exception_handler(NotFoundError, not_found)
-    app.add_exception_handler(BusinessRuleError, rule_broken)
-    app.add_exception_handler(ExternalServiceError, bad_gateway)
+    app.add_exception_handler(AppError, app_error)
+    app.add_exception_handler(RequestValidationError, invalid_request)
+    app.add_exception_handler(HTTPException, http_error)

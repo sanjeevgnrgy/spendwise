@@ -1,47 +1,47 @@
 """Expenses module: money spent, with amount, category, merchant and date.
 
-Public interface: other modules import ONLY the names below, from `app.modules.expenses`.
-Models, repository, router and service internals stay private to this module.
+Public interface: other modules import ONLY the contract names below, from `app.modules.expenses`,
+and send them through the bus. Tables, handlers, the repository and the router stay private.
 """
 
-from app.modules.expenses.schemas import (
-    MONTH_PATTERN,
+from app.modules.expenses.contracts import (
+    MAX_LIST_LIMIT,
+    PAYMENT_METHOD_LABELS,
     CategoryTotal,
-    ExpenseCreate,
-    ExpenseFilters,
+    CreateExpense,
+    DeleteExpense,
+    ExpenseChanges,
+    ExpenseId,
+    ExpenseList,
     ExpenseRead,
-    ExpenseUpdate,
+    GetExpense,
+    GetMonthlySummary,
+    GetMonthlyTrend,
+    ListExpenses,
     MonthlySummary,
     MonthlyTrend,
     MonthTotal,
     PaymentMethod,
-)
-from app.modules.expenses.service import (
-    create_expense,
-    delete_expense,
-    get_expense,
-    list_expenses,
-    monthly_summary,
-    monthly_trend,
-    update_expense,
+    UpdateExpense,
 )
 
 __all__ = [
-    "MONTH_PATTERN",
+    "MAX_LIST_LIMIT",
+    "PAYMENT_METHOD_LABELS",
     "CategoryTotal",
-    "ExpenseCreate",
-    "ExpenseFilters",
+    "CreateExpense",
+    "DeleteExpense",
+    "ExpenseChanges",
+    "ExpenseId",
+    "ExpenseList",
     "ExpenseRead",
-    "ExpenseUpdate",
+    "GetExpense",
+    "GetMonthlySummary",
+    "GetMonthlyTrend",
+    "ListExpenses",
     "MonthTotal",
     "MonthlySummary",
     "MonthlyTrend",
     "PaymentMethod",
-    "create_expense",
-    "delete_expense",
-    "get_expense",
-    "list_expenses",
-    "monthly_summary",
-    "monthly_trend",
-    "update_expense",
+    "UpdateExpense",
 ]

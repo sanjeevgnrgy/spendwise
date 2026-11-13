@@ -1,33 +1,32 @@
-from datetime import date, datetime
+"""Request and response bodies of the assistant's routes."""
+
+from datetime import date
 from decimal import Decimal
-from typing import Annotated, Any
+from typing import Annotated
 
 from pydantic import BaseModel, Field, WithJsonSchema
 
-from app.modules import expenses
+from app.modules.conversations import ThreadId
+from app.modules.expenses import PaymentMethod
+from app.modules.assistant.events import ToolCallSummary
 
-
-class AskRequest(BaseModel):
-    # The upper limit matters because every character is sent to Gemini and paid for as tokens.
-    prompt: str = Field(min_length=1, max_length=4000)
-
-
-class AskResponse(BaseModel):
-    answer: str
+# What one chat message may hold (also the web app's text box limit, via the generated contracts).
+MAX_MESSAGE_LENGTH = 2000
+MAX_NOTE_TEXT_LENGTH = 500
 
 
 class ParseRequest(BaseModel):
-    text: str = Field(min_length=1, max_length=500, examples=["Paid 450.50 at Swiggy yesterday via GPay"])
+    text: str = Field(min_length=1, max_length=MAX_NOTE_TEXT_LENGTH, examples=["Paid 450.50 at Swiggy yesterday via GPay"])
 
 
-# ParsedExpense's JSON schema is sent to Gemini as the shape its answer must have, so the docstring
-# and field descriptions below are instructions Gemini reads. Every field is required, but most may
-# be null: Gemini must answer every field, and null is how it says "the text doesn't say".
+# ParsedExpense's JSON schema is sent to the model as the shape its answer must have, so the docstring
+# and field descriptions below are instructions it reads. Every field is required, but most may be
+# null: the model must answer every field, and null is how it says "the text doesn't say".
 # Without null, it would have to invent something.
 class ParsedExpense(BaseModel):
     """One expense read from a short note the user wrote. Use null for anything the note does not say."""
 
-    # Gemini's schema has no decimal type. A string keeps the exact digits (a JSON number could be
+    # The model's schema has no decimal type. A string keeps the exact digits (a JSON number could be
     # read as a float); Pydantic then turns it into a Decimal, which the API returns as "450.50".
     amount: Annotated[Decimal | None, WithJsonSchema({"type": ["string", "null"]})] = Field(
         description='The amount as a plain number string, e.g. "1250.50", with no currency symbol or commas. '
@@ -41,7 +40,7 @@ class ParsedExpense(BaseModel):
         description="The date of the expense. Work out words like 'yesterday' or 'last Friday' from today's date; "
         "use today if no date is mentioned."
     )
-    payment_method: expenses.PaymentMethod | None = Field(
+    payment_method: PaymentMethod | None = Field(
         description="Only if the text says how it was paid (GPay, PhonePe and Paytm UPI are upi); otherwise null."
     )
     note: str | None = Field(description="A few words on what was bought, or null.")
@@ -53,44 +52,16 @@ class ParseResponse(BaseModel):
     missing_fields: list[str]
 
 
-# Shared by POST /chat and POST /agent. A thread id is stored in ChatMessage.thread_id (max 32).
-MAX_MESSAGE_LENGTH = 2000
-MAX_THREAD_ID_LENGTH = 32
-
-
 class ChatRequest(BaseModel):
     message: str = Field(
         min_length=1, max_length=MAX_MESSAGE_LENGTH, examples=["I spent 250 on lunch at Subway today, paid by UPI"]
     )
     # Leave it out to start a new conversation; send the thread_id from a reply to continue that one.
-    thread_id: str | None = Field(default=None, max_length=MAX_THREAD_ID_LENGTH)
-
-
-class ToolCall(BaseModel):
-    """One tool the agent ran while answering: what it called, with which arguments, and whether it worked."""
-
-    name: str
-    arguments: dict[str, Any]
-    ok: bool
+    thread_id: ThreadId | None = None
 
 
 class ChatResponse(BaseModel):
     # Send this back with the next message to continue the same conversation.
     thread_id: str
     reply: str
-    tool_calls: list[ToolCall]
-
-
-class ThreadMessage(BaseModel):
-    """One step of a conversation, made readable."""
-
-    turn: int
-    # user_input, model_output, function_call or function_result.
-    kind: str
-    text: str
-    created_at: datetime
-
-
-class ThreadRead(BaseModel):
-    thread_id: str
-    messages: list[ThreadMessage]
+    tool_calls: list[ToolCallSummary]

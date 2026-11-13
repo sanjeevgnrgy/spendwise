@@ -8,6 +8,14 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 BACKEND_DIR = Path(__file__).resolve().parents[2]
 PROJECT_DIR = BACKEND_DIR.parent
 
+# Every REST route lives under this prefix. A breaking change to the API gets /api/v2, so existing
+# clients keep working while they move over.
+API_PREFIX = "/api/v1"
+# The version shown in the OpenAPI document. It describes the API contract, so it changes with it.
+API_VERSION = "1.0.0"
+# Where MCP clients reach the MCP server over HTTP, when it's enabled (see MCP_TOKEN).
+MCP_PATH = "/mcp"
+
 
 class Settings(BaseSettings):
     model_config = SettingsConfigDict(
@@ -21,11 +29,13 @@ class Settings(BaseSettings):
     # SecretStr keeps the key out of logs and error messages if settings get printed.
     gemini_api_key: SecretStr | None = None
     gemini_model: str | None = None
-    # Where the assistant finds the MCP server with the expense tools. By default that's this
-    # app's own MCP module; point it elsewhere if that module ever runs as a separate service.
-    # "/mcp/" with the slash, because "/mcp" answers with a redirect first; and 127.0.0.1, because
-    # uvicorn listens there and "localhost" can try IPv6 (::1) first on Windows. Both cost a round trip.
-    mcp_url: str = "http://127.0.0.1:8000/mcp/"
+    # Where the assistant's expense tools run. Unset (the default): this app's own MCP server, called
+    # in-process, with no network hop. Set it only when the MCP server runs as a separate service.
+    mcp_url: str | None = None
+    # A shared secret for MCP over HTTP. Unset: /mcp/ isn't served over HTTP at all (stdio still works).
+    # Set: /mcp/ answers only requests with "Authorization: Bearer <token>", and the assistant sends it
+    # to MCP_URL. Anyone who can reach an open MCP endpoint could change or delete expenses.
+    mcp_token: SecretStr | None = None
     # Web pages allowed to call this API from a browser (CORS). Only the Vite dev server for now;
     # both spellings, because the browser treats localhost and 127.0.0.1 as different origins.
     cors_origins: list[str] = ["http://localhost:5173", "http://127.0.0.1:5173"]

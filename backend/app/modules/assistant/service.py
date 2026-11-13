@@ -11,9 +11,14 @@ from ag_ui.core import (
     RunErrorEvent,
     RunFinishedEvent,
     RunStartedEvent,
+    StateSnapshotEvent,
     TextMessageContentEvent,
     TextMessageEndEvent,
     TextMessageStartEvent,
+    ToolCallArgsEvent,
+    ToolCallEndEvent,
+    ToolCallResultEvent,
+    ToolCallStartEvent,
 )
 from sqlmodel import Session
 
@@ -102,17 +107,25 @@ def _newest_user_text(run: RunAgentInput) -> str:
     return text
 
 
+def _data_version(state: Any) -> int:
+    """dataVersion from the state the client sent with the run; 0 if it's missing or not a number."""
+    value = state.get("dataVersion") if isinstance(state, dict) else None
+    return value if isinstance(value, int) else 0
+
+
 def agent_run(session: Session, run: RunAgentInput) -> Iterator[BaseEvent]:
     """POST /agent: one AG-UI run, answering the newest user message as a stream of events.
 
-    RUN_STARTED, then the reply as TEXT_MESSAGE_START / _CONTENT (one per piece) / _END, then
-    RUN_FINISHED with the tools used. Once the stream has started, the HTTP status (200) has already
-    been sent and can't change, so any failure is reported as a RUN_ERROR event instead.
+    RUN_STARTED; then, as they happen, the reply's text as TEXT_MESSAGE_START / _CONTENT / _END, each
+    tool call as TOOL_CALL_START / _ARGS / _END / _RESULT, and a STATE_SNAPSHOT after a tool changed
+    data; then RUN_FINISHED. Once the stream has started, the HTTP status (200) has already been sent
+    and can't change, so any failure is reported as a RUN_ERROR event instead.
     """
     yield RunStartedEvent(thread_id=run.thread_id, run_id=run.run_id)
-    message_id = uuid4().hex  # every piece of the reply says which message it belongs to
-    started = False  # TEXT_MESSAGE_START goes out with the first piece of text
-    tool_calls: list[dict[str, Any]] = []
+    text_id: str | None = None  # the text message currently open, if any
+    # AG-UI shared state: the client sends its dataVersion with the run and gets it back, raised,
+    # after every tool that changed data. A new number is what makes the pages reload.
+    data_version = _data_version(run.state)
     try:
         message = _newest_user_text(run)
         # AG-UI clients name their threads themselves, so an unknown id starts a new
@@ -122,14 +135,35 @@ def agent_run(session: Session, run: RunAgentInput) -> Iterator[BaseEvent]:
 
         for item in agent.stream(message, date.today(), history):
             if isinstance(item, str):
-                if not started:
-                    yield TextMessageStartEvent(message_id=message_id, role="assistant")
-                    started = True
-                yield TextMessageContentEvent(message_id=message_id, delta=item)
+                if text_id is None:
+                    text_id = uuid4().hex  # every piece names the message it belongs to
+                    yield TextMessageStartEvent(message_id=text_id, role="assistant")
+                yield TextMessageContentEvent(message_id=text_id, delta=item)
+
+            elif isinstance(item, agent.ToolStarted):
+                if text_id is not None:
+                    # Close the text so far ("Let me check."); any text after the tool is a new message.
+                    yield TextMessageEndEvent(message_id=text_id)
+                    text_id = None
+                # START, ARGS and END describe the call: END means "the arguments are complete", not
+                # "the tool has run". The tool runs after these, while the panel shows "Saving expense…".
+                yield ToolCallStartEvent(tool_call_id=item.call_id, tool_call_name=item.name)
+                yield ToolCallArgsEvent(tool_call_id=item.call_id, delta=json.dumps(item.arguments))
+                yield ToolCallEndEvent(tool_call_id=item.call_id)
+
+            elif isinstance(item, agent.ToolFinished):
+                # What the tool returned. The event has no error field, so success goes in `metadata`,
+                # the slot every AG-UI event has for extra data.
+                yield ToolCallResultEvent(
+                    message_id=uuid4().hex, tool_call_id=item.call_id, content=item.text, metadata={"ok": item.ok}
+                )
+                if item.changed_data:
+                    data_version += 1
+                    yield StateSnapshotEvent(snapshot={"dataVersion": data_version})
+
             else:
                 # The last item: the whole turn. Saved only when the run succeeds, like POST /chat.
                 repository.add_turn(session, run.thread_id, turn, item.steps)
-                tool_calls = [call.model_dump(mode="json") for call in item.tool_calls]
     # RUN_ERROR ends the run. The client keeps whatever text already arrived and shows the error.
     except (BusinessRuleError, ExternalServiceError) as exc:
         # Expected problems (e.g. Gemini's "high demand") carry a message meant for the user.
@@ -144,11 +178,9 @@ def agent_run(session: Session, run: RunAgentInput) -> Iterator[BaseEvent]:
         )
         return
 
-    if started:
-        yield TextMessageEndEvent(message_id=message_id)
-    # `result` is AG-UI's free-form slot for the run's outcome. The chat panel uses the tool calls
-    # for its badges, and to refresh the page when the assistant changed expenses.
-    yield RunFinishedEvent(thread_id=run.thread_id, run_id=run.run_id, result={"toolCalls": tool_calls})
+    if text_id is not None:
+        yield TextMessageEndEvent(message_id=text_id)
+    yield RunFinishedEvent(thread_id=run.thread_id, run_id=run.run_id)
 
 
 def _readable_text(step: dict[str, Any]) -> str:

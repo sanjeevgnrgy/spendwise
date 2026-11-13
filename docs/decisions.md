@@ -572,11 +572,13 @@ is natural. It's still a soft, model-judged guard.
   remains the source of truth.
 - **Revisit when:** changes can come from outside this browser tab (other devices, background jobs); then the server
   must push updates (e.g. the later AG-UI / SSE work).
+- **Updated by D112:** the number now comes from the agent's `STATE_SNAPSHOT`; `setDataVersion` replaces `notifyDataChanged`.
 
 ### D95. "Did the assistant change data?" is decided in the browser from the tool calls
 - `add_expense` / `update_expense` that succeeded, or `delete_expense` with `confirmed: true`, in `hooks/use-chat.ts`.
 - **Trade-off:** the tool names are repeated here. **Revisit when:** tools grow; then have `/chat` report
   `data_changed` (e.g. from MCP tool annotations like `readOnlyHint`).
+- **Superseded by D111** (MCP tool annotations decide, on the server).
 
 ### D96. The conversation lives in a `useChat()` hook in the layout
 - So it survives closing the panel, switching between desktop panel and mobile sheet, and changing pages.
@@ -647,11 +649,13 @@ is natural. It's still a soft, model-judged guard.
 - This phase streams text only. The tool calls the badges and the page refresh need (D95) are sent once, as
   `RUN_FINISHED.result = {"toolCalls": [...]}`. That is AG-UI's free-form slot for a run's outcome.
 - **Revisit when:** the panel should show tools live ("Adding expense…"); then emit `TOOL_CALL_START/ARGS/END/RESULT`.
+- **Superseded by D109** (Phase 15: tool events; `RUN_FINISHED` no longer has a `result`).
 
 ### D106. One assistant message per run, started lazily
 - `TEXT_MESSAGE_START` is sent with the first piece of text, so the panel shows "Thinking…" until there is something to read.
 - Text from a later Gemini step (after a tool call) continues the same message, starting a new paragraph (`\n\n`).
   `AgentResult.reply` (used by `/chat`) is the same joined text.
+- **Updated by D110:** a text message is now closed before a tool call; text after it is a new message (still one bubble).
 
 ### D107. The browser reads the stream with `fetch()`, without an AG-UI client library
 - `EventSource` only does GET without a body, so `api.ts` POSTs with `fetch()` and reads `response.body` through a
@@ -672,3 +676,54 @@ is natural. It's still a soft, model-judged guard.
   1 s with Google's message (before: still waiting after 20 s); a 503 is still retried once.
 - **Trade-off:** a momentary per-minute rate limit is no longer retried automatically; the user sees the quota message and
   sends again. **Revisit when:** short automatic waits are wanted; then retry 429 ourselves with a capped delay.
+
+---
+
+## Tool progress (Phase 15)
+
+> Checked offline: the real app and real MCP server with a scripted fake Gemini (a successful add, a read-only summary,
+> a failing delete), the raw SSE from Python and the web app's `runAgent()` from Node, plus `npm run build`.
+> Not yet tried with real Gemini or in a browser.
+
+### D109. Each MCP call streams as `TOOL_CALL_START/ARGS/END`, then `TOOL_CALL_RESULT`
+- START, ARGS (the arguments as one JSON piece) and END go out just **before** the MCP call; RESULT goes out **after** it.
+  In AG-UI, END means "the arguments are complete" (the package's docstring), not "the tool has run"; the outcome is RESULT.
+- Success is `metadata.ok`: `TOOL_CALL_RESULT` has no error field, and `metadata` is every event's slot for extra data.
+  `content` is the tool's text (its error message when it failed), so a failed chip can show why.
+- The arguments are sent whole, not as Gemini's fragments: they're only known once `GeminiStream` has the complete call.
+- `RUN_FINISHED` no longer carries `result.toolCalls` (D105). `/chat` still returns `tool_calls`.
+
+### D110. A text message is closed before a tool call
+- If Gemini wrote text before calling a tool ("Let me check."), `TEXT_MESSAGE_END` is sent before `TOOL_CALL_START`, and
+  later text is a new message (starting with the `\n\n` from D106). Tool events never interleave with an open text
+  message, which keeps strict AG-UI clients happy. The panel joins a run's text into one bubble.
+
+### D111. "Did this tool change data?" comes from MCP tool annotations
+- The MCP server marks `list_expenses` and `get_summary` `read_only_hint=True`; `add_expense` is `destructive_hint=False`;
+  `update_expense` and `delete_expense` are `destructive_hint=True`. `mcp_client.changes_data(name)` treats anything not
+  marked read-only as a change, as the MCP spec says to assume. Only successful calls count.
+- **Why:** the knowledge lives with the tools, and no tool names are repeated in the assistant or the browser (D95).
+- **Trade-offs:** annotations are hints, fine to trust from our own server, never from a third-party one. A
+  `delete_expense` preview (`confirmed: false`) counts as a change, so the pages reload once for nothing (harmless).
+  The tool list is cached (D73), so restart the app after changing annotations.
+
+### D112. `dataVersion` is AG-UI shared state
+- The panel sends `state: {"dataVersion": n}` with every run. After each data-changing tool, the agent sends
+  `STATE_SNAPSHOT {"dataVersion": n + 1}`, and the panel stores it in the data-sync context, which makes the pages reload
+  (D94) while the reply is still streaming.
+- **Why send it each time:** the agent continues from the client's number. Starting from 0 every run could repeat a
+  number the panel already has, and then nothing would reload.
+- The number counts changes in this browser session only, and a reload starts it at 0 again (pages load fresh anyway).
+  **Revisit when:** other tabs or devices must see changes; then the server needs its own version (D94).
+
+### D113. No `STEP_STARTED` / `STEP_FINISHED`
+- The phase allowed them "if useful". The chips, streaming text and "Thinking…" already show the user everything
+  meaningful, and a step (one round trip to Gemini) means nothing to them. **Revisit when:** steps get names worth
+  showing (e.g. "Asking the receipt agent" with A2A agents).
+
+### D114. Chip wording lives in the browser, and never overclaims
+- `tool-chip.tsx` maps each tool to running / done / failed wording, falling back to the tool's name for new tools.
+- A `delete_expense` without `confirmed: true` reads "Checking the expense…" → "Waiting for your OK", never "Deleting".
+- If the run fails, chips still spinning turn into failures, so nothing keeps spinning forever.
+- "Thinking…" shows only while nothing else shows progress: before the first event, or between finished tools and the
+  start of the answer's text.

@@ -78,24 +78,39 @@ def _to_declaration(tool: Any) -> dict[str, Any]:
     }
 
 
-_declarations: list[dict[str, Any]] | None = None
+_tools: list[Any] | None = None
+
+
+def _list_tools() -> list[Any]:
+    """The MCP server's tools, fetched on first use and then remembered.
+
+    It can't be done while the app starts: by default the MCP server is this same app, which
+    isn't answering requests yet at that point. Restart the app to pick up tools added later.
+    """
+    global _tools
+    if _tools is None:
+
+        async def list_tools(session: ClientSession) -> list[Any]:
+            return list((await session.list_tools()).tools)
+
+        _tools = _run(list_tools)
+    return _tools
 
 
 def tool_declarations() -> list[dict[str, Any]]:
-    """Gemini function declarations for every tool the MCP server offers.
+    """Gemini function declarations for every tool the MCP server offers."""
+    return [_to_declaration(tool) for tool in _list_tools()]
 
-    Fetched on first use and then remembered. It can't be done while the app starts: by
-    default the MCP server is this same app, which isn't answering requests yet at that
-    point. Restart the app to pick up tools added to the server later.
+
+def changes_data(name: str) -> bool:
+    """Whether a tool may change data, from its MCP annotations (read_only_hint).
+
+    The MCP spec says to assume a tool without the hint may change things, so only tools the
+    server marks read-only count as safe. The answer comes from the cached list: no extra request.
     """
-    global _declarations
-    if _declarations is None:
-
-        async def list_tools(session: ClientSession) -> list[dict[str, Any]]:
-            return [_to_declaration(tool) for tool in (await session.list_tools()).tools]
-
-        _declarations = _run(list_tools)
-    return _declarations
+    tool = next((tool for tool in _list_tools() if tool.name == name), None)
+    annotations = tool.annotations if tool else None
+    return not (annotations and annotations.read_only_hint)
 
 
 def call_tool(name: str, arguments: dict[str, Any]) -> ToolResult:

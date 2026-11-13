@@ -5,13 +5,20 @@ import { ChatMessageBubble } from "@/components/chat/chat-message"
 import { Button } from "@/components/ui/button"
 import { ScrollArea } from "@/components/ui/scroll-area"
 import { Textarea } from "@/components/ui/textarea"
-import type { ChatState } from "@/hooks/use-chat"
+import type { ChatMessage, ChatState } from "@/hooks/use-chat"
 
 const SUGGESTIONS = [
   "How much did I spend on food this month?",
   "Add 250 for lunch at Subway today, paid by UPI",
   "What were my 3 biggest expenses this month?",
 ]
+
+// True while the assistant is working with nothing to show yet: before its first event, or after its
+// tools have finished and before the answer's text starts (Gemini is deciding what to say).
+function isWaiting(last: ChatMessage | undefined): boolean {
+  if (last?.role !== "assistant") return true
+  return !last.text && !last.tools?.some((tool) => tool.status === "running")
+}
 
 interface ChatPanelProps {
   chat: ChatState // the conversation lives in the layout, so it survives closing this panel
@@ -95,8 +102,8 @@ export function ChatPanel({ chat, onClose }: ChatPanelProps) {
             <ChatMessageBubble key={message.id} message={message} />
           ))}
 
-          {/* Only until the reply starts arriving; after that, the growing reply shows progress. */}
-          {chat.sending && chat.messages.at(-1)?.role === "user" && (
+          {/* Only while nothing else shows progress: not while a tool chip spins or text is arriving. */}
+          {chat.sending && isWaiting(chat.messages.at(-1)) && (
             <div className="flex items-center gap-2 text-sm text-muted-foreground">
               <Loader2 className="size-4 animate-spin" /> Thinking…
             </div>

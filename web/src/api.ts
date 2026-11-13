@@ -165,19 +165,23 @@ export function getMonthlyTrend(months = 6): Promise<MonthlyTrend> {
 
 // ---------- the assistant: AG-UI events streamed from POST /agent ----------
 
-export interface ToolCall {
-  name: string
-  arguments: Record<string, unknown>
-  ok: boolean
+// The agent's shared state (AG-UI): sent with every run, sent back in STATE_SNAPSHOT events.
+export interface AgentState {
+  dataVersion: number // goes up each time a tool changed expenses
 }
 
-// The AG-UI events the backend sends, in the order they arrive. Only the fields we use are listed.
+// The AG-UI events the backend sends. Only the fields we use are listed.
 export type AgentEvent =
   | { type: "RUN_STARTED"; threadId: string; runId: string }
   | { type: "TEXT_MESSAGE_START"; messageId: string; role: "assistant" }
   | { type: "TEXT_MESSAGE_CONTENT"; messageId: string; delta: string }
   | { type: "TEXT_MESSAGE_END"; messageId: string }
-  | { type: "RUN_FINISHED"; threadId: string; runId: string; result?: { toolCalls: ToolCall[] } }
+  | { type: "TOOL_CALL_START"; toolCallId: string; toolCallName: string }
+  | { type: "TOOL_CALL_ARGS"; toolCallId: string; delta: string } // a piece of the arguments' JSON
+  | { type: "TOOL_CALL_END"; toolCallId: string } // the arguments are complete; the tool runs next
+  | { type: "TOOL_CALL_RESULT"; toolCallId: string; content: string; metadata?: { ok?: boolean } }
+  | { type: "STATE_SNAPSHOT"; snapshot: AgentState }
+  | { type: "RUN_FINISHED"; threadId: string; runId: string }
   | { type: "RUN_ERROR"; message: string; code?: string }
 
 // A random id of 32 hex characters, the length the backend allows for a thread id.
@@ -189,10 +193,15 @@ export function newId(): string {
  * Runs the assistant on one message, calling `onEvent` for each event as soon as it arrives.
  * Resolves on RUN_FINISHED. Throws on RUN_ERROR, or if the connection ends before the run does.
  */
-export async function runAgent(threadId: string, message: string, onEvent: (event: AgentEvent) => void) {
+export async function runAgent(
+  threadId: string,
+  message: string,
+  state: AgentState,
+  onEvent: (event: AgentEvent) => void,
+) {
   // AG-UI's run input. The browser names the thread; the server only needs the newest message,
-  // because it keeps the conversation's history itself.
-  const input = { threadId, runId: newId(), messages: [{ id: newId(), role: "user", content: message }] }
+  // because it keeps the conversation's history itself. `state` is the shared state, as we know it.
+  const input = { threadId, runId: newId(), state, messages: [{ id: newId(), role: "user", content: message }] }
   let response: Response
   try {
     // fetch, not EventSource: EventSource can only send GET requests, and a run needs a POST body.

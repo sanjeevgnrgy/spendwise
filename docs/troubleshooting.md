@@ -147,9 +147,22 @@ on your tier, or temporarily overloaded).
 - **Fix:** use `curl.exe -N` to watch the events arrive, or `POST /chat` for a plain JSON reply.
 
 ### Assistant panel: the assistant added an expense but the page didn't update
-- **Cause:** the page refreshes only when a tool call that changes data **succeeded** (green badge). A red badge means
-  the backend refused it; a `delete expense` badge before you confirmed changes nothing yet.
-- **Fix:** read the reply. If it says it was saved but the page didn't change, reload the page and report it.
+- **Cause:** the page reloads when the agent sends a `STATE_SNAPSHOT` with a new `dataVersion`, which happens only after
+  a tool that may change data **succeeded** (a ✓ chip such as "Expense saved"). A red ✗ chip means the backend refused it.
+- **Check:** in the raw stream (`curl.exe -N`, see [phases/phase-15-tool-progress.md](phases/phase-15-tool-progress.md)),
+  a `STATE_SNAPSHOT` should follow that tool's `TOOL_CALL_RESULT`. If it doesn't, the tool may be marked
+  `read_only_hint=True` in `modules/mcp/server.py`. After changing a tool's annotations, restart the app: the assistant
+  reads the tool list only once.
+
+### Assistant panel: a tool chip keeps spinning
+- **Cause:** the tool is still running. An MCP call gives up after 15 s, and then the chip turns red. If the whole run
+  fails, every spinning chip turns red along with the red error bubble.
+- **Fix:** if one spins much longer than 15 s, check the backend terminal; the server may be stuck (see "Every request
+  stays pending" above).
+
+### Assistant panel: "Waiting for your OK" after asking to delete
+- That's the delete safety rule (decisions D53): the first `delete_expense` call only looks the expense up, and nothing is
+  deleted. Reply "yes" to confirm; the chip then reads "Deleting expense…" → "Expense deleted".
 
 ### Assistant panel: the conversation disappeared
 - **Cause:** a browser reload clears it (it's kept in memory across pages and panel toggles, not across reloads), or

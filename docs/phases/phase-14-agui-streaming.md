@@ -1,5 +1,9 @@
 # Phase 14: AG-UI streaming
 
+> **Later changes:** in Phase 15 each MCP call also streams `TOOL_CALL_START/ARGS/END/RESULT`, a text message is closed
+> before a tool call, a `STATE_SNAPSHOT` follows each data-changing tool, and `RUN_FINISHED` no longer carries
+> `result.toolCalls`. See [phase-15-tool-progress.md](phase-15-tool-progress.md). This page records Phase 14 as it was built.
+
 **Goal:** the assistant's reply appears in the chat panel **as Gemini writes it**, instead of all at once after a
 pause. A new endpoint, `POST /agent`, accepts an **AG-UI** run input (`threadId`, `runId`, `messages`) and streams
 **AG-UI events** over **Server-Sent Events (SSE)**: `RUN_STARTED`, `TEXT_MESSAGE_START`, `TEXT_MESSAGE_CONTENT`

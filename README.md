@@ -2,10 +2,11 @@
 
 An agentic expense tracker, built one small phase at a time as a learning project.
 
-**Current state (Phase 14):** a React web app (`web/`) with a sidebar layout, light/dark theme, a
+**Current state (Phase 15):** a React web app (`web/`) with a sidebar layout, light/dark theme, a
 Dashboard (this month's total, category and 6-month trend charts, recent expenses), an
 Expenses page (sortable table, filters, add/edit/delete) and an Assistant chat panel on every page
-that shows the agent's reply as it's written and refreshes the page when it changes data, on top of a modular-monolith FastAPI
+that shows the agent's reply as it's written, each tool it uses as a live status chip ("Saving expense…" → "Expense
+saved"), and refreshes the page as soon as a tool changes data, on top of a modular-monolith FastAPI
 backend with a REST API for expenses
 (create, list with filters, read, update, delete), a monthly summary, a categories list,
 `POST /ask` (sends a prompt to Gemini), `POST /parse` (turns a note like "Paid 450 at Swiggy
@@ -85,8 +86,8 @@ With the server running:
   tools the agent called; watch the server terminal to see each step (needs your Gemini key; `/chat` can change data).
   Send the reply's `thread_id` with your next message to continue the same conversation, and view it with
   `GET /threads/{thread_id}`
-- `POST /agent` streams the same agent's reply as AG-UI events; watch it arrive with `curl.exe -N` as shown in
-  [docs/phases/phase-14-agui-streaming.md](docs/phases/phase-14-agui-streaming.md#test-it-by-hand)
+- `POST /agent` streams the same agent's reply as AG-UI events (text, tool calls, state); watch it arrive with
+  `curl.exe -N` as shown in [docs/phases/phase-15-tool-progress.md](docs/phases/phase-15-tool-progress.md#test-it-by-hand)
 
 The full route list, filters, status codes and example requests are in
 [docs/phases/phase-4-expenses-api.md](docs/phases/phase-4-expenses-api.md).

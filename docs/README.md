@@ -26,7 +26,8 @@ covers setup and running; this folder explains **why** things are the way they a
 | [phases/phase-11-frontend.md](phases/phase-11-frontend.md) | React components, props, useState/useEffect, shadcn/ui vs a component library, CORS, the Expenses page |
 | [phases/phase-12-dashboard.md](phases/phase-12-dashboard.md) | Why the backend aggregates, the trend endpoint, shadcn charts, loading / empty / error states |
 | [phases/phase-13-chat-panel.md](phases/phase-13-chat-panel.md) | The chat panel, keeping panel and pages in sync with a shared context, resizable panel vs Sheet |
-| [phases/phase-14-agui-streaming.md](phases/phase-14-agui-streaming.md) | SSE vs normal HTTP, the AG-UI events, streaming Gemini with tools in the loop, reading a stream in the browser (not run live yet) |
+| [phases/phase-14-agui-streaming.md](phases/phase-14-agui-streaming.md) | SSE vs normal HTTP, the AG-UI events, streaming Gemini with tools in the loop, reading a stream in the browser |
+| [phases/phase-15-tool-progress.md](phases/phase-15-tool-progress.md) | Why tool activity builds trust, AG-UI tool events, shared state and `dataVersion`, MCP tool annotations, status chips (not run live yet) |
 
 Each phase file has the concepts, what was built, how to run and test it, and the
 "check your understanding" questions. Answers are hidden; click to reveal them.

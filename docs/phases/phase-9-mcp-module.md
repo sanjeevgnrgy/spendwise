@@ -6,6 +6,8 @@ FastAPI app at `/mcp/`, and can also run over stdio for local tools.
 
 > **Later changes:** in Phase 10 the assistant's agent became an MCP client of this server and
 > `assistant/tools.py` was deleted, so "three adapters" below became two adapters plus one MCP client.
+> In Phase 15 the tools gained MCP annotations (`read_only_hint`, `destructive_hint`), which the assistant uses to know
+> when data changed ([decisions.md](../decisions.md) D111).
 
 ## Concepts
 

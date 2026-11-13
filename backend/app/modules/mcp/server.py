@@ -13,6 +13,7 @@ from typing import Annotated, Any
 # The official MCP SDK. In SDK 2.x the class formerly called FastMCP is named MCPServer.
 from mcp.server.mcpserver import MCPServer
 from mcp.server.mcpserver.exceptions import ToolError
+from mcp.types import ToolAnnotations
 from pydantic import Field
 from sqlmodel import Session
 
@@ -30,6 +31,13 @@ server = MCPServer(
 # Each listed row is sent to the client's model and costs tokens, so lists are capped.
 MAX_ROWS = 50
 RECENT_ROWS = 20
+
+# MCP tool annotations: hints telling clients what a tool does to data. The assistant uses
+# read_only_hint to know when the pages must refresh; other clients (e.g. Claude Desktop) may use
+# them to decide when to ask the user first. Hints only: a client should trust them from its own servers.
+READS_ONLY = ToolAnnotations(read_only_hint=True)
+ADDS_DATA = ToolAnnotations(read_only_hint=False, destructive_hint=False)
+CHANGES_DATA = ToolAnnotations(read_only_hint=False, destructive_hint=True)  # overwrites or removes
 
 
 @contextmanager
@@ -76,7 +84,7 @@ def _describe(expense: expenses.ExpenseRead, names: dict[int, str]) -> dict[str,
 # ---------- tools: actions a client's model can ask for ----------
 
 
-@server.tool()
+@server.tool(annotations=ADDS_DATA)
 def add_expense(
     amount: Annotated[str, Field(description="Amount as a plain number string, e.g. '450.50'.")],
     category: Annotated[str, Field(description="Category name; see the expenses://categories resource.")],
@@ -104,7 +112,7 @@ def add_expense(
         return {"saved": _describe(created, _category_names(session))}
 
 
-@server.tool()
+@server.tool(annotations=READS_ONLY)
 def list_expenses(
     start_date: Annotated[str | None, Field(description="Only expenses on or after this date (YYYY-MM-DD).")] = None,
     end_date: Annotated[str | None, Field(description="Only expenses on or before this date (YYYY-MM-DD).")] = None,
@@ -131,7 +139,7 @@ def list_expenses(
         }
 
 
-@server.tool()
+@server.tool(annotations=READS_ONLY)
 def get_summary(
     month: Annotated[str, Field(description="The month as YYYY-MM, e.g. '2026-11'.", pattern=r"^\d{4}-(0[1-9]|1[0-2])$")],
     currency: Annotated[str, Field(description="ISO currency code. INR unless asked otherwise.")] = "INR",
@@ -144,7 +152,7 @@ def get_summary(
         return summary.model_dump(mode="json")
 
 
-@server.tool()
+@server.tool(annotations=CHANGES_DATA)
 def update_expense(
     expense_id: Annotated[int, Field(description="The id of the expense to change (find it with list_expenses).")],
     amount: Annotated[str | None, Field(description="New amount as a plain number string.")] = None,
@@ -171,7 +179,7 @@ def update_expense(
         return {"updated": _describe(updated, _category_names(session))}
 
 
-@server.tool()
+@server.tool(annotations=CHANGES_DATA)
 def delete_expense(
     expense_id: Annotated[int, Field(description="The id of the expense to delete (find it with list_expenses).")],
     confirmed: Annotated[bool, Field(description="true only after the user has explicitly confirmed.")] = False,

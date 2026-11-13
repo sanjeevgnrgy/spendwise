@@ -42,6 +42,26 @@ class AgentResult:
     steps: list[dict[str, Any]]
 
 
+@dataclass
+class ToolStarted:
+    """stream() is about to run a tool: what the UI can show as "Saving expense…"."""
+
+    call_id: str
+    name: str
+    arguments: dict[str, Any]
+
+
+@dataclass
+class ToolFinished:
+    """A tool has run. `text` is what it returned, or its error message."""
+
+    call_id: str
+    ok: bool
+    text: str
+    # A tool that may change data (per its MCP annotations) ran successfully: pages should reload.
+    changed_data: bool
+
+
 def _system_instruction(today: date, category_names: list[str]) -> str:
     return "\n".join(
         [
@@ -86,12 +106,14 @@ def _run_tool(name: str, arguments: dict[str, Any]) -> mcp_client.ToolResult:
     return result
 
 
-def stream(message: str, today: date, history: list[dict[str, Any]] | None = None) -> Iterator[str | AgentResult]:
+def stream(
+    message: str, today: date, history: list[dict[str, Any]] | None = None
+) -> Iterator[str | ToolStarted | ToolFinished | AgentResult]:
     """Answer one user message, streaming.
 
-    Yields the reply's text in pieces, as Gemini writes it, and then, as the very last item, an
-    AgentResult with the whole reply, the tools used and the steps to store.
-    `history` is the earlier conversation in this thread (oldest first).
+    Yields, as they happen: the reply's text in pieces (str), a ToolStarted before and a ToolFinished
+    after each tool call, and finally, as the very last item, an AgentResult with the whole reply,
+    the tools used and the steps to store. `history` is the earlier conversation (oldest first).
     """
     earlier = history or []
     turn: list[dict[str, Any]] = [_text_step("user_input", message)]
@@ -138,7 +160,10 @@ def stream(message: str, today: date, history: list[dict[str, Any]] | None = Non
 
         for call in calls:
             arguments = call.get("arguments") or {}
+            yield ToolStarted(call_id=call["id"], name=call["name"], arguments=arguments)
             result = _run_tool(call["name"], arguments)
+            changed = result.ok and mcp_client.changes_data(call["name"])
+            yield ToolFinished(call_id=call["id"], ok=result.ok, text=result.text, changed_data=changed)
             tool_calls.append(ToolCall(name=call["name"], arguments=arguments, ok=result.ok))
             turn.append(
                 {

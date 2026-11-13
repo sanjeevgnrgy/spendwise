@@ -1,32 +1,29 @@
 import { useRef, useState } from "react"
 
-import { newId, runAgent, type ToolCall } from "@/api"
+import { newId, runAgent } from "@/api"
 import { useDataSync } from "@/lib/data-sync"
+
+// One tool call the assistant made, as the panel shows it: a chip that changes as events arrive.
+export interface ToolActivity {
+  id: string
+  name: string
+  args: string // the arguments' JSON, built up from TOOL_CALL_ARGS pieces
+  status: "running" | "done" | "failed"
+  result?: string // what the tool returned (for a failed call, why)
+}
 
 export interface ChatMessage {
   id: number
   role: "user" | "assistant"
   text: string
-  toolCalls?: ToolCall[]
+  tools?: ToolActivity[] // assistant only: the tools used for this reply, in order
   failed?: boolean // the run failed; text is the error
-}
-
-// Tools that change expenses. delete_expense only deletes with confirmed=true; without it,
-// it just looks the expense up so the assistant can ask "are you sure?".
-function changedData(toolCalls: ToolCall[]): boolean {
-  return toolCalls.some(
-    (call) =>
-      call.ok &&
-      (call.name === "add_expense" ||
-        call.name === "update_expense" ||
-        (call.name === "delete_expense" && call.arguments.confirmed === true)),
-  )
 }
 
 // Everything about the conversation, as a custom hook. It's used by the layout (which stays on
 // screen across pages), not by the panel, so closing the panel or changing page keeps the chat.
 export function useChat() {
-  const { notifyDataChanged } = useDataSync()
+  const { dataVersion, setDataVersion } = useDataSync()
   const [messages, setMessages] = useState<ChatMessage[]>([])
   const [threadId, setThreadId] = useState<string | null>(null)
   const [sending, setSending] = useState(false)
@@ -49,27 +46,54 @@ export function useChat() {
     // With AG-UI the client names the thread; the server starts it when the first message arrives.
     const thread = threadId ?? newId()
     setThreadId(thread)
+
+    // The reply's bubble, created by whatever arrives first: text, or a tool call.
     let replyId: number | null = null
+    const reply = () => (replyId ??= add({ role: "assistant", text: "", tools: [] }))
+    const updateTool = (toolId: string, change: (tool: ToolActivity) => ToolActivity) =>
+      update(replyId, (message) => ({
+        ...message,
+        tools: message.tools?.map((tool) => (tool.id === toolId ? change(tool) : tool)),
+      }))
+
     try {
-      await runAgent(thread, text, (event) => {
+      await runAgent(thread, text, { dataVersion }, (event) => {
         switch (event.type) {
           case "TEXT_MESSAGE_START":
-            replyId = add({ role: "assistant", text: "" })
+            reply()
             break
           case "TEXT_MESSAGE_CONTENT":
-            // Each piece is added to the bubble the moment it arrives: the reply "types itself".
-            update(replyId, (message) => ({ ...message, text: message.text + event.delta }))
+            // Each piece is added the moment it arrives: the reply "types itself".
+            update(reply(), (message) => ({ ...message, text: message.text + event.delta }))
             break
-          case "RUN_FINISHED": {
-            const toolCalls = event.result?.toolCalls ?? []
-            update(replyId, (message) => ({ ...message, toolCalls }))
-            // The assistant changed expenses: tell every page showing them to reload.
-            if (changedData(toolCalls)) notifyDataChanged()
+          case "TOOL_CALL_START": {
+            const tool: ToolActivity = { id: event.toolCallId, name: event.toolCallName, args: "", status: "running" }
+            update(reply(), (message) => ({ ...message, tools: [...(message.tools ?? []), tool] }))
             break
           }
+          case "TOOL_CALL_ARGS":
+            updateTool(event.toolCallId, (tool) => ({ ...tool, args: tool.args + event.delta }))
+            break
+          // TOOL_CALL_END only says the arguments are complete; the chip keeps spinning while the tool runs.
+          case "TOOL_CALL_RESULT":
+            updateTool(event.toolCallId, (tool) => ({
+              ...tool,
+              status: event.metadata?.ok === false ? "failed" : "done",
+              result: event.content,
+            }))
+            break
+          case "STATE_SNAPSHOT":
+            // A tool changed expenses. A new dataVersion makes every page that shows them reload.
+            setDataVersion(event.snapshot.dataVersion)
+            break
         }
       })
     } catch (error) {
+      // The run failed: a tool still spinning will never finish, so don't leave it spinning.
+      update(replyId, (message) => ({
+        ...message,
+        tools: message.tools?.map((tool) => (tool.status === "running" ? { ...tool, status: "failed" } : tool)),
+      }))
       // Any text that already arrived stays; the error appears as its own red bubble below it.
       add({ role: "assistant", text: error instanceof Error ? error.message : String(error), failed: true })
     } finally {

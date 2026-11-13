@@ -33,7 +33,7 @@ spendwise/
         llm.py          ask_gemini(), ask_gemini_for_json(), stream_gemini_with_tools()
       modules/
         assistant/      POST /ask, /parse, /chat, /agent (AG-UI stream), GET /threads; ChatMessage table (parse, agent, mcp_client)
-        mcp/            MCP server "spendwise": 5 tools, 2 resources; mounted at /mcp/ (no tables)
+        mcp/            MCP server "spendwise": 5 tools (with read-only/destructive annotations), 2 resources; mounted at /mcp/ (no tables)
         categories/     Category table, GET /categories, public interface
         expenses/       Expense table, CRUD routes + GET /summary, /summary/trend, public interface
     seed.py             sample data, using modules' public interfaces
@@ -156,10 +156,13 @@ HTTP request
   -> modules/assistant/router.py        validates the body (ag_ui RunAgentInput) -> 422 if malformed; then a 200 stream
        (a sync generator with EventSourceResponse: FastAPI runs it in a worker thread and pings every 15 s)
   -> modules/assistant/service.py       agent_run(): RUN_STARTED; newest user message; load the thread (new if unknown)
-  -> modules/assistant/agent.py         stream(): the same loop as /chat, yielding text pieces as Gemini writes them
-       each piece                         -> TEXT_MESSAGE_START (first piece only), TEXT_MESSAGE_CONTENT
+  -> modules/assistant/agent.py         stream(): the same loop as /chat, yielding as things happen:
+       text pieces                        -> TEXT_MESSAGE_START (if none open), TEXT_MESSAGE_CONTENT
+       ToolStarted (before an MCP call)   -> TEXT_MESSAGE_END (if open), TOOL_CALL_START, TOOL_CALL_ARGS, TOOL_CALL_END
+       ToolFinished (after it)            -> TOOL_CALL_RESULT (metadata.ok); if it changed data (MCP annotations,
+                                             mcp_client.changes_data): STATE_SNAPSHOT {"dataVersion": state + 1}
   -> assistant/repository.add_turn()    saves the turn when the loop ends
-  <- TEXT_MESSAGE_END, RUN_FINISHED(result={"toolCalls": [...]})   or RUN_ERROR on any failure (nothing saved)
+  <- TEXT_MESSAGE_END, RUN_FINISHED   or RUN_ERROR on any failure (nothing saved)
 ```
 
 If a service raises `NotFoundError`, `BusinessRuleError` or `ExternalServiceError` (e.g. `GeminiError`), the

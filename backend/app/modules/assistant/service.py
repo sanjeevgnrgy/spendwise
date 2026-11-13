@@ -50,7 +50,8 @@ def chat(session: Session, message: str, thread_id: str | None = None) -> ChatRe
         rows = repository.messages(session, thread_id, from_turn=turn - MAX_HISTORY_TURNS)
         history = [row.content for row in rows]
 
-    result = agent.run(session, message, date.today(), history)
+    # The agent gets no database session: it reaches expense data only through the MCP server.
+    result = agent.run(message, date.today(), history)
     repository.add_turn(session, thread_id, turn, result.steps)
     return ChatResponse(thread_id=thread_id, reply=result.reply, tool_calls=result.tool_calls)
 

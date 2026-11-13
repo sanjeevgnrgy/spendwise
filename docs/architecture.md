@@ -32,7 +32,7 @@ spendwise/
         money.py        rupees <-> paise
         llm.py          ask_gemini(), ask_gemini_for_json(), ask_gemini_with_tools()
       modules/
-        assistant/      POST /ask, /parse, /chat, GET /threads; ChatMessage table (parse, tools, agent)
+        assistant/      POST /ask, /parse, /chat, GET /threads; ChatMessage table (parse, agent, mcp_client)
         mcp/            MCP server "spendwise": 5 tools, 2 resources; mounted at /mcp/ (no tables)
         categories/     Category table, GET /categories, public interface
         expenses/       Expense table, CRUD routes + GET /summary, public interface
@@ -81,7 +81,7 @@ that link, so the service must, and it does.
 | Module | Exports (`from app.modules import <name>`) | Used by |
 |---|---|---|
 | `categories` | `CategoryCreate`, `CategoryRead`, `create_category`, `get_category`, `list_categories` | `expenses`, `assistant`, `seed.py` |
-| `expenses` | `ExpenseCreate`, `ExpenseUpdate`, `ExpenseRead`, `ExpenseFilters`, `MonthlySummary`, `CategoryTotal`, `PaymentMethod`, `create_expense`, `get_expense`, `list_expenses`, `update_expense`, `delete_expense`, `monthly_summary` | `assistant` (`PaymentMethod`, and all of the above via `tools.py`), `seed.py` (later: mcp) |
+| `expenses` | `ExpenseCreate`, `ExpenseUpdate`, `ExpenseRead`, `ExpenseFilters`, `MonthlySummary`, `CategoryTotal`, `PaymentMethod`, `create_expense`, `get_expense`, `list_expenses`, `update_expense`, `delete_expense`, `monthly_summary` | `mcp`, `assistant` (`PaymentMethod` only, for `/parse`), `seed.py` |
 | `assistant` | nothing yet | — |
 
 | `mcp` | nothing | — (it *uses* `expenses` and `categories`) |
@@ -89,9 +89,13 @@ that link, so the service must, and it does.
 Routers and the MCP `server` object are not part of any public interface; only `main.py` (and `mcp_stdio.py`)
 import them.
 
-**Three adapters, one set of services.** The REST routers, the assistant's tools and the MCP module each translate
-their own protocol (HTTP/JSON, Gemini function calls, MCP) into calls to the same public service functions. The
-business rules live in the services, so they apply to every way in.
+**Two adapters, one set of services.** The REST routers and the MCP module each translate their own protocol
+(HTTP/JSON, MCP) into calls to the same public service functions. The business rules live in the services, so they
+apply to every way in.
+
+**The assistant's agent goes through MCP** (since Phase 10). It doesn't import the expenses module: it connects to
+`MCP_URL` as an MCP client, discovers the tools there, and asks the MCP server to run them. By default that URL is
+this same app, so `/chat` makes HTTP calls to `/mcp/` on its own server.
 
 ## How a request flows
 
@@ -138,8 +142,9 @@ HTTP request
   -> modules/assistant/service.py       chat(): new thread, or load its last 10 turns
        -> assistant/repository.py       ChatMessage rows (the assistant module's own table)
   -> modules/assistant/agent.py         the loop, at most 5 Gemini calls, sending history + this turn:
+       -> assistant/mcp_client.py              lists the tools and categories from the MCP server (MCP_URL)
        -> core/llm.ask_gemini_with_tools()     Gemini answers with text, or with function calls
-       -> modules/assistant/tools.py           runs each call through the expenses/categories public interfaces
+       -> assistant/mcp_client.call_tool()     HTTP to /mcp/ -> modules/mcp/server.py -> expenses/categories services
   -> assistant/repository.add_turn()    saves every step of this turn, in one commit
   <- ChatResponse(thread_id, reply, tool_calls)   every step, tool call and token count is logged
 ```

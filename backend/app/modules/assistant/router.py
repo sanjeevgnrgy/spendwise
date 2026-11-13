@@ -34,7 +34,9 @@ def parse_expense(body: ParseRequest, session: SessionDep) -> ParseResponse:
 
 @router.post("/chat")
 def chat(body: ChatRequest, session: SessionDep) -> ChatResponse:
-    # Unlike /parse, this can change data: the agent may add, update or delete expenses via its tools.
+    # Unlike /parse, this can change data: the agent may add, update or delete expenses via MCP tools.
+    # It must stay a plain `def` (run in a worker thread): the agent calls this same app's /mcp
+    # endpoint, and an `async def` that blocked the server's event loop while waiting would deadlock.
     return service.chat(session, body.message, body.thread_id)
 
 

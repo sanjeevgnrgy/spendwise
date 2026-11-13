@@ -4,6 +4,9 @@
 AI app (MCP Inspector, Claude Desktop, and later our own assistant) can use them. The server is mounted in the
 FastAPI app at `/mcp/`, and can also run over stdio for local tools.
 
+> **Later changes:** in Phase 10 the assistant's agent became an MCP client of this server and
+> `assistant/tools.py` was deleted, so "three adapters" below became two adapters plus one MCP client.
+
 ## Concepts
 
 **MCP** is a standard way for AI apps to plug into tools and data. In Phase 7 we described our tools to Gemini in

@@ -22,6 +22,7 @@ covers setup and running; this folder explains **why** things are the way they a
 | [phases/phase-7-function-calling-chat.md](phases/phase-7-function-calling-chat.md) | Function calling, the agent loop step by step, why steps are capped, watching it think |
 | [phases/phase-8-memory.md](phases/phase-8-memory.md) | Why the model forgets, chat threads, sending the last N turns, the cost of long history |
 | [phases/phase-9-mcp-module.md](phases/phase-9-mcp-module.md) | MCP: host, client and server, tools vs resources, the MCP module as an adapter, Inspector and Claude Desktop |
+| [phases/phase-10-agent-uses-mcp.md](phases/phase-10-agent-uses-mcp.md) | The agent as an MCP client: discovering tools, schema conversion, error handling, what decoupling buys (not run yet) |
 
 Each phase file has the concepts, what was built, how to run and test it, and the
 "check your understanding" questions. Answers are hidden; click to reveal them.

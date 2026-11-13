@@ -91,6 +91,10 @@ trailing slash). To explore it by hand in the MCP Inspector, over stdio (needs N
 .\.venv\Scripts\mcp.exe dev backend\mcp_stdio.py
 ```
 
+The assistant behind `POST /chat` uses this same server: it connects to `MCP_URL` (default
+`http://localhost:8000/mcp`) to find and run its tools. If you start the app on another port, set
+`MCP_URL` in `.env` to match.
+
 Tools: `add_expense`, `list_expenses`, `get_summary`, `update_expense`, `delete_expense`. Resources:
 `expenses://categories`, `expenses://recent`. Inspector steps and Claude Desktop setup:
 [docs/phases/phase-9-mcp-module.md](docs/phases/phase-9-mcp-module.md).
@@ -122,7 +126,7 @@ spendwise/
         money.py           rupees <-> paise helpers
         llm.py             the one place that talks to Gemini (plain, structured output, tools)
       modules/
-        assistant/         POST /ask, /parse, /chat, GET /threads; ChatMessage table (+ parse, tools, agent)
+        assistant/         POST /ask, /parse, /chat, GET /threads; ChatMessage table (+ parse, agent, mcp_client)
         mcp/               MCP server: expense tools and resources for any MCP client, mounted at /mcp/
         categories/        Category table, GET /categories, public interface
         expenses/          Expense table, CRUD routes, GET /summary, public interface

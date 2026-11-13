@@ -404,6 +404,7 @@ is natural. It's still a soft, model-judged guard.
 - `assistant/tools.py` (Phase 7) and `mcp/server.py` wrap the same services in almost the same way. Modules can't
   share internals, and the plan is for the assistant to call the MCP tools.
 - **Revisit when:** the assistant becomes an MCP client. Then delete `assistant/tools.py`.
+- **Resolved by D72** (Phase 10): `assistant/tools.py` is deleted.
 
 ### D68. One server, two transports
 - **Streamable HTTP**, mounted at `/mcp` in the FastAPI app: `streamable_http_app(streamable_http_path="/",
@@ -425,3 +426,38 @@ is natural. It's still a soft, model-judged guard.
 ### D71. Deletes over MCP use the same soft confirmation as the assistant
 - `delete_expense(confirmed=false)` only reports what would be deleted. Hosts such as Claude Desktop also ask the
   person to approve tool calls, which is a second check.
+
+---
+
+## Agent uses MCP (Phase 10)
+
+> Written without running the server or Gemini, at the developer's request. Not yet exercised end to end.
+
+### D72. The agent is an MCP client; it has no tools of its own
+- `assistant/mcp_client.py` connects to `MCP_URL` (default `http://localhost:8000/mcp`, this app's own MCP module),
+  lists the tools, converts them to Gemini declarations, and runs every call with `call_tool`.
+- `assistant/tools.py` is deleted. `agent.py` imports no business module and takes no database session; category
+  names come from the `expenses://categories` resource.
+- **Still direct:** `/parse` uses the `categories` and `expenses.PaymentMethod` public interfaces.
+
+### D73. Tools are listed on first use and cached
+- Not at app startup: by default the MCP server is this same app, which isn't serving yet during startup.
+- The cache lasts until the app restarts. **Revisit when:** tools change while the app runs.
+
+### D74. One short MCP connection per operation, run with `asyncio.run`
+- The SDK is async; the agent runs in a worker thread. Each operation (list, call, read) opens a connection, does
+  one thing and closes, with a 15 s timeout.
+- `/chat` must remain a plain `def` route, or calling the app's own `/mcp` would deadlock the event loop.
+- **Revisit when:** the extra round trips matter; then keep one session per chat turn.
+
+### D75. MCP input schemas are simplified for Gemini
+- `anyOf [X, null]` becomes `X`; only `type`, `description`, `enum`, `items`, `format` are kept.
+- **Revisit when:** a tool uses nested objects or other keywords this drops.
+
+### D76. MCP failures become part of the reply
+- `isError` results go back to the model as error results.
+- Unreachable before the loop: an apology is returned without calling Gemini (200, stored in the thread).
+- Unreachable during a call: the model is told, and tells the user.
+
+### D77. Running on another port needs `MCP_URL`
+- The default assumes port 8000. With `--port 8001`, set `MCP_URL=http://localhost:8001/mcp`.

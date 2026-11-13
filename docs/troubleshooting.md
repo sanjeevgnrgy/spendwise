@@ -95,6 +95,15 @@ on your tier, or temporarily overloaded).
 - **Fix:** read the traceback in the server's terminal (for stdio, the host's server log). Expected problems, like an
   unknown category, come with a clear message instead.
 
+### `/chat` replies "Sorry, I can't reach the expense tools right now"
+- **Cause:** the assistant couldn't connect to the MCP server at `MCP_URL` (default `http://localhost:8000/mcp`).
+  Most often the app is running on a different port, e.g. `.\run.ps1 --port 8001`.
+- **Fix:** set `MCP_URL=http://localhost:<port>/mcp` in `.env` and restart. The terminal logs the URL it tried.
+
+### `/chat` doesn't see a tool I just added to the MCP server
+- **Cause:** the assistant lists the tools once, on the first chat, and caches them.
+- **Fix:** restart the app.
+
 ### `mcp dev` fails: "npx not found" or `uv` not found
 - **Cause:** the Inspector needs Node.js (`npx`), and `mcp dev` starts the server through `uv`.
 - **Fix:** install Node.js and uv, or run the Inspector directly:

@@ -21,6 +21,9 @@ class Settings(BaseSettings):
     # SecretStr keeps the key out of logs and error messages if settings get printed.
     gemini_api_key: SecretStr | None = None
     gemini_model: str | None = None
+    # Where the assistant finds the MCP server with the expense tools. By default that's this
+    # app's own MCP module; point it elsewhere if that module ever runs as a separate service.
+    mcp_url: str = "http://localhost:8000/mcp"
     # A local SQLite file by default; point DATABASE_URL at Postgres later without code changes.
     database_url: str = f"sqlite:///{(BACKEND_DIR / 'spendwise.db').as_posix()}"
 

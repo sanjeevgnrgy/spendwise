@@ -5,7 +5,8 @@ table, filters, row selection, add dialog, inline edit, delete with confirmation
 which now allows it through CORS.
 
 > **How it was checked:** `npm run build` (TypeScript type-check plus production bundle) passes, and the backend
-> still compiles. The app was **not** opened in a browser while building this phase. See "Test it by hand".
+> still compiles. On the first run in a browser, the Expenses page went blank with an endless render loop; that
+> and a console warning were fixed afterwards (see "Two bugs found on the first run").
 
 ## Concepts
 
@@ -49,11 +50,12 @@ web/
   index.html, vite.config.ts      Vite + Tailwind plugin + "@" alias for src/
   components.json                 shadcn/ui settings (radix base, "nova" preset, lucide icons)
   src/
-    main.tsx                      providers: theme (next-themes), tooltips, router, toasts
+    main.tsx                      providers: theme, tooltips, router, toasts
     App.tsx                       routes: /, /expenses, /budgets, /settings (inside AppLayout)
     api.ts                        every backend call + the TypeScript types for its data
     lib/format.ts                 money, dates, payment-method labels
     components/
+      theme-provider.tsx          keeps the "dark" class on <html> in sync with the chosen theme
       app-layout.tsx              SidebarProvider + sidebar + top bar + <Outlet/> (the current page)
       app-sidebar.tsx             shadcn Sidebar menu with NavLinks
       mode-toggle.tsx             Light / Dark / System menu
@@ -90,9 +92,46 @@ const columnHelper = createColumnHelper<typeof features, Expense>()
 
 Each sortable column passes its sort function directly (`sortFn: sortFn_alphanumeric`, `sortFn_basic` for amounts in
 paise). Cells come from `row.getAllCells()`, because `getVisibleCells()` belongs to the column-visibility feature.
+Row selection is **controlled**: the table reads it from the component's own `useState` and reports changes back
+(`state: { rowSelection }, onRowSelectionChange: setRowSelection`).
 
-**Theme.** `next-themes` (installed by shadcn for its toast component) adds or removes the `dark` class on `<html>`;
-`index.css` defines both colour sets. The choice is saved in localStorage, and "System" follows the OS setting.
+**Theme.** A small `ThemeProvider` (`components/theme-provider.tsx`, with `lib/theme.ts`) adds or removes the `dark`
+class on `<html>`; `index.css` defines both colour sets. The choice is saved in localStorage, and "System" follows the
+OS live. A tiny script in `index.html` applies the saved theme before React starts, so dark mode doesn't flash light.
+
+## Two bugs found on the first run
+
+**1. Blank Expenses page: "Maximum update depth exceeded … in `<ExpensesTable>`".** The table cleared its row selection
+in an effect: `useEffect(() => table.resetRowSelection(), [expenses, table])`. But TanStack's `useTable` returns a
+**new `table` object on every render** (it's rebuilt from the options object, which is new each render). So the
+effect ran after every render, the reset changed table state, which caused another render with yet another new
+`table`, forever. React stops that after a while, and the page crashed.
+
+The fix: keep the selection in our own `useState`, pass it to the table, and clear it when the `expenses` prop changes
+by comparing **during render** (React's "reset state when a prop changes" pattern), with no effect involved:
+
+```tsx
+const [rowSelection, setRowSelection] = useState<RowSelectionState>({})
+const [selectionFor, setSelectionFor] = useState(expenses)
+if (selectionFor !== expenses) {   // new data arrived
+  setSelectionFor(expenses)
+  setRowSelection({})
+}
+```
+
+**Lesson:** an effect re-runs whenever anything in its dependency list is a *different value* than last time. Objects
+created during render (option objects, inline functions, a library's return value) are different every time. If such
+an effect then sets state, you get a loop. Prefer deriving things during render, and use effects only to sync with
+the outside world.
+
+**2. Console: "Encountered a script tag while rendering React component".** `next-themes` (which shadcn's toast
+component uses by default) renders a `<script>` meant for server-rendered apps; in a browser-only app React warns
+that it never runs. It was replaced by our own small theme provider, as in shadcn's Vite dark-mode guide, and
+`sonner.tsx` now reads the theme from it. `next-themes` was uninstalled.
+
+The same console also showed `GET http://localhost:8000/categories net::ERR_CONNECTION_REFUSED`: the backend wasn't
+running. That's not a bug; with the fixes, it now shows the red "Can't reach the SpendWise API" toast instead of a
+blank page.
 
 ## Run it
 
@@ -113,7 +152,7 @@ Open **http://localhost:5173**. (The backend allows `localhost:5173` and `127.0.
 
 ## Test it by hand
 
-None of this has been tried in a browser yet.
+Start the backend first (`.\run.ps1`); without it, every page load shows a red "Can't reach the SpendWise API" toast.
 
 1. **Layout:** the sidebar shows Dashboard, Expenses, Budgets and Settings, and the current page is highlighted.
    The ☰ button (top left) collapses it to icons, with tooltips. The sun/moon button switches Light / Dark / System.

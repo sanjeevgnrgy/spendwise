@@ -8,10 +8,11 @@ import {
   sortFn_basic,
   tableFeatures,
   useTable,
+  type RowSelectionState,
   type SortDirection,
 } from "@tanstack/react-table"
 import { ArrowDown, ArrowUp, ArrowUpDown, Pencil, Trash2 } from "lucide-react"
-import { useEffect, useMemo, useState } from "react"
+import { useMemo, useState } from "react"
 
 import type { Category, Expense, ExpenseChanges } from "@/api"
 import { Badge } from "@/components/ui/badge"
@@ -58,6 +59,21 @@ interface ExpensesTableProps {
 
 export function ExpensesTable({ expenses, categories, loading, onSave, onDelete }: ExpensesTableProps) {
   const [editingId, setEditingId] = useState<number | null>(null)
+  // Which rows are ticked, as { "12": true, "15": true }. Kept here (not only inside the table)
+  // so this component decides when it's cleared.
+  const [rowSelection, setRowSelection] = useState<RowSelectionState>({})
+  const [selectionFor, setSelectionFor] = useState(expenses)
+
+  // New data (after a filter change, add, edit or delete) clears the selection, so hidden or
+  // already-deleted rows can't stay selected by accident. This is React's "reset state when a
+  // prop changes" pattern: compare during render instead of in an effect. An effect that
+  // cleared the selection whenever `table` changed caused an endless render loop, because
+  // useTable returns a new `table` object on every render.
+  if (selectionFor !== expenses) {
+    setSelectionFor(expenses)
+    setRowSelection({})
+  }
+
   const categoryNames = useMemo(() => new Map(categories.map((c) => [c.id, c.name])), [categories])
 
   // The column definitions: what each column shows, and how it sorts. useMemo keeps the same
@@ -153,13 +169,10 @@ export function ExpensesTable({ expenses, categories, loading, onSave, onDelete 
     // Use the expense id as the row id, so selection and editing follow the expense, not its position.
     getRowId: (expense) => String(expense.id),
     enableRowSelection: true,
+    // "Controlled" selection: the table reads it from our state and reports changes back to us.
+    state: { rowSelection },
+    onRowSelectionChange: setRowSelection,
   })
-
-  // New data (after a filter change, add, edit or delete) clears the selection, so hidden or
-  // already-deleted rows can't stay selected by accident.
-  useEffect(() => {
-    table.resetRowSelection()
-  }, [expenses, table])
 
   const rows = table.getRowModel().rows
   const selected = table.getSelectedRowModel().rows.map((row) => row.original)

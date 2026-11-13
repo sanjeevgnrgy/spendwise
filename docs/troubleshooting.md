@@ -93,6 +93,17 @@ on your tier, or temporarily overloaded).
 - **Fix:** open the app at `http://localhost:5173`, or add its address to `CORS_ORIGINS` in `.env`
   (a JSON list) and restart the backend.
 
+### Blank page; console says "Maximum update depth exceeded"
+- **Cause:** a component keeps setting state in a loop, usually a `useEffect` that sets state and lists a value
+  that's new on every render (an object or function created during render, or `useTable`'s `table`).
+  The Expenses table had exactly this bug at first (decisions D88).
+- **Fix:** find the effect in the component named in the console. Remove the unstable dependency, or compute the
+  value during render instead of in an effect.
+
+### Console: "Encountered a script tag while rendering React component"
+- **Cause:** a component rendered a `<script>` (e.g. `next-themes`), which never runs in a browser-rendered React app.
+- **Fix:** already removed from SpendWise (decisions D87). Put scripts in `index.html` instead.
+
 ### `npm run dev`: "Cannot find module" or a blank page after pulling changes
 - **Cause:** `package.json` changed but `node_modules` wasn't updated.
 - **Fix:** run `npm install` in `web/`, then `npm run dev` again.

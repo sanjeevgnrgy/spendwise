@@ -1,5 +1,4 @@
 import { Monitor, Moon, Sun } from "lucide-react"
-import { useTheme } from "next-themes"
 
 import { Button } from "@/components/ui/button"
 import {
@@ -8,9 +7,10 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
+import { useTheme } from "@/lib/theme"
 
-// Light / dark / follow the system. next-themes stores the choice in localStorage and puts a
-// "dark" class on <html>; the colours in index.css switch on that class.
+// Light / dark / follow the system. ThemeProvider saves the choice and puts a "dark" class on
+// <html>; the colours in index.css switch on that class.
 export function ModeToggle() {
   const { setTheme } = useTheme()
 

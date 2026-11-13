@@ -1,9 +1,9 @@
-import { ThemeProvider } from "next-themes"
 import { StrictMode } from "react"
 import { createRoot } from "react-dom/client"
 import { BrowserRouter } from "react-router"
 
 import App from "@/App"
+import { ThemeProvider } from "@/components/theme-provider"
 import { Toaster } from "@/components/ui/sonner"
 import { TooltipProvider } from "@/components/ui/tooltip"
 import "./index.css"
@@ -12,8 +12,7 @@ import "./index.css"
 // the theme (light/dark), tooltips (used by the collapsed sidebar) and the router (current URL).
 createRoot(document.getElementById("root")!).render(
   <StrictMode>
-    {/* attribute="class": put "dark" on <html>, which is what index.css's dark colours key off. */}
-    <ThemeProvider attribute="class" defaultTheme="system" enableSystem disableTransitionOnChange>
+    <ThemeProvider>
       <TooltipProvider>
         <BrowserRouter>
           <App />

@@ -493,6 +493,7 @@ is natural. It's still a soft, model-judged guard.
 ### D82. Theme with `next-themes`
 - shadcn's toast component already depends on it, and it works outside Next.js. `attribute="class"` toggles `.dark`
   on `<html>`, matching the `dark` variant shadcn put in `index.css`. Saves the choice; "System" follows the OS.
+- **Superseded by D87.**
 
 ### D83. All backend calls in `web/src/api.ts`
 - Typed functions per endpoint; one `request()` turns failures into `ApiError` with the backend's message
@@ -513,3 +514,17 @@ is natural. It's still a soft, model-judged guard.
 ### D86. Known warnings
 - oxlint warns about four generated shadcn files (`only-export-components`, one `set-state-in-effect`), left as shadcn ships them.
 - Vite warns the bundle is over 500 kB. **Revisit when:** more pages exist; then split routes with lazy imports.
+
+### D87. Our own small ThemeProvider instead of `next-themes`
+- **Why:** `next-themes` renders a `<script>` for server-rendered apps; in this browser-only app React logs
+  "Encountered a script tag while rendering React component".
+- **How:** `components/theme-provider.tsx` + `lib/theme.ts` (as in shadcn's Vite dark-mode guide); the edited
+  `ui/sonner.tsx` reads the theme from it. An inline script in `index.html` applies the saved theme before React loads,
+  to avoid a light flash. `next-themes` is uninstalled.
+
+### D88. Table row selection is controlled state, reset during render
+- **Why:** clearing it in `useEffect(..., [expenses, table])` looped forever, because `useTable` returns a new `table`
+  object on every render (blank Expenses page, "Maximum update depth exceeded").
+- **How:** `useState<RowSelectionState>` passed as `state: { rowSelection }` with `onRowSelectionChange`; cleared when
+  the `expenses` prop changes, by comparing during render rather than in an effect.
+- **Rule of thumb:** never put a library's per-render return value in an effect that sets state.

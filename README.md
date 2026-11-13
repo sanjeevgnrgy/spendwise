@@ -2,10 +2,11 @@
 
 An agentic expense tracker, built one small phase at a time as a learning project.
 
-**Current state (Phase 5):** a modular-monolith FastAPI backend with a REST API for expenses
-(create, list with filters, read, update, delete), a monthly summary, a categories list, and
-`POST /ask` (sends a prompt to Gemini). `backend/seed.py` fills the database with sample data.
-A pytest suite covers the API, the business rules and the module boundaries.
+**Current state (Phase 6):** a modular-monolith FastAPI backend with a REST API for expenses
+(create, list with filters, read, update, delete), a monthly summary, a categories list,
+`POST /ask` (sends a prompt to Gemini) and `POST /parse` (turns a note like "Paid 450 at Swiggy
+yesterday" into a structured expense, without saving it). `backend/seed.py` fills the database with
+sample data. A pytest suite covers the API, the business rules and the module boundaries.
 
 ## Requirements
 
@@ -60,6 +61,8 @@ With the server running:
 - http://127.0.0.1:8000/categories → the 8 categories
 - http://127.0.0.1:8000/expenses?search=grocer → expenses whose merchant or note contains "grocer"
 - http://127.0.0.1:8000/summary?month=2026-11 → that month's total and per-category totals
+- `POST /parse` in `/docs` with `{"text": "Paid 450.50 at Swiggy yesterday via GPay"}` → the parsed expense
+  and `missing_fields` (needs your Gemini key; nothing is saved)
 
 The full route list, filters, status codes and example requests are in
 [docs/phases/phase-4-expenses-api.md](docs/phases/phase-4-expenses-api.md).
@@ -78,7 +81,7 @@ From the project folder:
 
 ```powershell
 .\.venv\Scripts\python.exe -m pip install -r requirements-dev.txt   # once, and when it changes
-.\.venv\Scripts\python.exe -m pytest                                # expect: 38 passed
+.\.venv\Scripts\python.exe -m pytest                                # expect: 47 passed
 ```
 
 Tests use a fresh in-memory database each, never `backend/spendwise.db` or your Gemini key.
@@ -106,11 +109,11 @@ spendwise/
       core/
         config.py          settings from .env (pydantic-settings)
         db.py              database engine, table creation, get_session / SessionDep
-        errors.py          NotFoundError -> 404, BusinessRuleError -> 422
+        errors.py          NotFoundError -> 404, BusinessRuleError -> 422, ExternalServiceError -> 502
         money.py           rupees <-> paise helpers
-        llm.py             ask_gemini(): the one place that talks to Gemini
+        llm.py             the one place that talks to Gemini (plain and structured output)
       modules/
-        assistant/         POST /ask (router, schemas, service)
+        assistant/         POST /ask, POST /parse (router, schemas, service, parse)
         categories/        Category table, GET /categories, public interface
         expenses/          Expense table, CRUD routes, GET /summary, public interface
     seed.py                default categories and sample expenses

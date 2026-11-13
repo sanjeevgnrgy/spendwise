@@ -62,15 +62,43 @@ It uses the **Interactions API** (`client.interactions.create`), which Google re
 The older `client.models.generate_content` still works and is fully supported, but Google calls it legacy.
 See [decisions.md](decisions.md) D6–D9 for the reasoning.
 
+## Structured output
+
+`ask_gemini_for_json(prompt, schema, system_instruction)` makes Gemini answer with JSON that fits a schema
+(used by `POST /parse`, see [phases/phase-6-structured-output.md](phases/phase-6-structured-output.md)):
+
+```python
+response_format={"type": "text", "mime_type": "application/json", "schema": SomeModel.model_json_schema()}
+# then: SomeModel.model_validate_json(interaction.output_text)
+```
+
+- **Supported schema features** (Google's docs, 2026-11-13): `type` (including `null`, and type arrays like
+  `["string", "null"]`), `properties`, `required`, `enum`, `format` (`date`, `date-time`, `time`), `minimum`/`maximum`,
+  `items`, `minItems`/`maxItems`, `title`, `description`. `minLength`/`maxLength` and a few others are **ignored**, so
+  validate those yourself (Pydantic does).
+- **Make fields required and allow `null`** for anything that might be unknown. Otherwise the model must invent a value.
+- **Descriptions are instructions:** Gemini reads each field's `description`.
+- Very large or deeply nested schemas can be rejected with `400 INVALID_ARGUMENT`.
+
+## Timeouts and retries
+
+The client gives up on an attempt after **30 s** and makes **at most 2 attempts**
+(`HttpOptions(timeout=30_000, retry_options=HttpRetryOptions(attempts=2))` in `core/llm.py`). The SDK's defaults
+(5 attempts, up to 60 s apart) made requests hang for minutes while Gemini was down. Now an outage becomes a 502
+in about half a minute.
+
 ## When something goes wrong
 
-| What you see from `POST /ask` | Meaning | Where to look |
+| What you see from `POST /ask` or `POST /parse` | Meaning | Where to look |
 |---|---|---|
 | `422` | The request body is invalid, e.g. an empty prompt or over 4000 characters | The `detail` field says which rule failed |
 | `500 Internal Server Error` | Our setup is wrong: `GEMINI_API_KEY` or `GEMINI_MODEL` isn't set | The server terminal says which setting is missing |
 | `502` with "API key not valid" | Gemini rejected the key | Re-copy the key into `.env`, then restart |
 | `502` with a quota or rate-limit message | Free-tier limit reached | AI Studio rate-limit page; wait for the reset |
 | `502` mentioning the model | The model isn't available to your key | Pick a free-tier model from the table above |
+| `502` "experiencing high demand" (Google's 503) | The model is temporarily overloaded | Wait a few minutes, or switch `GEMINI_MODEL` (e.g. `gemini-4-hydrogen`) and restart |
+| `502` "didn't match the expected shape" | Gemini's JSON didn't fit `ParsedExpense` | Rare with structured output; retry. If it repeats, the schema or descriptions need a look |
+| `422` "There are no categories yet" (`/parse` only) | Nothing to pick a category from | Run `backend\seed.py` or add categories |
 
 **500 vs 502:** a 500 means *our* server has a problem; a 502 means a service we depend on (Gemini) failed.
 

@@ -53,11 +53,23 @@ the project folder (the repo root, where `run.ps1` is) unless noted.
 - **Cause:** pytest couldn't write its `.pytest_cache` folder (permissions).
 - **Fix:** harmless; tests still run. Only `--lf` ("last failed") needs the cache.
 
-## Gemini (`POST /ask`)
+## Gemini (`POST /ask`, `POST /parse`)
 
 See the error table in [gemini.md](gemini.md#when-something-goes-wrong). In short: `500` means a setting
-is missing (the terminal says which); `502` means Gemini refused (bad key, quota, or model not available
-on your tier).
+is missing (the terminal says which); `502` means Gemini refused or failed (bad key, quota, model not available
+on your tier, or temporarily overloaded).
+
+### `502` "... is currently experiencing high demand ... Please try again later."
+- **Cause:** Google returned `503 Service Unavailable`: that model is overloaded right now. Not a problem in our code.
+- **Fix:** wait a few minutes and retry, or set `GEMINI_MODEL=gemini-4-hydrogen` (also free tier) in `.env` and restart.
+
+### `/ask` or `/parse` takes a very long time
+- **Cause (fixed in Phase 6):** the SDK used to retry up to 5 times, up to 60 s apart, while Gemini was down.
+- **Now:** each attempt gives up after 30 s and there are at most 2, so you get a 502 within about a minute.
+  If it still hangs much longer, check your network.
+
+### `/parse` returns 422 "There are no categories yet"
+- **Fix:** run `.\.venv\Scripts\python.exe backend\seed.py`. Parsing needs the category list to choose from.
 
 ## Database
 

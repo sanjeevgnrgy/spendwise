@@ -161,6 +161,7 @@ add a new entry and mark the old one **Superseded by D<n>**.
   handlers that turn them into 404 / 422 with `{"detail": "<message>"}`.
 - **Why:** services stay free of HTTP (so MCP tools can reuse them), and routers need no try/except.
 - **Revisit when:** a third kind of error appears, or to move `/ask`'s Gemini → 502 mapping here too.
+- **Updated by D48:** a third kind was added (`ExternalServiceError` → 502).
 
 ### D29. 404 only for the resource in the URL
 - An unknown `category_id` in a request body is **422**, not 404: the endpoint exists, the body is invalid.
@@ -237,3 +238,49 @@ add a new entry and mark the old one **Superseded by D<n>**.
 ### D41. The checker has its own test
 - `test_checker_catches_violations` builds a fake project with known violations and checks each one is reported.
   A checker that silently found nothing would otherwise pass forever.
+
+---
+
+## Structured output (Phase 6)
+
+### D42. Structured output through `response_format`, validated with Pydantic
+- **How:** `interactions.create(..., response_format={"type": "text", "mime_type": "application/json",
+  "schema": ParsedExpense.model_json_schema() ...})`, then `ParsedExpense.model_validate_json(output_text)`.
+  This is the pattern in Google's structured-output docs (checked 2026-11-13). The older `response_mime_type`
+  parameter is marked deprecated in the SDK.
+- **If the answer doesn't validate:** `GeminiError` → 502.
+
+### D43. Every schema field is required; unknowns are `null`
+- **Why:** Gemini must fill every field, and `null` lets it say "not stated" instead of inventing a value.
+  This follows Google's advice: "Mark properties as required where possible and allow null values when a field can be empty."
+- **No defaults in the schema:** only keywords the docs list as supported are sent.
+- **`amount` travels as a string** (`WithJsonSchema({"type": ["string", "null"]})`) so the exact digits survive;
+  Pydantic turns it into a `Decimal`.
+
+### D44. Categories are an `enum` added to the schema per request
+- The names come from `categories.list_categories()` (public interface). With no categories, `/parse` returns 422
+  without calling Gemini.
+- The answer is re-checked: a category not in the list becomes `null`. Model output is data to verify.
+
+### D45. `/parse` never saves; it returns `missing_fields`
+- `missing_fields` lists what `POST /expenses` would still need: `amount`, `category`, `merchant`, `payment_method`.
+- `currency` (default INR) and `spent_on` (default today) always get a value, so they're never missing.
+- Saving stays a deliberate step: the user, or later the assistant after confirming, calls `POST /expenses`.
+
+### D46. "Today" is the server's date
+- Good enough for one user running locally.
+- **Revisit when:** there's auth and users in different time zones; then the client should send its date.
+
+### D47. The note is treated as data
+- The system instruction tells Gemini the note is data to extract from, and to ignore any instructions inside it.
+
+### D48. `ExternalServiceError` → 502, handled in one place
+- `core/errors.py` adds `ExternalServiceError`; `GeminiError` is a kind of it. `/ask` and `/parse` have no try/except;
+  the shared handler returns 502.
+
+### D49. Gemini calls give up within about a minute
+- **Why:** the SDK's defaults (5 attempts, up to 60 s between them) made requests hang for minutes during a 503
+  "high demand" outage of `gemini-3.8-flash`.
+- **How:** `HttpOptions(timeout=30_000 ms, retry_options=HttpRetryOptions(attempts=2))` on the client.
+  Measured: an outage now returns 502 in about 32 s.
+- **Revisit when:** responses legitimately take longer than 30 s (e.g. long reports); then raise the limit for those calls.

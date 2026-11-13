@@ -27,11 +27,11 @@ spendwise/
       core/             shared technical code, no business rules
         config.py       settings from .env
         db.py           engine, table creation, get_session / SessionDep
-        errors.py       NotFoundError (404), BusinessRuleError (422) and their handlers
+        errors.py       NotFoundError (404), BusinessRuleError (422), ExternalServiceError (502), handlers
         money.py        rupees <-> paise
-        llm.py          ask_gemini()
+        llm.py          ask_gemini(), ask_gemini_for_json() (structured output)
       modules/
-        assistant/      POST /ask
+        assistant/      POST /ask, POST /parse (parse.py: text -> ParsedExpense)
         categories/     Category table, GET /categories, public interface
         expenses/       Expense table, CRUD routes + GET /summary, public interface
     seed.py             sample data, using modules' public interfaces
@@ -78,8 +78,8 @@ that link, so the service must, and it does.
 
 | Module | Exports (`from app.modules import <name>`) | Used by |
 |---|---|---|
-| `categories` | `CategoryCreate`, `CategoryRead`, `create_category`, `get_category`, `list_categories` | `expenses`, `seed.py` |
-| `expenses` | `ExpenseCreate`, `ExpenseUpdate`, `ExpenseRead`, `ExpenseFilters`, `MonthlySummary`, `CategoryTotal`, `PaymentMethod`, `create_expense`, `get_expense`, `list_expenses`, `update_expense`, `delete_expense`, `monthly_summary` | `seed.py` (later: mcp, assistant) |
+| `categories` | `CategoryCreate`, `CategoryRead`, `create_category`, `get_category`, `list_categories` | `expenses`, `assistant`, `seed.py` |
+| `expenses` | `ExpenseCreate`, `ExpenseUpdate`, `ExpenseRead`, `ExpenseFilters`, `MonthlySummary`, `CategoryTotal`, `PaymentMethod`, `create_expense`, `get_expense`, `list_expenses`, `update_expense`, `delete_expense`, `monthly_summary` | `assistant` (`PaymentMethod`), `seed.py` (later: mcp) |
 | `assistant` | nothing yet | — |
 
 Routers are not part of any public interface; only `main.py` imports them.
@@ -91,7 +91,7 @@ Routers are not part of any public interface; only `main.py` imports them.
 ```
 HTTP request
   -> main.py (app)                      includes the assistant router
-  -> modules/assistant/router.py        validates the body (AskRequest), maps GeminiError -> 502
+  -> modules/assistant/router.py        validates the body (AskRequest)
   -> modules/assistant/service.py       answer(prompt): orchestration grows here later
   -> core/llm.py                        ask_gemini(): the only code that talks to Gemini
   -> Gemini API
@@ -109,8 +109,21 @@ HTTP request
   <- ExpenseRead (frozen copy)           router returns it with 201
 ```
 
-If the service raises `NotFoundError` or `BusinessRuleError`, the handlers registered from `core/errors.py`
-turn it into a 404 or 422 response. The router never catches anything itself.
+`POST /parse`:
+
+```
+HTTP request
+  -> modules/assistant/router.py        validates the body (ParseRequest)
+  -> modules/assistant/service.py       parse_expense_text(): today's date + category names
+       -> categories.list_categories()  public interface: the names Gemini may choose from
+  -> modules/assistant/parse.py         builds the schema (category enum) and system instruction
+  -> core/llm.ask_gemini_for_json()     structured output: JSON shaped by the schema
+  <- ParsedExpense + missing_fields      validated with Pydantic; nothing is saved
+```
+
+If a service raises `NotFoundError`, `BusinessRuleError` or `ExternalServiceError` (e.g. `GeminiError`), the
+handlers registered from `core/errors.py` turn it into a 404, 422 or 502 response. Routers never catch anything
+themselves.
 
 ## Startup
 

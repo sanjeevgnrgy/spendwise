@@ -11,6 +11,7 @@ from app.modules.assistant.schemas import (
     ChatResponse,
     ParseRequest,
     ParseResponse,
+    ThreadRead,
 )
 
 # The tag groups this module's routes under one heading in /docs.
@@ -34,4 +35,9 @@ def parse_expense(body: ParseRequest, session: SessionDep) -> ParseResponse:
 @router.post("/chat")
 def chat(body: ChatRequest, session: SessionDep) -> ChatResponse:
     # Unlike /parse, this can change data: the agent may add, update or delete expenses via its tools.
-    return service.chat(session, body.message)
+    return service.chat(session, body.message, body.thread_id)
+
+
+@router.get("/threads/{thread_id}")
+def get_thread(thread_id: str, session: SessionDep) -> ThreadRead:
+    return service.get_thread(session, thread_id)

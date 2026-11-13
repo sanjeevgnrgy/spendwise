@@ -4,6 +4,9 @@
 expense (amount, currency, category, merchant, date, payment method, note), using Gemini's structured
 output, **without saving it**.
 
+> **Later changes:** the tests mentioned below were removed after Phase 8 ([decisions.md](../decisions.md) D64).
+> This page records Phase 6 as it was built.
+
 ## Concepts
 
 **Structured output.** Normally a model answers in free text, which your code then has to pick apart and

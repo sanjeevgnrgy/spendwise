@@ -32,11 +32,10 @@ spendwise/
         money.py        rupees <-> paise
         llm.py          ask_gemini(), ask_gemini_for_json(), ask_gemini_with_tools()
       modules/
-        assistant/      POST /ask, /parse, /chat (parse.py, tools.py, agent.py)
+        assistant/      POST /ask, /parse, /chat, GET /threads; ChatMessage table (parse, tools, agent)
         categories/     Category table, GET /categories, public interface
         expenses/       Expense table, CRUD routes + GET /summary, public interface
     seed.py             sample data, using modules' public interfaces
-    tests/              one folder per module + architecture/ (import rules)
   agents/               (planned) A2A agents: receipt, insights, currency; separate services
   skills/               (planned) Agent Skills
   web/                  (planned) React frontend
@@ -126,12 +125,14 @@ HTTP request
 
 ```
 HTTP request
-  -> modules/assistant/router.py        validates the body (ChatRequest)
-  -> modules/assistant/service.py       chat() -> agent.run(session, message, today)
-  -> modules/assistant/agent.py         the loop, at most 5 Gemini calls:
+  -> modules/assistant/router.py        validates the body (ChatRequest: message, optional thread_id)
+  -> modules/assistant/service.py       chat(): new thread, or load its last 10 turns
+       -> assistant/repository.py       ChatMessage rows (the assistant module's own table)
+  -> modules/assistant/agent.py         the loop, at most 5 Gemini calls, sending history + this turn:
        -> core/llm.ask_gemini_with_tools()     Gemini answers with text, or with function calls
        -> modules/assistant/tools.py           runs each call through the expenses/categories public interfaces
-  <- ChatResponse(reply, tool_calls)     every step and tool call is logged to the console
+  -> assistant/repository.add_turn()    saves every step of this turn, in one commit
+  <- ChatResponse(thread_id, reply, tool_calls)   every step, tool call and token count is logged
 ```
 
 If a service raises `NotFoundError`, `BusinessRuleError` or `ExternalServiceError` (e.g. `GeminiError`), the
@@ -157,12 +158,16 @@ imports modules.
 
 ## Checking the rules
 
-The rules are enforced automatically by `backend/tests/architecture/test_module_boundaries.py`, which runs
-with every `python -m pytest`. It fails, naming the file, line and fix, if:
+Nothing checks the rules automatically at the moment: the architecture test was removed along with the other
+tests (see [decisions.md](decisions.md) D64). These scans, run from the project folder, catch violations:
 
-- anything in `core/` imports from `app.modules`, or
-- a file outside module X imports X's submodules (`app.modules.X.repository`) or a name that isn't in
-  X's `__all__`.
+```powershell
+# Core must never import modules. Expect no output.
+Select-String -Path backend\app\core\*.py -Pattern '^\s*(from|import)\s+app\.modules'
 
-`main.py` and the tests are exempt. See [phases/phase-5-tests.md](phases/phase-5-tests.md) for an example
-failure and how to read it.
+# Imports that reach into a module's internals. Each line must be inside that same module's folder
+# (e.g. categories/service.py importing app.modules.categories.repository is fine).
+Select-String -Path backend\app\modules\*\*.py -Pattern '^\s*(from|import)\s+app\.modules\.'
+```
+
+`main.py` (the composition root) is allowed to import routers.

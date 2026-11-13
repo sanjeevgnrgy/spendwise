@@ -3,6 +3,10 @@
 **Goal:** automated tests for the categories and expenses modules (over HTTP and at the service level),
 plus an architecture test that fails if anyone breaks the module boundaries.
 
+> **Later changes:** after Phase 8, all tests, `pytest.ini` and `requirements-dev.txt` were removed at the developer's
+> request; tests will be added again later ([decisions.md](../decisions.md) D64). This page records Phase 5 as it was
+> built and is kept as learning notes.
+
 ## Concepts
 
 **Fixture.** A fixture is a function that prepares something a test needs: a database, a test client,

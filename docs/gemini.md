@@ -96,6 +96,14 @@ conversation (used by `POST /chat`, see [phases/phase-7-function-calling-chat.md
 - **Thinking level:** `generation_config={"thinking_level": "minimal" | "low" | "medium" | "high" | "xhigh"}`. The agent
   uses `low`; with deeper thinking, a single step took 40–60+ s in testing.
 
+## Conversation memory and cost
+
+Gemini remembers nothing between requests, and with `store=False` Google keeps nothing either. So `/chat` stores each
+thread's steps in the `ChatMessage` table and resends the **last 10 turns** with every new message
+([phases/phase-8-memory.md](phases/phase-8-memory.md)). Every token of that history is billed on every request, and
+again on every step of the agent loop, so the cap keeps long conversations from getting ever more expensive. The
+console shows `tokens: N in, M out` for each step.
+
 ## Timeouts and retries
 
 The client gives up on an attempt after **60 s** and makes **at most 2 attempts**

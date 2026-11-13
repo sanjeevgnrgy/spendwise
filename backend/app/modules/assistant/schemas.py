@@ -1,4 +1,4 @@
-from datetime import date
+from datetime import date, datetime
 from decimal import Decimal
 from typing import Annotated, Any
 
@@ -55,6 +55,8 @@ class ParseResponse(BaseModel):
 
 class ChatRequest(BaseModel):
     message: str = Field(min_length=1, max_length=2000, examples=["I spent 250 on lunch at Subway today, paid by UPI"])
+    # Leave it out to start a new conversation; send the thread_id from a reply to continue that one.
+    thread_id: str | None = Field(default=None, max_length=32)
 
 
 class ToolCall(BaseModel):
@@ -66,5 +68,22 @@ class ToolCall(BaseModel):
 
 
 class ChatResponse(BaseModel):
+    # Send this back with the next message to continue the same conversation.
+    thread_id: str
     reply: str
     tool_calls: list[ToolCall]
+
+
+class ThreadMessage(BaseModel):
+    """One step of a conversation, made readable."""
+
+    turn: int
+    # user_input, model_output, function_call or function_result.
+    kind: str
+    text: str
+    created_at: datetime
+
+
+class ThreadRead(BaseModel):
+    thread_id: str
+    messages: list[ThreadMessage]

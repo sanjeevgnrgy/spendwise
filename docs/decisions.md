@@ -216,6 +216,8 @@ add a new entry and mark the old one **Superseded by D<n>**.
 
 ## Tests (Phase 5)
 
+> **Superseded by D64:** the tests, `pytest.ini` and `requirements-dev.txt` were removed after Phase 8.
+
 ### D38. Test tools live in `requirements-dev.txt`
 - **What:** `requirements-dev.txt` = `-r requirements.txt` + `pytest` + `httpx` (needed by `TestClient`), pinned.
 - **Why:** a deployed server installs only `requirements.txt` and never gets test tools.
@@ -319,6 +321,7 @@ add a new entry and mark the old one **Superseded by D<n>**.
 ### D54. `/chat` is single-turn for now
 - Each message starts a new conversation, so a follow-up must repeat the details.
 - **Revisit when:** chat threads are added (assistant module, later phase).
+- **Superseded by D58–D61** (Phase 8: threads and memory).
 
 ### D55. The agent uses `thinking_level="low"`
 - **Why:** in live tests, a delete request spent 40–60+ s per step thinking and timed out. With `low` it took 9 s in total.
@@ -333,3 +336,53 @@ add a new entry and mark the old one **Superseded by D<n>**.
 - `core/logging.py` (called in `main.py`) sets `spendwise.*` loggers to INFO; libraries stay at WARNING.
 - The agent logs the user message, each step, each tool call with its arguments, and each result (first 300 characters).
 - These logs contain expense data. Fine on your own console; don't ship them to an external service without thinking about privacy.
+
+---
+
+## Memory (Phase 8)
+
+### D58. Threads are stored as raw Gemini steps in `ChatMessage`
+- **What:** one row per step (`user_input`, `thought`, `function_call`, `function_result`, `model_output`), with
+  `thread_id`, `turn` and the step as JSON, in a table owned by the assistant module.
+- **Why raw steps:** stateless function calling needs the history resent exactly as received, thoughts included.
+  Storing anything else would mean rebuilding Gemini's format later.
+- **No separate `Thread` table:** a thread is just the rows that share a `thread_id`. Add one if threads need titles or owners.
+
+### D59. The server picks thread ids; an unknown id is a 404
+- New threads get `uuid4().hex` (32 characters). Sending an id that doesn't exist returns 404 instead of starting a
+  new conversation, so a typo can't silently lose the context.
+
+### D60. Only the last 10 turns are sent (`MAX_HISTORY_TURNS`)
+- **Why:** history is paid for on every request and every agent step, and long histories are slower and can distract
+  the model. Ten turns covers normal follow-ups.
+- Trimmed by whole turns, so calls and results stay paired. Older turns stay stored.
+- **Revisit when:** conversations need longer memory. Then summarise old turns instead of dropping them.
+
+### D61. A turn is saved in one go, after it finishes
+- The agent returns every step of the turn (`AgentResult.steps`), and the service stores them in a single commit.
+- When the 5-step cap is hit, the apology is stored as the model's answer, so the turn still ends cleanly.
+- **Limitation:** if Gemini fails mid-turn (a 502), that turn isn't stored, but tools that already ran (e.g.
+  `add_expense`) have changed data. A retry may then repeat the action. **Revisit when:** this bites; then store
+  steps as they happen and mark the turn incomplete.
+
+### D62. `GET /threads/{id}` is a readable view
+- Returns turn, kind, text and time per step. `thought` steps are stored but hidden, because they're internal
+  reasoning, not conversation.
+
+### D63. Token usage is logged per step
+- `tokens: N in, M out` (from `interaction.usage`) makes the cost of history visible while you chat.
+
+**Note on D53 (delete confirmation):** with threads, "yes" in a follow-up now has context, so confirming a delete
+is natural. It's still a soft, model-judged guard.
+
+---
+
+## Tests removed (after Phase 8)
+
+### D64. No automated tests for now
+- **What:** the pytest suite (`backend/tests/`), `pytest.ini`, `requirements-dev.txt` and the `.pytest_cache/` ignore
+  rule were removed at the developer's request. Tests will be added later, by hand. Until then, phases don't add tests.
+- **Consequences:**
+  - Nothing checks the module-boundary rules automatically; use the scans in [architecture.md](architecture.md#checking-the-rules).
+  - Changes are verified by running the server and calling the routes.
+- Supersedes D38–D41.

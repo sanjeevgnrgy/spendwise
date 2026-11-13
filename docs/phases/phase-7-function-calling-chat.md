@@ -1,5 +1,10 @@
 # Phase 7: Function calling chat
 
+> **Later changes:** in Phase 8, `/chat` gained a `thread_id` and memory, `agent.run()` returns an `AgentResult`
+> including every step of the turn, and the single-turn limitation described below no longer applies.
+> After Phase 8, the tests mentioned below were removed ([decisions.md](../decisions.md) D64).
+> This page records Phase 7 as it was built.
+
 **Goal:** `POST /chat {"message": "..."}` lets you talk to SpendWise in plain language. Gemini decides
 which tools to call (add, list, summarise, update, delete expenses), we run them, and it answers.
 The reply comes back with a list of the tools it used, and every step is logged to the console.

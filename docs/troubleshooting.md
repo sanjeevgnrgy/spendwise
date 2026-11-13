@@ -38,21 +38,6 @@ the project folder (the repo root, where `run.ps1` is) unless noted.
   `Get-CimInstance Win32_Process -Filter "Name='python.exe'" | Select ProcessId, CommandLine` and stop the
   leftover one with `Stop-Process -Id <id>`.
 
-## Tests
-
-### `No module named pytest` or `No module named 'httpx'`
-- **Cause:** the test tools aren't installed; `run.ps1` installs only `requirements.txt`.
-- **Fix:** `.\.venv\Scripts\python.exe -m pip install -r requirements-dev.txt`.
-
-### `ModuleNotFoundError: No module named 'app'` when running tests
-- **Cause:** pytest was started outside the project folder, so it didn't find `pytest.ini`, which puts
-  `backend/` on the import path.
-- **Fix:** run `python -m pytest` from the project folder.
-
-### `PytestCacheWarning: could not create cache path ...`
-- **Cause:** pytest couldn't write its `.pytest_cache` folder (permissions).
-- **Fix:** harmless; tests still run. Only `--lf` ("last failed") needs the cache.
-
 ## Gemini (`POST /ask`, `POST /parse`)
 
 See the error table in [gemini.md](gemini.md#when-something-goes-wrong). In short: `500` means a setting
@@ -78,9 +63,19 @@ on your tier, or temporarily overloaded).
   (e.g. give the expense's merchant and date).
 
 ### `/chat` forgot what I just said ("yes" doesn't confirm a delete)
-- **Cause:** `/chat` is single-turn for now; each message starts a fresh conversation.
-- **Fix:** repeat the details in the follow-up ("Yes, delete the Subway expense of ₹250 from today"). Conversation
-  threads come in a later phase.
+- **Cause:** the follow-up was sent without a `thread_id`, so it started a new conversation.
+- **Fix:** copy `thread_id` from the previous reply and send it with the next message:
+  `{"message": "yes, delete it", "thread_id": "<from the last reply>"}`.
+
+### `/chat` or `GET /threads` returns 404 "Thread ... not found"
+- **Cause:** that `thread_id` doesn't exist. It may be mistyped, or it may come from a database you've since deleted
+  (e.g. when re-seeding).
+- **Fix:** check the id, or leave `thread_id` out to start a new conversation.
+
+### The assistant forgot something from much earlier in a long thread
+- **Cause:** only the last 10 turns are sent (`MAX_HISTORY_TURNS` in `modules/assistant/service.py`), to keep cost down.
+  Older turns are still stored (`GET /threads/{id}`), but the model doesn't see them.
+- **Fix:** repeat the detail, or start a new thread for a new topic.
 
 ### `/parse` returns 422 "There are no categories yet"
 - **Fix:** run `.\.venv\Scripts\python.exe backend\seed.py`. Parsing needs the category list to choose from.

@@ -2,13 +2,13 @@
 
 An agentic expense tracker, built one small phase at a time as a learning project.
 
-**Current state (Phase 7):** a modular-monolith FastAPI backend with a REST API for expenses
+**Current state (Phase 8):** a modular-monolith FastAPI backend with a REST API for expenses
 (create, list with filters, read, update, delete), a monthly summary, a categories list,
 `POST /ask` (sends a prompt to Gemini), `POST /parse` (turns a note like "Paid 450 at Swiggy
 yesterday" into a structured expense, without saving it) and `POST /chat` (a Gemini agent that
-adds, finds, summarises, updates and deletes expenses through tools). `backend/seed.py` fills the
-database with sample data. A pytest suite covers the API, the business rules, the agent loop and
-the module boundaries.
+adds, finds, summarises, updates and deletes expenses through tools, and remembers the conversation
+per `thread_id`; see it with `GET /threads/{id}`). `backend/seed.py` fills the database with sample
+data.
 
 ## Requirements
 
@@ -66,7 +66,9 @@ With the server running:
 - `POST /parse` in `/docs` with `{"text": "Paid 450.50 at Swiggy yesterday via GPay"}` → the parsed expense
   and `missing_fields` (needs your Gemini key; nothing is saved)
 - `POST /chat` in `/docs` with `{"message": "How much did I spend on food this month?"}` → a reply plus the
-  tools the agent called; watch the server terminal to see each step (needs your Gemini key; `/chat` can change data)
+  tools the agent called; watch the server terminal to see each step (needs your Gemini key; `/chat` can change data).
+  Send the reply's `thread_id` with your next message to continue the same conversation, and view it with
+  `GET /threads/{thread_id}`
 
 The full route list, filters, status codes and example requests are in
 [docs/phases/phase-4-expenses-api.md](docs/phases/phase-4-expenses-api.md).
@@ -78,18 +80,6 @@ terminal says which setting is missing); a wrong key returns `502` with Google's
 
 The seed script prints the 10 sample expenses it saved, each in rupees and in paise.
 The database is the file `backend/spendwise.db`; delete it to start from an empty database.
-
-## Run the tests
-
-From the project folder:
-
-```powershell
-.\.venv\Scripts\python.exe -m pip install -r requirements-dev.txt   # once, and when it changes
-.\.venv\Scripts\python.exe -m pytest                                # expect: 56 passed
-```
-
-Tests use a fresh in-memory database each, never `backend/spendwise.db` or your Gemini key.
-How to run a subset and read a failure: [docs/phases/phase-5-tests.md](docs/phases/phase-5-tests.md).
 
 ## Architecture: modular monolith
 
@@ -118,16 +108,13 @@ spendwise/
         money.py           rupees <-> paise helpers
         llm.py             the one place that talks to Gemini (plain, structured output, tools)
       modules/
-        assistant/         POST /ask, /parse, /chat (router, schemas, service, parse, tools, agent)
+        assistant/         POST /ask, /parse, /chat, GET /threads; ChatMessage table (+ parse, tools, agent)
         categories/        Category table, GET /categories, public interface
         expenses/          Expense table, CRUD routes, GET /summary, public interface
     seed.py                default categories and sample expenses
     spendwise.db           local SQLite database (git-ignored, created automatically)
-    tests/                 pytest: conftest.py fixtures, one folder per module, architecture/
   run.ps1                  one-command dev start (Windows)
   requirements.txt         pinned direct dependencies
-  requirements-dev.txt     requirements.txt + test tools (pytest, httpx)
-  pytest.ini               where tests live; puts backend/ on the import path
   .env.example             names of the settings the app expects (no secret values)
   .env                     your real settings and API key (git-ignored, you create it)
   docs/                    learning notes, decisions, Gemini notes, troubleshooting
@@ -152,7 +139,6 @@ spendwise/
 
 - `requirements.txt` lists direct dependencies only, pinned to exact versions (`package==x.y.z`),
   so every machine installs the same thing.
-- Tools needed only while developing (pytest) go in `requirements-dev.txt`, which includes `requirements.txt`.
 - To add a dependency:
   1. With the venv active, run `python -m pip install <package>`.
   2. Run `python -m pip show <package>` to read the installed version.
@@ -186,7 +172,7 @@ spendwise/
 | Commit | Never commit |
 |---|---|
 | Source code (`backend/`, ...) | `.venv/` |
-| `requirements.txt`, `requirements-dev.txt`, `pytest.ini` | `__pycache__/`, `*.pyc`, `.pytest_cache/` |
+| `requirements.txt` | `__pycache__/`, `*.pyc` |
 | `.env.example` | `.env` |
 | `.gitignore`, `README.md`, `docs/`, `run.ps1` | `*.db` (your local database) |
 

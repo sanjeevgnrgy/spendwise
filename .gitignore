@@ -5,6 +5,9 @@
 __pycache__/
 *.py[cod]
 
+# pytest's own cache (remembers last failures for --lf), regenerated automatically.
+.pytest_cache/
+
 # Real secrets live here. Only .env.example (no real values) is committed.
 .env
 

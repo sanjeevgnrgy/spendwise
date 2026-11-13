@@ -210,3 +210,30 @@ add a new entry and mark the old one **Superseded by D<n>**.
 - **What:** `origin` is `https://sanjeevgnrgy@github.com/sanjeevgnrgy/spendwise.git` (a private repo).
 - **Why:** Git Credential Manager on the development machine already holds a login for a different GitHub
   account. With the username in the URL, it keeps a separate login for this repo, and other repos are unaffected.
+
+---
+
+## Tests (Phase 5)
+
+### D38. Test tools live in `requirements-dev.txt`
+- **What:** `requirements-dev.txt` = `-r requirements.txt` + `pytest` + `httpx` (needed by `TestClient`), pinned.
+- **Why:** a deployed server installs only `requirements.txt` and never gets test tools.
+
+### D39. Every test gets its own in-memory database
+- **How:** the `engine` fixture creates `sqlite://` with `StaticPool` (one shared connection; otherwise each
+  connection would be a different, empty database) and `check_same_thread=False` (TestClient runs the app in
+  another thread). The `client` fixture swaps `get_session` through `app.dependency_overrides`.
+- **Safety net:** `conftest.py` sets `DATABASE_URL=sqlite://` and dummy Gemini settings **before** importing
+  the app, so neither `backend/spendwise.db` nor the real API key in `.env` can be reached, even by mistake.
+- **No Gemini in tests:** `/ask` isn't tested yet; testing it would need a fake Gemini client.
+
+### D40. The architecture test is a small `ast`-based pytest, not import-linter
+- **Why:** our main rule ("only the package or names in its `__all__`, never a submodule") is easy to state in
+  ~60 lines of plain Python and hard to express in import-linter contracts. It also adds no dependency, and
+  the rules are readable in one file.
+- **Limitation:** it reads `import` statements only. Imports done at runtime with `importlib` aren't seen; we don't use those.
+- **Exempt:** `main.py` (the composition root imports routers) and the tests.
+
+### D41. The checker has its own test
+- `test_checker_catches_violations` builds a fake project with known violations and checks each one is reported.
+  A checker that silently found nothing would otherwise pass forever.

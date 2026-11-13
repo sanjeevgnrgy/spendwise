@@ -2,9 +2,10 @@
 
 An agentic expense tracker, built one small phase at a time as a learning project.
 
-**Current state (Phase 4):** a modular-monolith FastAPI backend with a REST API for expenses
+**Current state (Phase 5):** a modular-monolith FastAPI backend with a REST API for expenses
 (create, list with filters, read, update, delete), a monthly summary, a categories list, and
 `POST /ask` (sends a prompt to Gemini). `backend/seed.py` fills the database with sample data.
+A pytest suite covers the API, the business rules and the module boundaries.
 
 ## Requirements
 
@@ -71,6 +72,18 @@ terminal says which setting is missing); a wrong key returns `502` with Google's
 The seed script prints the 10 sample expenses it saved, each in rupees and in paise.
 The database is the file `backend/spendwise.db`; delete it to start from an empty database.
 
+## Run the tests
+
+From the project folder:
+
+```powershell
+.\.venv\Scripts\python.exe -m pip install -r requirements-dev.txt   # once, and when it changes
+.\.venv\Scripts\python.exe -m pytest                                # expect: 38 passed
+```
+
+Tests use a fresh in-memory database each, never `backend/spendwise.db` or your Gemini key.
+How to run a subset and read a failure: [docs/phases/phase-5-tests.md](docs/phases/phase-5-tests.md).
+
 ## Architecture: modular monolith
 
 One FastAPI app, one deployable, one database, split inside into **modules by business
@@ -102,8 +115,11 @@ spendwise/
         expenses/          Expense table, CRUD routes, GET /summary, public interface
     seed.py                default categories and sample expenses
     spendwise.db           local SQLite database (git-ignored, created automatically)
+    tests/                 pytest: conftest.py fixtures, one folder per module, architecture/
   run.ps1                  one-command dev start (Windows)
   requirements.txt         pinned direct dependencies
+  requirements-dev.txt     requirements.txt + test tools (pytest, httpx)
+  pytest.ini               where tests live; puts backend/ on the import path
   .env.example             names of the settings the app expects (no secret values)
   .env                     your real settings and API key (git-ignored, you create it)
   docs/                    learning notes, decisions, Gemini notes, troubleshooting
@@ -128,6 +144,7 @@ spendwise/
 
 - `requirements.txt` lists direct dependencies only, pinned to exact versions (`package==x.y.z`),
   so every machine installs the same thing.
+- Tools needed only while developing (pytest) go in `requirements-dev.txt`, which includes `requirements.txt`.
 - To add a dependency:
   1. With the venv active, run `python -m pip install <package>`.
   2. Run `python -m pip show <package>` to read the installed version.
@@ -161,7 +178,7 @@ spendwise/
 | Commit | Never commit |
 |---|---|
 | Source code (`backend/`, ...) | `.venv/` |
-| `requirements.txt` | `__pycache__/`, `*.pyc` |
+| `requirements.txt`, `requirements-dev.txt`, `pytest.ini` | `__pycache__/`, `*.pyc`, `.pytest_cache/` |
 | `.env.example` | `.env` |
 | `.gitignore`, `README.md`, `docs/`, `run.ps1` | `*.db` (your local database) |
 

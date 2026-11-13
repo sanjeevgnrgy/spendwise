@@ -35,7 +35,7 @@ spendwise/
         categories/     Category table, GET /categories, public interface
         expenses/       Expense table, CRUD routes + GET /summary, public interface
     seed.py             sample data, using modules' public interfaces
-    tests/              (planned) one folder per module + architecture tests
+    tests/              one folder per module + architecture/ (import rules)
   agents/               (planned) A2A agents: receipt, insights, currency; separate services
   skills/               (planned) Agent Skills
   web/                  (planned) React frontend
@@ -131,14 +131,12 @@ imports modules.
 
 ## Checking the rules
 
-Until architecture tests are added (planned in `backend/tests/`), these scans, run from the project folder,
-catch violations:
+The rules are enforced automatically by `backend/tests/architecture/test_module_boundaries.py`, which runs
+with every `python -m pytest`. It fails, naming the file, line and fix, if:
 
-```powershell
-# Core must never import modules. Expect no output.
-Select-String -Path backend\app\core\*.py -Pattern '^\s*(from|import)\s+app\.modules'
+- anything in `core/` imports from `app.modules`, or
+- a file outside module X imports X's submodules (`app.modules.X.repository`) or a name that isn't in
+  X's `__all__`.
 
-# List imports that reach into a module's internals. Each line must be inside that same module's
-# folder (e.g. categories/service.py importing app.modules.categories.repository is fine).
-Select-String -Path backend\app\modules\*\*.py -Pattern '^\s*(from|import)\s+app\.modules\.'
-```
+`main.py` and the tests are exempt. See [phases/phase-5-tests.md](phases/phase-5-tests.md) for an example
+failure and how to read it.

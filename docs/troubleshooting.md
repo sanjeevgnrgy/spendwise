@@ -38,6 +38,21 @@ the project folder (the repo root, where `run.ps1` is) unless noted.
   `Get-CimInstance Win32_Process -Filter "Name='python.exe'" | Select ProcessId, CommandLine` and stop the
   leftover one with `Stop-Process -Id <id>`.
 
+## Tests
+
+### `No module named pytest` or `No module named 'httpx'`
+- **Cause:** the test tools aren't installed; `run.ps1` installs only `requirements.txt`.
+- **Fix:** `.\.venv\Scripts\python.exe -m pip install -r requirements-dev.txt`.
+
+### `ModuleNotFoundError: No module named 'app'` when running tests
+- **Cause:** pytest was started outside the project folder, so it didn't find `pytest.ini`, which puts
+  `backend/` on the import path.
+- **Fix:** run `python -m pytest` from the project folder.
+
+### `PytestCacheWarning: could not create cache path ...`
+- **Cause:** pytest couldn't write its `.pytest_cache` folder (permissions).
+- **Fix:** harmless; tests still run. Only `--lf` ("last failed") needs the cache.
+
 ## Gemini (`POST /ask`)
 
 See the error table in [gemini.md](gemini.md#when-something-goes-wrong). In short: `500` means a setting

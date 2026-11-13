@@ -1,0 +1,6 @@
+# Everything the app needs, plus tools used only while developing. Kept separate so a
+# deployed server never installs test tools.
+-r requirements.txt
+pytest==9.2.0
+# FastAPI's TestClient sends its fake HTTP requests through httpx.
+httpx==0.28.1

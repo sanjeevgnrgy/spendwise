@@ -386,3 +386,42 @@ is natural. It's still a soft, model-judged guard.
   - Nothing checks the module-boundary rules automatically; use the scans in [architecture.md](architecture.md#checking-the-rules).
   - Changes are verified by running the server and calling the routes.
 - Supersedes D38–D41.
+
+---
+
+## MCP module (Phase 9)
+
+### D65. MCP SDK 2.x: `MCPServer`, not `FastMCP`
+- `mcp[cli]==2.3.0`. In 2.x, `FastMCP` was renamed `MCPServer` (`from mcp.server.mcpserver import MCPServer`).
+  We use the current SDK rather than pinning `mcp<2`.
+
+### D66. The MCP module is an adapter with no tables and no rules
+- `modules/mcp/server.py` holds one `MCPServer("spendwise")` with 5 tools and 2 resources. Each calls only the
+  `expenses` and `categories` public interfaces, and opens its own database session per call.
+- It exports nothing to other modules. `main.py` (composition root) and `backend/mcp_stdio.py` import `server`.
+
+### D67. The assistant's tools and the MCP tools are near-copies, for now
+- `assistant/tools.py` (Phase 7) and `mcp/server.py` wrap the same services in almost the same way. Modules can't
+  share internals, and the plan is for the assistant to call the MCP tools.
+- **Revisit when:** the assistant becomes an MCP client. Then delete `assistant/tools.py`.
+
+### D68. One server, two transports
+- **Streamable HTTP**, mounted at `/mcp` in the FastAPI app: `streamable_http_app(streamable_http_path="/",
+  stateless_http=True, json_response=True)`. Stateless with JSON responses, because our tools are simple
+  request/response and need no per-client session in memory. The session manager is started in `main.py`'s `lifespan`.
+- The URL is **`/mcp/`** with a trailing slash; `/mcp` returns a 307 redirect to it.
+- **stdio**, via `backend/mcp_stdio.py`, for local hosts (Inspector, Claude Desktop). It never prints to stdout.
+
+### D69. Expected errors become `ToolError`s
+- The SDK reports unexpected exceptions to clients as a bare "Error executing tool" (their text could leak internals).
+- `_tool_session()` converts `BusinessRuleError`, `NotFoundError` and `ValueError` (incl. Pydantic validation) into
+  `ToolError`, whose message the client's model does see and can act on.
+
+### D70. No authentication on `/mcp` yet
+- Anyone who can reach the server can read and change expenses through MCP, as with the REST API today. Fine on
+  `127.0.0.1`. The SDK's default DNS-rebinding protection only accepts local Host headers.
+- **Revisit when:** auth is added, or before exposing the server beyond localhost.
+
+### D71. Deletes over MCP use the same soft confirmation as the assistant
+- `delete_expense(confirmed=false)` only reports what would be deleted. Hosts such as Claude Desktop also ask the
+  person to approve tool calls, which is a second check.

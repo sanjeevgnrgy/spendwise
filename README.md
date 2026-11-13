@@ -7,7 +7,8 @@ An agentic expense tracker, built one small phase at a time as a learning projec
 `POST /ask` (sends a prompt to Gemini), `POST /parse` (turns a note like "Paid 450 at Swiggy
 yesterday" into a structured expense, without saving it) and `POST /chat` (a Gemini agent that
 adds, finds, summarises, updates and deletes expenses through tools, and remembers the conversation
-per `thread_id`; see it with `GET /threads/{id}`). `backend/seed.py` fills the database with sample
+per `thread_id`; see it with `GET /threads/{id}`). The same expense tools are also exposed to any MCP client (MCP Inspector, Claude
+Desktop) by an MCP server at `/mcp/` and over stdio. `backend/seed.py` fills the database with sample
 data.
 
 ## Requirements
@@ -81,6 +82,19 @@ terminal says which setting is missing); a wrong key returns `502` with Google's
 The seed script prints the 10 sample expenses it saved, each in rupees and in paise.
 The database is the file `backend/spendwise.db`; delete it to start from an empty database.
 
+## MCP server
+
+With the app running, MCP clients can connect to `http://127.0.0.1:8000/mcp/` (Streamable HTTP; keep the
+trailing slash). To explore it by hand in the MCP Inspector, over stdio (needs Node.js and uv):
+
+```powershell
+.\.venv\Scripts\mcp.exe dev backend\mcp_stdio.py
+```
+
+Tools: `add_expense`, `list_expenses`, `get_summary`, `update_expense`, `delete_expense`. Resources:
+`expenses://categories`, `expenses://recent`. Inspector steps and Claude Desktop setup:
+[docs/phases/phase-9-mcp-module.md](docs/phases/phase-9-mcp-module.md).
+
 ## Architecture: modular monolith
 
 One FastAPI app, one deployable, one database, split inside into **modules by business
@@ -109,9 +123,11 @@ spendwise/
         llm.py             the one place that talks to Gemini (plain, structured output, tools)
       modules/
         assistant/         POST /ask, /parse, /chat, GET /threads; ChatMessage table (+ parse, tools, agent)
+        mcp/               MCP server: expense tools and resources for any MCP client, mounted at /mcp/
         categories/        Category table, GET /categories, public interface
         expenses/          Expense table, CRUD routes, GET /summary, public interface
     seed.py                default categories and sample expenses
+    mcp_stdio.py           runs the MCP server over stdio (MCP Inspector, Claude Desktop)
     spendwise.db           local SQLite database (git-ignored, created automatically)
   run.ps1                  one-command dev start (Windows)
   requirements.txt         pinned direct dependencies

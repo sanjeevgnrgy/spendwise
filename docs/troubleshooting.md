@@ -80,6 +80,30 @@ on your tier, or temporarily overloaded).
 ### `/parse` returns 422 "There are no categories yet"
 - **Fix:** run `.\.venv\Scripts\python.exe backend\seed.py`. Parsing needs the category list to choose from.
 
+## MCP
+
+### `No module named 'mcp.server.fastmcp'` / tutorials say `FastMCP`
+- **Cause:** MCP SDK 2.x renamed `FastMCP` to `MCPServer`.
+- **Fix:** `from mcp.server.mcpserver import MCPServer`, as `modules/mcp/server.py` does.
+
+### An MCP client can't connect to `http://127.0.0.1:8000/mcp`
+- **Cause:** the endpoint is `/mcp/` (with a trailing slash); `/mcp` answers with a 307 redirect that some clients don't follow.
+- **Fix:** use `http://127.0.0.1:8000/mcp/`, with the app running (`.\run.ps1`).
+
+### A tool call returns only "Error executing tool <name>"
+- **Cause:** an *unexpected* exception; the SDK hides its text from clients on purpose.
+- **Fix:** read the traceback in the server's terminal (for stdio, the host's server log). Expected problems, like an
+  unknown category, come with a clear message instead.
+
+### `mcp dev` fails: "npx not found" or `uv` not found
+- **Cause:** the Inspector needs Node.js (`npx`), and `mcp dev` starts the server through `uv`.
+- **Fix:** install Node.js and uv, or run the Inspector directly:
+  `npx @modelcontextprotocol/inspector .\.venv\Scripts\python.exe backend\mcp_stdio.py`.
+
+### The stdio server starts, then the client reports garbage or disconnects
+- **Cause:** something printed to stdout, which carries the protocol messages.
+- **Fix:** never `print()` in code the stdio server runs; use logging (it goes to stderr).
+
 ## Database
 
 ### I want fresh sample data

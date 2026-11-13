@@ -33,9 +33,11 @@ spendwise/
         llm.py          ask_gemini(), ask_gemini_for_json(), ask_gemini_with_tools()
       modules/
         assistant/      POST /ask, /parse, /chat, GET /threads; ChatMessage table (parse, tools, agent)
+        mcp/            MCP server "spendwise": 5 tools, 2 resources; mounted at /mcp/ (no tables)
         categories/     Category table, GET /categories, public interface
         expenses/       Expense table, CRUD routes + GET /summary, public interface
     seed.py             sample data, using modules' public interfaces
+    mcp_stdio.py        runs the MCP server over stdio (Inspector, Claude Desktop)
   agents/               (planned) A2A agents: receipt, insights, currency; separate services
   skills/               (planned) Agent Skills
   web/                  (planned) React frontend
@@ -82,7 +84,14 @@ that link, so the service must, and it does.
 | `expenses` | `ExpenseCreate`, `ExpenseUpdate`, `ExpenseRead`, `ExpenseFilters`, `MonthlySummary`, `CategoryTotal`, `PaymentMethod`, `create_expense`, `get_expense`, `list_expenses`, `update_expense`, `delete_expense`, `monthly_summary` | `assistant` (`PaymentMethod`, and all of the above via `tools.py`), `seed.py` (later: mcp) |
 | `assistant` | nothing yet | — |
 
-Routers are not part of any public interface; only `main.py` imports them.
+| `mcp` | nothing | — (it *uses* `expenses` and `categories`) |
+
+Routers and the MCP `server` object are not part of any public interface; only `main.py` (and `mcp_stdio.py`)
+import them.
+
+**Three adapters, one set of services.** The REST routers, the assistant's tools and the MCP module each translate
+their own protocol (HTTP/JSON, Gemini function calls, MCP) into calls to the same public service functions. The
+business rules live in the services, so they apply to every way in.
 
 ## How a request flows
 

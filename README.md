@@ -2,7 +2,8 @@
 
 An agentic expense tracker, built one small phase at a time as a learning project.
 
-**Current state (Phase 11):** a React web app (`web/`) with a sidebar layout, light/dark theme and an
+**Current state (Phase 12):** a React web app (`web/`) with a sidebar layout, light/dark theme, a
+Dashboard (this month's total, category and 6-month trend charts, recent expenses) and an
 Expenses page (sortable table, filters, add/edit/delete), on top of a modular-monolith FastAPI
 backend with a REST API for expenses
 (create, list with filters, read, update, delete), a monthly summary, a categories list,
@@ -75,6 +76,7 @@ With the server running:
 - http://127.0.0.1:8000/categories → the 8 categories
 - http://127.0.0.1:8000/expenses?search=grocer → expenses whose merchant or note contains "grocer"
 - http://127.0.0.1:8000/summary?month=2026-11 → that month's total and per-category totals
+- http://127.0.0.1:8000/summary/trend?months=6 → totals for each of the last 6 months (the Dashboard's line chart)
 - `POST /parse` in `/docs` with `{"text": "Paid 450.50 at Swiggy yesterday via GPay"}` → the parsed expense
   and `missing_fields` (needs your Gemini key; nothing is saved)
 - `POST /chat` in `/docs` with `{"message": "How much did I spend on food this month?"}` → a reply plus the

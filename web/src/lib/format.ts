@@ -11,6 +11,22 @@ export function formatDate(isoDate: string): string {
   return new Date(year, month - 1, day).toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric" })
 }
 
+export function formatMonth(isoMonth: string, style: "long" | "short" = "long"): string {
+  // "2026-11" -> "November 2026" (long) or "Nov" (short, for chart axes).
+  const [year, month] = isoMonth.split("-").map(Number)
+  const options: Intl.DateTimeFormatOptions = style === "long" ? { month: "long", year: "numeric" } : { month: "short" }
+  return new Date(year, month - 1, 1).toLocaleDateString("en-IN", options)
+}
+
+export function formatCompactMoney(amount: number): string {
+  // For chart axes: 125000 -> "₹1.3L" style short labels.
+  return new Intl.NumberFormat("en-IN", { style: "currency", currency: "INR", notation: "compact" }).format(amount)
+}
+
+export function currentMonth(): string {
+  return todayIso().slice(0, 7)
+}
+
 export function todayIso(): string {
   const now = new Date()
   const pad = (n: number) => String(n).padStart(2, "0")

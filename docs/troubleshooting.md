@@ -104,6 +104,15 @@ on your tier, or temporarily overloaded).
 - **Cause:** a component rendered a `<script>` (e.g. `next-themes`), which never runs in a browser-rendered React app.
 - **Fix:** already removed from SpendWise (decisions D87). Put scripts in `index.html` instead.
 
+### Dashboard shows "Couldn't load the dashboard"
+- **Cause:** one of its four requests failed, most often because the backend isn't running.
+- **Fix:** start the backend (`.\run.ps1`) and click **Try again**. The message under the title is the actual error.
+
+### Dashboard charts say "No spending…" but I have expenses
+- **Cause:** the charts show the **current** month and the last 6 months, in **INR** only. Expenses dated outside
+  that window, or in another currency, aren't included.
+- **Fix:** check the expense dates (the seed script dates its samples relative to the day it ran).
+
 ### `npm run dev`: "Cannot find module" or a blank page after pulling changes
 - **Cause:** `package.json` changed but `node_modules` wasn't updated.
 - **Fix:** run `npm install` in `web/`, then `npm run dev` again.

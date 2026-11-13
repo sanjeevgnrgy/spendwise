@@ -3,6 +3,7 @@
 No business rules here, and no try/except: service errors become 404/422 in core/errors.py.
 """
 
+from datetime import date
 from typing import Annotated
 
 from fastapi import APIRouter, Query
@@ -10,7 +11,14 @@ from fastapi import APIRouter, Query
 from app.core.db import SessionDep
 from app.core.money import DEFAULT_CURRENCY
 from app.modules.expenses import service
-from app.modules.expenses.schemas import ExpenseCreate, ExpenseFilters, ExpenseRead, ExpenseUpdate, MonthlySummary
+from app.modules.expenses.schemas import (
+    ExpenseCreate,
+    ExpenseFilters,
+    ExpenseRead,
+    ExpenseUpdate,
+    MonthlySummary,
+    MonthlyTrend,
+)
 
 router = APIRouter(tags=["expenses"])
 
@@ -50,3 +58,14 @@ def monthly_summary(
 ) -> MonthlySummary:
     year, month_number = (int(part) for part in month.split("-"))
     return service.monthly_summary(session, year, month_number, currency)
+
+
+@router.get("/summary/trend")
+def monthly_trend(
+    session: SessionDep,
+    # Capped at 24 so one request can't ask the database for decades of grouping.
+    months: Annotated[int, Query(ge=1, le=24)] = 6,
+    currency: Annotated[str, Query(pattern=r"^[A-Z]{3}$")] = DEFAULT_CURRENCY,
+) -> MonthlyTrend:
+    # "The last N months" counts back from the server's today (like /parse and /chat do).
+    return service.monthly_trend(session, months, date.today(), currency)

@@ -3,7 +3,7 @@
 from datetime import date
 from typing import Any
 
-from sqlalchemy import func, or_
+from sqlalchemy import extract, func, or_
 from sqlmodel import Session, col, select
 
 from app.modules.expenses.models import Expense
@@ -43,6 +43,9 @@ def search(session: Session, filters: ExpenseFilters) -> list[Expense]:
         )
     # Newest first: that's how people read a list of expenses.
     statement = statement.order_by(col(Expense.spent_on).desc(), col(Expense.id).desc())
+    if filters.limit:
+        # The database stops after N rows, rather than sending them all for the caller to cut.
+        statement = statement.limit(filters.limit)
     return list(session.exec(statement))
 
 
@@ -69,3 +72,20 @@ def totals_by_category(session: Session, start: date, end: date, currency: str) 
         .group_by(col(Expense.category_id))
     )
     return [(category_id, count, total) for category_id, count, total in session.exec(statement)]
+
+
+def totals_by_month(session: Session, start: date, end: date, currency: str) -> list[tuple[int, int, int, int]]:
+    """(year, month, number of expenses, total paise) per month, from start up to, not including, end.
+
+    Months with no expenses are simply absent; the service fills them in.
+    """
+    # EXTRACT(year/month ...) is standard SQL, so this works on SQLite today and Postgres later
+    # (a SQLite-only function like strftime would not).
+    year = extract("year", col(Expense.spent_on))
+    month = extract("month", col(Expense.spent_on))
+    statement = (
+        select(year, month, func.count(col(Expense.id)), func.sum(Expense.amount_minor))
+        .where(Expense.spent_on >= start, Expense.spent_on < end, Expense.currency == currency)
+        .group_by(year, month)
+    )
+    return [(int(y), int(m), count, total) for y, m, count, total in session.exec(statement)]

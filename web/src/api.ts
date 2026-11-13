@@ -47,6 +47,37 @@ export interface ExpenseFilters {
   end_date?: string
   category_id?: number
   search?: string
+  limit?: number // at most this many, newest first
+}
+
+// Totals are computed by the backend; the browser only receives the results.
+export interface CategoryTotal {
+  category_id: number
+  category_name: string
+  expense_count: number
+  total_minor: number
+  total: string
+}
+
+export interface MonthlySummary {
+  month: string // "YYYY-MM"
+  currency: string
+  expense_count: number
+  total_minor: number
+  total: string
+  by_category: CategoryTotal[] // biggest first
+}
+
+export interface MonthTotal {
+  month: string // "YYYY-MM"
+  expense_count: number
+  total_minor: number
+  total: string
+}
+
+export interface MonthlyTrend {
+  currency: string
+  months: MonthTotal[] // oldest first, with 0 for months without spending
 }
 
 // ---------- errors ----------
@@ -122,4 +153,12 @@ export function updateExpense(id: number, changes: ExpenseChanges): Promise<Expe
 
 export function deleteExpense(id: number): Promise<void> {
   return request<void>(`/expenses/${id}`, { method: "DELETE" })
+}
+
+export function getMonthlySummary(month: string): Promise<MonthlySummary> {
+  return request<MonthlySummary>(`/summary?month=${month}`)
+}
+
+export function getMonthlyTrend(months = 6): Promise<MonthlyTrend> {
+  return request<MonthlyTrend>(`/summary/trend?months=${months}`)
 }

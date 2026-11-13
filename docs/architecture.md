@@ -35,7 +35,7 @@ spendwise/
         assistant/      POST /ask, /parse, /chat, GET /threads; ChatMessage table (parse, agent, mcp_client)
         mcp/            MCP server "spendwise": 5 tools, 2 resources; mounted at /mcp/ (no tables)
         categories/     Category table, GET /categories, public interface
-        expenses/       Expense table, CRUD routes + GET /summary, public interface
+        expenses/       Expense table, CRUD routes + GET /summary, /summary/trend, public interface
     seed.py             sample data, using modules' public interfaces
     mcp_stdio.py        runs the MCP server over stdio (Inspector, Claude Desktop)
   agents/               (planned) A2A agents: receipt, insights, currency; separate services
@@ -81,7 +81,7 @@ that link, so the service must, and it does.
 | Module | Exports (`from app.modules import <name>`) | Used by |
 |---|---|---|
 | `categories` | `CategoryCreate`, `CategoryRead`, `create_category`, `get_category`, `list_categories` | `expenses`, `assistant`, `seed.py` |
-| `expenses` | `ExpenseCreate`, `ExpenseUpdate`, `ExpenseRead`, `ExpenseFilters`, `MonthlySummary`, `CategoryTotal`, `PaymentMethod`, `create_expense`, `get_expense`, `list_expenses`, `update_expense`, `delete_expense`, `monthly_summary` | `mcp`, `assistant` (`PaymentMethod` only, for `/parse`), `seed.py` |
+| `expenses` | `ExpenseCreate`, `ExpenseUpdate`, `ExpenseRead`, `ExpenseFilters`, `MonthlySummary`, `CategoryTotal`, `PaymentMethod`, `create_expense`, `get_expense`, `list_expenses`, `update_expense`, `delete_expense`, `monthly_summary`, `monthly_trend` (+ `MonthlyTrend`, `MonthTotal`) | `mcp`, `assistant` (`PaymentMethod` only, for `/parse`), `seed.py` |
 | `assistant` | nothing yet | — |
 
 | `mcp` | nothing | — (it *uses* `expenses` and `categories`) |

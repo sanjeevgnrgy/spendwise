@@ -528,3 +528,31 @@ is natural. It's still a soft, model-judged guard.
 - **How:** `useState<RowSelectionState>` passed as `state: { rowSelection }` with `onRowSelectionChange`; cleared when
   the `expenses` prop changes, by comparing during render rather than in an effect.
 - **Rule of thumb:** never put a library's per-render return value in an effect that sets state.
+
+---
+
+## Dashboard (Phase 12)
+
+### D89. Aggregation happens in the backend, in SQL
+- `GET /summary/trend` groups and sums in the database; the browser receives one number per month.
+- Grouping uses `EXTRACT(year/month FROM spent_on)` (SQLAlchemy's `extract`), standard SQL that SQLite and Postgres both
+  support, not SQLite's `strftime`.
+
+### D90. The trend is zero-filled, oldest first
+- One entry per month in the window, with `total_minor = 0` for months without spending, so charts have no gaps.
+- The window counts back from the server's today (as `/parse` and `/chat` do). `months` is 1–24, `currency` defaults to INR.
+
+### D91. `GET /expenses` gains `limit`
+- Optional, 1–500, applied in SQL after the newest-first ordering. Added for the Dashboard's "5 most recent"
+  instead of downloading every expense.
+
+### D92. The Dashboard loads four requests in parallel
+- Summary, trend, 5 recent expenses and categories, with `Promise.all`. If any fails, the whole page shows an error
+  card with Try again, rather than a partial dashboard with misleading zeros.
+- **Revisit when:** one slow or failing part should not block the rest; then load each card independently.
+
+### D93. shadcn charts (Recharts 3) for visualisation
+- `components/ui/chart.tsx` from `npx shadcn add chart`. Colours come from `ChartConfig` as `--color-<key>` CSS
+  variables, set to `var(--primary)` so charts follow the theme. Category breakdown is a horizontal bar chart
+  (readable with many categories); the trend is a line.
+- Chart values are rupees as numbers, converted from paise **for display only**.

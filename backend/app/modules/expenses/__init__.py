@@ -11,6 +11,8 @@ from app.modules.expenses.schemas import (
     ExpenseRead,
     ExpenseUpdate,
     MonthlySummary,
+    MonthlyTrend,
+    MonthTotal,
     PaymentMethod,
 )
 from app.modules.expenses.service import (
@@ -19,6 +21,7 @@ from app.modules.expenses.service import (
     get_expense,
     list_expenses,
     monthly_summary,
+    monthly_trend,
     update_expense,
 )
 
@@ -28,12 +31,15 @@ __all__ = [
     "ExpenseFilters",
     "ExpenseRead",
     "ExpenseUpdate",
+    "MonthTotal",
     "MonthlySummary",
+    "MonthlyTrend",
     "PaymentMethod",
     "create_expense",
     "delete_expense",
     "get_expense",
     "list_expenses",
     "monthly_summary",
+    "monthly_trend",
     "update_expense",
 ]

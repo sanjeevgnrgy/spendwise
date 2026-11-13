@@ -85,6 +85,9 @@ class ExpenseFilters(BaseModel):
     search: str | None = Field(
         default=None, min_length=1, max_length=100, description="Text to find in the merchant or note"
     )
+    # Return at most this many (newest first). Lets the Dashboard ask for "the 5 latest" without
+    # downloading every expense.
+    limit: int | None = Field(default=None, ge=1, le=500, description="At most this many expenses, newest first")
 
     @model_validator(mode="after")
     def check_date_range(self) -> Self:
@@ -117,3 +120,21 @@ class MonthlySummary(BaseModel):
     @property
     def total(self) -> Decimal:
         return paise_to_rupees(self.total_minor)
+
+
+class MonthTotal(BaseModel):
+    month: str  # "YYYY-MM"
+    expense_count: int
+    total_minor: int
+
+    @computed_field
+    @property
+    def total(self) -> Decimal:
+        return paise_to_rupees(self.total_minor)
+
+
+class MonthlyTrend(BaseModel):
+    currency: str
+    # Oldest month first, one entry per month, including months with no spending (total 0),
+    # so a chart can draw them without gaps.
+    months: list[MonthTotal]

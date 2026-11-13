@@ -23,6 +23,8 @@ from app.modules.expenses.schemas import (
     ExpenseRead,
     ExpenseUpdate,
     MonthlySummary,
+    MonthlyTrend,
+    MonthTotal,
 )
 
 
@@ -99,3 +101,29 @@ def monthly_summary(session: Session, year: int, month: int, currency: str = DEF
         total_minor=sum(t.total_minor for t in by_category),
         by_category=by_category,
     )
+
+
+def _months_back(year: int, month: int, count: int) -> tuple[int, int]:
+    """The (year, month) that is `count` months before (year, month)."""
+    index = year * 12 + (month - 1) - count
+    return index // 12, index % 12 + 1
+
+
+def monthly_trend(
+    session: Session, months: int, today: date, currency: str = DEFAULT_CURRENCY
+) -> MonthlyTrend:
+    """Totals for the last `months` months, ending with the month that contains `today`."""
+    first_year, first_month = _months_back(today.year, today.month, months - 1)
+    start = date(first_year, first_month, 1)
+    next_year, next_month = _months_back(today.year, today.month, -1)
+    end = date(next_year, next_month, 1)
+
+    found = {(y, m): (count, total) for y, m, count, total in repository.totals_by_month(session, start, end, currency)}
+
+    # One entry per month, oldest first. A month with no spending is a real 0, not a missing point.
+    trend = []
+    for offset in range(months - 1, -1, -1):
+        y, m = _months_back(today.year, today.month, offset)
+        count, total = found.get((y, m), (0, 0))
+        trend.append(MonthTotal(month=f"{y:04d}-{m:02d}", expense_count=count, total_minor=total))
+    return MonthlyTrend(currency=currency, months=trend)

@@ -11,7 +11,7 @@ covers setup and running; this folder explains **why** things are the way they a
 | [decisions.md](decisions.md) | Every design decision so far, with the reason and when to revisit it |
 | [gemini.md](gemini.md) | Gemini setup, models and the free tier, privacy, errors, tokens |
 | [troubleshooting.md](troubleshooting.md) | Problems already hit and how to fix them |
-| [git.md](git.md) | Repo-specific git identity, committing safely, pushing to GitHub later |
+| [git.md](git.md) | Repo-specific git identity, committing safely, the GitHub remote |
 | [concepts/python-tooling.md](concepts/python-tooling.md) | Virtual environments, `.env`, `__pycache__`, `python -m`, pinned dependencies |
 | [phases/phase-1-project-setup.md](phases/phase-1-project-setup.md) | Routes, path parameters, `/docs` |
 | [phases/phase-2-first-gemini-call.md](phases/phase-2-first-gemini-call.md) | Models, prompts, tokens, keeping the API key in `.env` |

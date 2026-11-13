@@ -9,7 +9,7 @@ How SpendWise talks to Gemini, which models a free account can use, and what to 
 ## Setup
 
 1. Create a key at https://aistudio.google.com/apikey.
-2. Put it in `spendwise/.env` after `GEMINI_API_KEY=` (no quotes, no spaces).
+2. Put it in `.env` in the project folder, after `GEMINI_API_KEY=` (no quotes, no spaces).
 3. Set `GEMINI_MODEL` (currently `gemini-3.8-flash`).
 4. Restart the server. `.env` is read once at startup, and auto-reload only watches `.py` files.
 

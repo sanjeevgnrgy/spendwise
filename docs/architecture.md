@@ -131,8 +131,8 @@ imports modules.
 
 ## Checking the rules
 
-Until architecture tests are added (planned in `backend/tests/`), these scans from `spendwise/` catch
-violations:
+Until architecture tests are added (planned in `backend/tests/`), these scans, run from the project folder,
+catch violations:
 
 ```powershell
 # Core must never import modules. Expect no output.

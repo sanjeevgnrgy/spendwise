@@ -28,17 +28,21 @@ git config --global --list    # see the machine-wide defaults (unchanged)
 
 The `LF will be replaced by CRLF` warnings when staging are harmless on Windows.
 
-## Pushing to GitHub (not set up yet)
+## GitHub
 
-1. Create an **empty** repo on github.com: don't add a README, `.gitignore` or license, so there's
-   no history to merge.
-2. If this repo should push as a **different GitHub account** than the one Git Credential Manager already
-   knows, put that account's username in the remote URL. The credential manager then keeps a separate
-   login for it, and other repos keep using the usual account.
+The repo is pushed to a private GitHub repo, `sanjeevgnrgy/spendwise` (see [decisions.md](decisions.md) D37):
 
-   ```powershell
-   git remote add origin https://<github-username>@github.com/<owner>/<repo>.git
-   git push -u origin main
-   ```
+```powershell
+git remote -v      # shows https://sanjeevgnrgy@github.com/sanjeevgnrgy/spendwise.git
+git push           # after committing; main tracks origin/main
+```
 
-3. The first push opens a browser to sign in to that account once; it's remembered after that.
+**Why the username is in the URL:** Git Credential Manager remembers one login per GitHub account. This
+machine already has a login for a different account. Putting `sanjeevgnrgy@` in the URL makes this repo use
+its own login, and other repos keep using the usual account. The first push opens a browser to sign in as
+that account once; it's remembered after that.
+
+**Setting this up on another repo:**
+1. Create an **empty** repo on github.com: no README, `.gitignore` or license, so there's no history to merge.
+2. `git remote add origin https://<github-username>@github.com/<owner>/<repo>.git`
+3. `git push -u origin main`

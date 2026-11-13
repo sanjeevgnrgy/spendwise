@@ -5,7 +5,8 @@ modules, money helpers, and a seed script, keeping `/health` and `/ask` working.
 
 > **Later changes:** in Phase 4, `ExpenseCreate` takes `amount` in rupees instead of `amount_minor`, and the
 > service does the conversion. `main.py` now imports each module through its router. The duplicate-category
-> error became `BusinessRuleError`. This page records Phase 3 as it was built.
+> error became `BusinessRuleError`. After Phase 4, the project moved from `spendwise/` to the repo root, so
+> "from `spendwise\`" below means the project folder. This page records Phase 3 as it was built.
 
 ## Concepts
 

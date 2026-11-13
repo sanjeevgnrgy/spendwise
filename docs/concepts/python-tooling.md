@@ -6,7 +6,7 @@ The "why" behind the everyday tools in this project.
 
 **What it does:** gives this project its own private set of installed libraries.
 
-- **Keeps installs inside the project.** `pip install` puts packages in `spendwise\.venv\`, not in the
+- **Keeps installs inside the project.** `pip install` puts packages in the project's `.venv\`, not in the
   system Python, so nothing installed here can break another project.
 - **Locks in versions.** SpendWise always runs on its pinned versions, even if another project needs different ones.
 - **Makes `requirements.txt` trustworthy.** Only what's listed gets installed, so a missing entry fails on

@@ -12,6 +12,7 @@ add a new entry and mark the old one **Superseded by D<n>**.
 - **Why:** keeps SpendWise's libraries separate from every other Python project, so versions can't clash
   and `requirements.txt` is the complete list. See [concepts/python-tooling.md](concepts/python-tooling.md).
 - **Consequence:** `.venv` is never committed. Recreate it after moving or renaming the project folder.
+- **Updated by D36:** the venv is now `.venv` at the repo root.
 
 ### D2. Pin direct dependencies to exact versions (Phase 1)
 - **Why:** every machine installs the same versions, so "works on my machine" means it works everywhere.
@@ -137,6 +138,7 @@ add a new entry and mark the old one **Superseded by D<n>**.
 ### D25. `.vscode/settings.json` is committed
 - **Why:** it points VS Code at `spendwise/.venv` and at `spendwise/backend` for imports. Everyone who opens
   the repo gets working import checking. It contains no secrets. The interpreter path is Windows-only.
+- **Updated by D36:** the paths are now `.venv` and `backend` at the repo root.
 
 ---
 
@@ -192,3 +194,19 @@ add a new entry and mark the old one **Superseded by D<n>**.
 ### D35. `get_expense` raises; `get_category` returns `None`
 - `expenses.get_expense()` raises `NotFoundError`, because callers asking for a specific expense expect it to exist.
 - `categories.get_category()` returns `None`, because other modules use it as a "does this exist?" check.
+
+---
+
+## Repository on GitHub
+
+### D36. The project lives at the repository root
+- **What:** everything that was in `spendwise/` moved up to the repo root, just before the first push.
+- **Why:** GitHub shows the root README on the repo's front page, and a fresh `git clone` gives
+  `spendwise/backend`, `spendwise/docs`, ..., matching these docs.
+- **Consequence:** the venv was recreated, because venvs can't be moved. Local folder names don't matter;
+  "the project folder" means wherever the repo is checked out.
+
+### D37. The GitHub remote URL includes the account name
+- **What:** `origin` is `https://sanjeevgnrgy@github.com/sanjeevgnrgy/spendwise.git` (a private repo).
+- **Why:** Git Credential Manager on the development machine already holds a login for a different GitHub
+  account. With the username in the URL, it keeps a separate login for this repo, and other repos are unaffected.

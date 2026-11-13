@@ -1,6 +1,6 @@
 """Insert default categories and 10 sample expenses. Safe to run more than once.
 
-Run from the spendwise/ folder:  .\\.venv\\Scripts\\python.exe backend\\seed.py
+Run from the project folder:  .\\.venv\\Scripts\\python.exe backend\\seed.py
 """
 
 from datetime import date, timedelta

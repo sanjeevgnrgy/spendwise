@@ -3,7 +3,9 @@
 **Goal:** a Python project with a virtual environment, pinned dependencies, and a FastAPI app with two routes.
 
 > **Later changes:** in Phase 3, `backend/main.py` moved to `backend/app/main.py`, `/hello` was removed,
-> and the start command became `.\run.ps1`. This page records Phase 1 as it was built.
+> and the start command became `.\run.ps1`. After Phase 4, the whole project moved from `spendwise/` to the
+> repo root, so paths below that start with `spendwise/` now start at the project folder.
+> This page records Phase 1 as it was built.
 
 ## Concepts
 

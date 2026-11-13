@@ -13,7 +13,7 @@ class GeminiError(Exception):
 def _client() -> genai.Client:
     if settings.gemini_api_key is None:
         # Say exactly what to fix, instead of letting a vague SDK error surface later.
-        raise RuntimeError("GEMINI_API_KEY is not set. Add it to spendwise/.env (see .env.example).")
+        raise RuntimeError("GEMINI_API_KEY is not set. Add it to .env in the project folder (see .env.example).")
     # Built once on first use and then reused, so all requests share one connection pool.
     # The key is passed explicitly because the SDK would silently prefer GOOGLE_API_KEY
     # over GEMINI_API_KEY if both happened to be set on this machine.
@@ -25,7 +25,7 @@ def ask_gemini(prompt: str) -> str:
     # Outside the try below: a missing setting is our misconfiguration, not a Gemini failure.
     client = _client()
     if not settings.gemini_model:
-        raise RuntimeError("GEMINI_MODEL is not set. Add it to spendwise/.env (see .env.example).")
+        raise RuntimeError("GEMINI_MODEL is not set. Add it to .env in the project folder (see .env.example).")
 
     try:
         interaction = client.interactions.create(

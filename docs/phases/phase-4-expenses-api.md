@@ -122,7 +122,7 @@ An unknown parameter, such as the typo `catgory_id`, is rejected with 422 instea
 
 ## Run it
 
-From `spendwise\`: `.\run.ps1`. No new packages and no database changes; your seeded data still works.
+From the project folder: `.\run.ps1`. No new packages and no database changes; your seeded data still works.
 Then open http://127.0.0.1:8000/docs.
 
 ## Test it by hand

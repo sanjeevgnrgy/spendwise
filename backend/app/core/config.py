@@ -3,7 +3,7 @@ from pathlib import Path
 from pydantic import SecretStr
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
-# This file is spendwise/backend/app/core/config.py, so parents[2] is backend/.
+# This file is backend/app/core/config.py, so parents[2] is backend/ and its parent is the project folder.
 # Absolute paths mean it works no matter which folder the app is started from.
 BACKEND_DIR = Path(__file__).resolve().parents[2]
 PROJECT_DIR = BACKEND_DIR.parent

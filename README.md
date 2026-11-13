@@ -13,7 +13,7 @@ An agentic expense tracker, built one small phase at a time as a learning projec
 
 ## Quick start (Windows)
 
-From the `spendwise/` folder:
+From the project folder (the repo root, where `run.ps1` is):
 
 ```powershell
 Copy-Item .env.example .env     # once, then paste your Gemini API key into .env
@@ -36,7 +36,7 @@ If PowerShell refuses to run the script, allow local scripts once with
 
 ## Manual setup (any OS)
 
-What `run.ps1` does, step by step. From the `spendwise/` folder:
+What `run.ps1` does, step by step. From the project folder:
 
 ```powershell
 py -3 -m venv .venv                         # macOS/Linux: python3 -m venv .venv
@@ -114,7 +114,7 @@ spendwise/
 
 ### Virtual environment
 
-- One venv per project, at `spendwise/.venv`. Never install project packages into the global Python.
+- One venv per project, in `.venv` in the project folder. Never install project packages into the global Python.
 - Activate it before working. Your prompt should start with `(.venv)`.
   To double-check, `python -c "import sys; print(sys.prefix)"` should print a path ending in `.venv`.
 - Run tools as `python -m pip` and `python -m uvicorn` rather than bare `pip` / `uvicorn`.

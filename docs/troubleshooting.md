@@ -1,15 +1,14 @@
 # Troubleshooting
 
 Problems already hit while building SpendWise, and how to fix them. All commands are run from
-the `spendwise/` folder unless noted.
+the project folder (the repo root, where `run.ps1` is) unless noted.
 
 ## Running the app
 
 ### `./run.ps1 : The term './run.ps1' is not recognized...`
-- **Cause:** the terminal isn't in the `spendwise` folder. VS Code terminals open in the workspace root
-  (`fluent-ui-demo`), one level up.
-- **Fix:** `cd spendwise` then `.\run.ps1`, or run `.\spendwise\run.ps1` from the root.
-  Check where you are with `Get-Location`.
+- **Cause:** the terminal isn't in the project folder (the one containing `run.ps1`).
+- **Fix:** `cd` into the project folder, then `.\run.ps1`. Or call the script by its path from anywhere
+  (it switches to its own folder). Check where you are with `Get-Location`.
 
 ### PowerShell refuses to run `run.ps1` or `Activate.ps1`
 - **Cause:** the execution policy blocks local scripts.
@@ -30,6 +29,14 @@ the `spendwise/` folder unless noted.
 ### The app stopped working after moving or renaming the project folder
 - **Cause:** a venv stores absolute paths.
 - **Fix:** delete `.venv` and run `.\run.ps1`, which recreates it.
+
+### Can't delete or move `.venv` or `spendwise.db`: "Access is denied" / "being used by another process"
+- **Cause:** a Python process still has the files open, usually the dev server. With `--reload`, uvicorn runs
+  a separate worker process whose command line only mentions `multiprocessing`, so it's easy to miss, and it
+  can keep running after its parent is killed.
+- **Fix:** stop the server with Ctrl+C in its terminal. If files are still locked, list Python processes with
+  `Get-CimInstance Win32_Process -Filter "Name='python.exe'" | Select ProcessId, CommandLine` and stop the
+  leftover one with `Stop-Process -Id <id>`.
 
 ## Gemini (`POST /ask`)
 
@@ -58,9 +65,9 @@ on your tier).
 
 ### `Import "fastapi" could not be resolved` (or `app.…` imports)
 - **Cause:** VS Code's checker (Pylance) is using a Python interpreter that isn't the project's venv,
-  or doesn't know the `app` package lives in `spendwise/backend`.
+  or doesn't know the `app` package lives in `backend/`.
 - **Fix:** `.vscode/settings.json` sets both. If you chose another interpreter by hand, run
-  **Python: Select Interpreter** and pick `spendwise\.venv\Scripts\python.exe`, then
+  **Python: Select Interpreter** and pick `.venv\Scripts\python.exe` in the project folder, then
   **Python: Restart Language Server**.
 
 ### Errors about files that no longer exist (e.g. old `tsconfig.json`)

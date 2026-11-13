@@ -4,7 +4,8 @@
 
 > **Later changes:** in Phase 3, `ask_gemini` moved to `backend/app/core/llm.py`, `/ask` moved to
 > `backend/app/modules/assistant/`, and `.env` is read by pydantic-settings instead of `python-dotenv`.
-> The model is now `gemini-3.8-flash`.
+> The model is now `gemini-3.8-flash`. After Phase 4, the project moved from `spendwise/` to the repo root,
+> so `spendwise/.env` below is now `.env` in the project folder.
 
 ## Concepts
 

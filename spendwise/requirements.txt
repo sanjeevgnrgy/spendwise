@@ -1,0 +1,8 @@
+# Pin exact versions so the app behaves the same on every machine.
+# Only direct dependencies are listed; pip resolves their sub-dependencies.
+fastapi==0.162.5
+uvicorn==0.54.0
+# Imported directly for request/response models, so it's listed even though FastAPI brings it.
+pydantic==2.14.3
+google-genai==3.3.0
+python-dotenv==1.2.4

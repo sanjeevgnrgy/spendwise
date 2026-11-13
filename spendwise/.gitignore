@@ -1,0 +1,9 @@
+# The virtual environment is rebuilt from requirements.txt, so never commit it.
+.venv/
+
+# Python's compiled bytecode cache, regenerated automatically.
+__pycache__/
+*.py[cod]
+
+# Real secrets live here. Only .env.example (no real values) is committed.
+.env

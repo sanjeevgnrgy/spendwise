@@ -4,7 +4,7 @@ from functools import lru_cache
 from typing import Any
 
 from google import genai
-from google.genai import types
+from google.genai import interactions, types
 
 from app.core.config import settings
 from app.core.errors import ExternalServiceError
@@ -25,24 +25,24 @@ def _client() -> genai.Client:
     return genai.Client(
         api_key=settings.gemini_api_key.get_secret_value(),
         # The SDK's defaults (5 attempts, waits of up to 60 s) can leave a request hanging for
-        # minutes while Gemini is down. Give up on an attempt after 30 s and try at most twice,
-        # so callers get a clear 502 within about a minute instead.
+        # many minutes while Gemini is down. Give up on an attempt after 60 s and try at most
+        # twice. 60 s, not less: a function-calling step can take 20-30 s while the model thinks.
         http_options=types.HttpOptions(
-            timeout=30_000,  # milliseconds
+            timeout=60_000,  # milliseconds
             retry_options=types.HttpRetryOptions(attempts=2),
         ),
     )
 
 
-def _interact(**request: Any) -> str:
-    """Send one request to Gemini and return its text output."""
+def _create(**request: Any) -> interactions.Interaction:
+    """Send one request to Gemini and return the whole interaction (text and any function calls)."""
     # Outside the try below: a missing setting is our misconfiguration, not a Gemini failure.
     client = _client()
     if not settings.gemini_model:
         raise RuntimeError("GEMINI_MODEL is not set. Add it to .env in the project folder (see .env.example).")
 
     try:
-        interaction = client.interactions.create(
+        return client.interactions.create(
             model=settings.gemini_model,
             # Don't let Google keep this conversation for later retrieval; we don't need it.
             # (On the free tier, Google's data-use terms still apply to what we send.)
@@ -54,6 +54,10 @@ def _interact(**request: Any) -> str:
         # so catch broadly, but only around this single network call.
         raise GeminiError(str(exc)) from exc
 
+
+def _interact(**request: Any) -> str:
+    """Send one request to Gemini and return its text output."""
+    interaction = _create(**request)
     if not interaction.output_text:
         raise GeminiError("Gemini returned no text.")
     return interaction.output_text
@@ -73,3 +77,22 @@ def ask_gemini_for_json(prompt: str, schema: dict[str, Any], system_instruction:
         # so we get the fields and types we asked for instead of free-form prose.
         response_format={"type": "text", "mime_type": "application/json", "schema": schema},
     )
+
+
+def ask_gemini_with_tools(
+    history: list[dict[str, Any]],
+    tools: list[dict[str, Any]],
+    system_instruction: str,
+    thinking_level: str | None = None,
+) -> interactions.Interaction:
+    """One step of a function-calling conversation.
+
+    `history` is the whole conversation so far (we don't let Google store it, so it's resent every
+    time). Returns the whole interaction, because the answer may be function calls
+    (`interaction.steps`) rather than text (`interaction.output_text`).
+    `thinking_level` ("minimal", "low", "medium", "high", "xhigh") trades reasoning depth for speed.
+    """
+    request: dict[str, Any] = {"input": history, "tools": tools, "system_instruction": system_instruction}
+    if thinking_level:
+        request["generation_config"] = {"thinking_level": thinking_level}
+    return _create(**request)

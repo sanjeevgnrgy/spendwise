@@ -80,12 +80,29 @@ response_format={"type": "text", "mime_type": "application/json", "schema": Some
 - **Descriptions are instructions:** Gemini reads each field's `description`.
 - Very large or deeply nested schemas can be rejected with `400 INVALID_ARGUMENT`.
 
+## Function calling
+
+`ask_gemini_with_tools(history, tools, system_instruction, thinking_level)` runs one step of a tool-using
+conversation (used by `POST /chat`, see [phases/phase-7-function-calling-chat.md](phases/phase-7-function-calling-chat.md)):
+
+- **Declarations:** `{"type": "function", "name", "description", "parameters": <JSON schema>}`, passed as `tools=[...]`.
+- **Calls:** steps in `interaction.steps` with `type == "function_call"`, plus `name`, `arguments` (a dict) and `id`.
+  Gemini can request several calls in one step.
+- **Results (stateless, `store=False`):** resend the whole history every time. That means the `user_input`, then
+  every step Gemini returned **unchanged**, then one `{"type": "function_result", "name", "call_id", "is_error",
+  "result": [{"type": "text", "text": "<json>"}]}` per call.
+- **Automatic function calling** (the SDK running your Python functions for you) isn't available in the Interactions
+  API, so `modules/assistant/agent.py` runs the loop itself.
+- **Thinking level:** `generation_config={"thinking_level": "minimal" | "low" | "medium" | "high" | "xhigh"}`. The agent
+  uses `low`; with deeper thinking, a single step took 40–60+ s in testing.
+
 ## Timeouts and retries
 
-The client gives up on an attempt after **30 s** and makes **at most 2 attempts**
-(`HttpOptions(timeout=30_000, retry_options=HttpRetryOptions(attempts=2))` in `core/llm.py`). The SDK's defaults
-(5 attempts, up to 60 s apart) made requests hang for minutes while Gemini was down. Now an outage becomes a 502
-in about half a minute.
+The client gives up on an attempt after **60 s** and makes **at most 2 attempts**
+(`HttpOptions(timeout=60_000, retry_options=HttpRetryOptions(attempts=2))` in `core/llm.py`):
+- The SDK's defaults (5 attempts, up to 60 s apart) made requests hang for many minutes while Gemini was down.
+- The limit was 30 s in Phase 6, but function-calling steps can legitimately take 20–30 s.
+- Google's quick "high demand" errors still fail fast; only a hung connection takes up to about 2 minutes.
 
 ## When something goes wrong
 

@@ -1,6 +1,6 @@
 from datetime import date
 from decimal import Decimal
-from typing import Annotated
+from typing import Annotated, Any
 
 from pydantic import BaseModel, Field, WithJsonSchema
 
@@ -51,3 +51,20 @@ class ParseResponse(BaseModel):
     expense: ParsedExpense
     # Fields POST /expenses needs that the text didn't give. Empty means it's ready to save.
     missing_fields: list[str]
+
+
+class ChatRequest(BaseModel):
+    message: str = Field(min_length=1, max_length=2000, examples=["I spent 250 on lunch at Subway today, paid by UPI"])
+
+
+class ToolCall(BaseModel):
+    """One tool the agent ran while answering: what it called, with which arguments, and whether it worked."""
+
+    name: str
+    arguments: dict[str, Any]
+    ok: bool
+
+
+class ChatResponse(BaseModel):
+    reply: str
+    tool_calls: list[ToolCall]

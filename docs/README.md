@@ -19,6 +19,7 @@ covers setup and running; this folder explains **why** things are the way they a
 | [phases/phase-4-expenses-api.md](phases/phase-4-expenses-api.md) | Router → service → repository, CRUD, input vs output models, 201 / 404 / 422 |
 | [phases/phase-5-tests.md](phases/phase-5-tests.md) | Fixtures, tests on a throwaway database, the architecture test, reading a failing test |
 | [phases/phase-6-structured-output.md](phases/phase-6-structured-output.md) | Structured output, required-but-nullable fields, what happens with no amount |
+| [phases/phase-7-function-calling-chat.md](phases/phase-7-function-calling-chat.md) | Function calling, the agent loop step by step, why steps are capped, watching it think |
 
 Each phase file has the concepts, what was built, how to run and test it, and the
 "check your understanding" questions. Answers are hidden; click to reveal them.

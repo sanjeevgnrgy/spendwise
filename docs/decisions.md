@@ -284,3 +284,52 @@ add a new entry and mark the old one **Superseded by D<n>**.
 - **How:** `HttpOptions(timeout=30_000 ms, retry_options=HttpRetryOptions(attempts=2))` on the client.
   Measured: an outage now returns 502 in about 32 s.
 - **Revisit when:** responses legitimately take longer than 30 s (e.g. long reports); then raise the limit for those calls.
+- **Updated by D56:** the per-attempt limit is now 60 s.
+
+---
+
+## Function calling chat (Phase 7)
+
+### D50. A hand-written agent loop, capped at 5 steps
+- **How:** send the history and tool declarations; if Gemini returns `function_call` steps, run them, append its steps
+  (unchanged) plus one `function_result` per call (matched by `call_id`), and repeat until it answers in text.
+- **Stateless:** with `store=False`, each request carries the whole history, as Google's "stateless function calling" docs describe.
+- **Cap:** `MAX_STEPS = 5` Gemini calls per message. At the cap, `/chat` returns a "too many steps" reply with the calls made so far.
+- **Why by hand:** the docs say automatic function calling isn't available in the Interactions API (Python), and
+  writing the loop makes every step visible.
+
+### D51. Tool declarations are built from the tool functions
+- Each tool's docstring is its description, and each argument is `Annotated[type, "description"]`. `agent.py` turns
+  the signature into `{"type": "function", "name", "description", "parameters"}`, so declarations can't drift from the code.
+- Arguments are plain JSON types (`str`, `int`, `bool`; optional = `| None` with a default). Amounts and dates are strings;
+  the expenses module validates them, as for the REST API.
+- Tools call only the `expenses` and `categories` public interfaces (the architecture test enforces this).
+
+### D52. Tool errors go back to the model
+- Unknown tool, wrong arguments (`inspect.signature(...).bind`), `BusinessRuleError`, `NotFoundError` and `ValueError`
+  (including Pydantic's `ValidationError`) become `{"error": ...}` with `is_error: true`. The model can correct
+  itself or tell the user. Unexpected exceptions still surface as 500s, so real bugs aren't hidden.
+
+### D53. Deleting needs explicit confirmation
+- `delete_expense(expense_id, confirmed=False)` only looks the expense up and returns `needs_confirmation`.
+  The system instruction says to show it and ask, and to use `confirmed=true` only when the user clearly confirms.
+- **Limitation:** this is a *soft* guard, because the model decides when `confirmed=true` is justified.
+- **Revisit when:** conversation threads exist; then confirmation can be enforced on the server (e.g. a pending action the user approves).
+
+### D54. `/chat` is single-turn for now
+- Each message starts a new conversation, so a follow-up must repeat the details.
+- **Revisit when:** chat threads are added (assistant module, later phase).
+
+### D55. The agent uses `thinking_level="low"`
+- **Why:** in live tests, a delete request spent 40–60+ s per step thinking and timed out. With `low` it took 9 s in total.
+  Bookkeeping tasks don't need deep reasoning.
+- **Where:** `agent.THINKING_LEVEL`, passed through `llm.ask_gemini_with_tools(..., thinking_level)` as
+  `generation_config={"thinking_level": ...}`.
+
+### D56. Gemini attempts time out after 60 s (was 30 s)
+- A function-calling step can take 20–30 s. With 2 attempts, a total outage still ends in a 502 within about 2 minutes.
+
+### D57. SpendWise logs its own steps to the console
+- `core/logging.py` (called in `main.py`) sets `spendwise.*` loggers to INFO; libraries stay at WARNING.
+- The agent logs the user message, each step, each tool call with its arguments, and each result (first 300 characters).
+- These logs contain expense data. Fine on your own console; don't ship them to an external service without thinking about privacy.

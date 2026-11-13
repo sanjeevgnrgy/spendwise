@@ -28,10 +28,11 @@ spendwise/
         config.py       settings from .env
         db.py           engine, table creation, get_session / SessionDep
         errors.py       NotFoundError (404), BusinessRuleError (422), ExternalServiceError (502), handlers
+        logging.py      console logging for spendwise.* loggers
         money.py        rupees <-> paise
-        llm.py          ask_gemini(), ask_gemini_for_json() (structured output)
+        llm.py          ask_gemini(), ask_gemini_for_json(), ask_gemini_with_tools()
       modules/
-        assistant/      POST /ask, POST /parse (parse.py: text -> ParsedExpense)
+        assistant/      POST /ask, /parse, /chat (parse.py, tools.py, agent.py)
         categories/     Category table, GET /categories, public interface
         expenses/       Expense table, CRUD routes + GET /summary, public interface
     seed.py             sample data, using modules' public interfaces
@@ -79,7 +80,7 @@ that link, so the service must, and it does.
 | Module | Exports (`from app.modules import <name>`) | Used by |
 |---|---|---|
 | `categories` | `CategoryCreate`, `CategoryRead`, `create_category`, `get_category`, `list_categories` | `expenses`, `assistant`, `seed.py` |
-| `expenses` | `ExpenseCreate`, `ExpenseUpdate`, `ExpenseRead`, `ExpenseFilters`, `MonthlySummary`, `CategoryTotal`, `PaymentMethod`, `create_expense`, `get_expense`, `list_expenses`, `update_expense`, `delete_expense`, `monthly_summary` | `assistant` (`PaymentMethod`), `seed.py` (later: mcp) |
+| `expenses` | `ExpenseCreate`, `ExpenseUpdate`, `ExpenseRead`, `ExpenseFilters`, `MonthlySummary`, `CategoryTotal`, `PaymentMethod`, `create_expense`, `get_expense`, `list_expenses`, `update_expense`, `delete_expense`, `monthly_summary` | `assistant` (`PaymentMethod`, and all of the above via `tools.py`), `seed.py` (later: mcp) |
 | `assistant` | nothing yet | — |
 
 Routers are not part of any public interface; only `main.py` imports them.
@@ -119,6 +120,18 @@ HTTP request
   -> modules/assistant/parse.py         builds the schema (category enum) and system instruction
   -> core/llm.ask_gemini_for_json()     structured output: JSON shaped by the schema
   <- ParsedExpense + missing_fields      validated with Pydantic; nothing is saved
+```
+
+`POST /chat`:
+
+```
+HTTP request
+  -> modules/assistant/router.py        validates the body (ChatRequest)
+  -> modules/assistant/service.py       chat() -> agent.run(session, message, today)
+  -> modules/assistant/agent.py         the loop, at most 5 Gemini calls:
+       -> core/llm.ask_gemini_with_tools()     Gemini answers with text, or with function calls
+       -> modules/assistant/tools.py           runs each call through the expenses/categories public interfaces
+  <- ChatResponse(reply, tool_calls)     every step and tool call is logged to the console
 ```
 
 If a service raises `NotFoundError`, `BusinessRuleError` or `ExternalServiceError` (e.g. `GeminiError`), the

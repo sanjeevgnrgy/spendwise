@@ -7,6 +7,7 @@ from fastapi import FastAPI
 
 from app.core.db import create_db_and_tables
 from app.core.errors import register_error_handlers
+from app.core.logging import setup_logging
 
 # Importing a module's router also imports the module itself, which registers its tables
 # with SQLModel before create_db_and_tables() runs at startup.
@@ -22,7 +23,8 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     yield
 
 
-app = FastAPI(title="SpendWise API", version="0.4.0", lifespan=lifespan)
+setup_logging()
+app = FastAPI(title="SpendWise API", version="0.7.0", lifespan=lifespan)
 register_error_handlers(app)
 
 

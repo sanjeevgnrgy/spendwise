@@ -63,10 +63,24 @@ on your tier, or temporarily overloaded).
 - **Cause:** Google returned `503 Service Unavailable`: that model is overloaded right now. Not a problem in our code.
 - **Fix:** wait a few minutes and retry, or set `GEMINI_MODEL=gemini-4-hydrogen` (also free tier) in `.env` and restart.
 
-### `/ask` or `/parse` takes a very long time
+### `/ask`, `/parse` or `/chat` takes a very long time
 - **Cause (fixed in Phase 6):** the SDK used to retry up to 5 times, up to 60 s apart, while Gemini was down.
-- **Now:** each attempt gives up after 30 s and there are at most 2, so you get a 502 within about a minute.
-  If it still hangs much longer, check your network.
+- **Now:** each attempt gives up after 60 s and there are at most 2. If it still hangs much longer, check your network.
+
+### `/chat` returns 502 "Request timed out. This is a client-side timeout."
+- **Cause:** one Gemini step took longer than 60 s, usually because the model was "thinking" for a long time.
+- **Fix:** already mitigated: the agent uses `thinking_level="low"` (`agent.THINKING_LEVEL`). If it keeps happening,
+  Gemini may be slow right now; retry later, or try another model in `GEMINI_MODEL`.
+
+### `/chat` replies "Sorry, that took too many steps"
+- **Cause:** Gemini kept calling tools without answering, and the loop stopped at `MAX_STEPS = 5`.
+- **Fix:** look at the console log to see which tools it called, and why it got stuck. Rephrase more specifically
+  (e.g. give the expense's merchant and date).
+
+### `/chat` forgot what I just said ("yes" doesn't confirm a delete)
+- **Cause:** `/chat` is single-turn for now; each message starts a fresh conversation.
+- **Fix:** repeat the details in the follow-up ("Yes, delete the Subway expense of ₹250 from today"). Conversation
+  threads come in a later phase.
 
 ### `/parse` returns 422 "There are no categories yet"
 - **Fix:** run `.\.venv\Scripts\python.exe backend\seed.py`. Parsing needs the category list to choose from.

@@ -2,11 +2,13 @@
 
 An agentic expense tracker, built one small phase at a time as a learning project.
 
-**Current state (Phase 6):** a modular-monolith FastAPI backend with a REST API for expenses
+**Current state (Phase 7):** a modular-monolith FastAPI backend with a REST API for expenses
 (create, list with filters, read, update, delete), a monthly summary, a categories list,
-`POST /ask` (sends a prompt to Gemini) and `POST /parse` (turns a note like "Paid 450 at Swiggy
-yesterday" into a structured expense, without saving it). `backend/seed.py` fills the database with
-sample data. A pytest suite covers the API, the business rules and the module boundaries.
+`POST /ask` (sends a prompt to Gemini), `POST /parse` (turns a note like "Paid 450 at Swiggy
+yesterday" into a structured expense, without saving it) and `POST /chat` (a Gemini agent that
+adds, finds, summarises, updates and deletes expenses through tools). `backend/seed.py` fills the
+database with sample data. A pytest suite covers the API, the business rules, the agent loop and
+the module boundaries.
 
 ## Requirements
 
@@ -63,6 +65,8 @@ With the server running:
 - http://127.0.0.1:8000/summary?month=2026-11 → that month's total and per-category totals
 - `POST /parse` in `/docs` with `{"text": "Paid 450.50 at Swiggy yesterday via GPay"}` → the parsed expense
   and `missing_fields` (needs your Gemini key; nothing is saved)
+- `POST /chat` in `/docs` with `{"message": "How much did I spend on food this month?"}` → a reply plus the
+  tools the agent called; watch the server terminal to see each step (needs your Gemini key; `/chat` can change data)
 
 The full route list, filters, status codes and example requests are in
 [docs/phases/phase-4-expenses-api.md](docs/phases/phase-4-expenses-api.md).
@@ -81,7 +85,7 @@ From the project folder:
 
 ```powershell
 .\.venv\Scripts\python.exe -m pip install -r requirements-dev.txt   # once, and when it changes
-.\.venv\Scripts\python.exe -m pytest                                # expect: 47 passed
+.\.venv\Scripts\python.exe -m pytest                                # expect: 56 passed
 ```
 
 Tests use a fresh in-memory database each, never `backend/spendwise.db` or your Gemini key.
@@ -110,10 +114,11 @@ spendwise/
         config.py          settings from .env (pydantic-settings)
         db.py              database engine, table creation, get_session / SessionDep
         errors.py          NotFoundError -> 404, BusinessRuleError -> 422, ExternalServiceError -> 502
+        logging.py         console logging for SpendWise's own messages
         money.py           rupees <-> paise helpers
-        llm.py             the one place that talks to Gemini (plain and structured output)
+        llm.py             the one place that talks to Gemini (plain, structured output, tools)
       modules/
-        assistant/         POST /ask, POST /parse (router, schemas, service, parse)
+        assistant/         POST /ask, /parse, /chat (router, schemas, service, parse, tools, agent)
         categories/        Category table, GET /categories, public interface
         expenses/          Expense table, CRUD routes, GET /summary, public interface
     seed.py                default categories and sample expenses

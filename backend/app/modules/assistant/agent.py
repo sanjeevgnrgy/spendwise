@@ -12,7 +12,7 @@ from datetime import date
 from typing import Any
 
 from app.core import llm
-from app.modules.assistant import a2ui, mcp_client
+from app.modules.assistant import a2ui, approvals, mcp_client
 from app.modules.assistant.schemas import ToolCall
 
 # Each step is one round trip to Gemini. A cap stops a confused model from looping forever,
@@ -25,6 +25,10 @@ THINKING_LEVEL = "low"
 
 TOO_MANY_STEPS = "Sorry, that took too many steps, so I stopped. Could you try a simpler or more specific request?"
 FORM_SHOWN = "Please check the details in the form and press Save."
+STALE_APPROVAL = (
+    "That card can't be used any more: it was already answered, or the app restarted since. "
+    "Ask me again if you still want to delete the expense."
+)
 TOOLS_UNAVAILABLE = (
     "Sorry, I can't reach the expense tools right now, so I can't look up or change anything. "
     "Please try again in a moment."
@@ -72,14 +76,29 @@ class FormShown:
     source: str  # "model" or "fallback"
 
 
-def _system_instruction(today: date, category_names: list[str], forms: bool) -> str:
-    # With forms (the web panel), missing details are asked for with a form; otherwise (POST /chat) in text.
-    missing = (
-        a2ui.form_instructions(category_names)
-        if forms
-        else "If something needed is missing (amount, category, merchant or payment method), ask the user "
-        "instead of guessing."
-    )
+def _system_instruction(today: date, category_names: list[str], rich_ui: bool) -> str:
+    # The web panel (rich_ui) shows forms, cards and approval buttons; POST /chat only shows text.
+    if rich_ui:
+        missing = a2ui.form_instructions(category_names)
+        deleting = (
+            "To delete, call delete_expense with confirmed=false. The app then shows the user Approve and Cancel "
+            "buttons and deletes only if they press Approve: you can't delete by yourself. Ask them to press one, "
+            "and never say an expense was deleted."
+        )
+        cards = (
+            "Cards next to your reply show the details (monthly summaries with charts, lists, saved or deleted "
+            "expenses), so keep the reply to a sentence or two and don't repeat every number."
+        )
+    else:
+        missing = (
+            "If something needed is missing (amount, category, merchant or payment method), ask the user "
+            "instead of guessing."
+        )
+        deleting = (
+            "Before deleting, call delete_expense with confirmed=false, tell the user what would be deleted, "
+            "and ask them to confirm. Never set confirmed=true unless the user's message clearly confirms it."
+        )
+        cards = ""
     return "\n".join(
         [
             "You are SpendWise, a friendly assistant that helps one person track their expenses.",
@@ -89,8 +108,7 @@ def _system_instruction(today: date, category_names: list[str], forms: bool) -> 
             f"Expense categories: {', '.join(category_names)}.",
             "Use the tools to read or change expenses. Never make up numbers you haven't looked up.",
             missing,
-            "Before deleting, call delete_expense with confirmed=false, tell the user what would be deleted, "
-            "and ask them to confirm. Never set confirmed=true unless the user's message clearly confirms it.",
+            deleting,
             # The app shows ids this way (cards, the Expenses table), so users can point at one exactly.
             "The app shows each expense's id like #14. When you mention specific expenses, include their ids that "
             "way; if the user writes #14, they mean the expense with id 14.",
@@ -98,8 +116,9 @@ def _system_instruction(today: date, category_names: list[str], forms: bool) -> 
             "If a tool reports an error, fix your call if you can; otherwise tell the user plainly what went wrong.",
             # The web chat panel shows replies as plain text, so Markdown would appear as raw ** and *.
             "Keep replies short, in plain text: no Markdown, no ** or bullet symbols. Use line breaks for lists.",
+            cards,
         ]
-    )
+    ).strip()
 
 
 def _text_step(kind: str, text: str) -> dict[str, Any]:
@@ -138,15 +157,15 @@ def _function_result(call: dict[str, Any], text: str, ok: bool) -> dict[str, Any
 
 
 def stream(
-    message: str, today: date, history: list[dict[str, Any]] | None = None, forms: bool = True
+    message: str, today: date, history: list[dict[str, Any]] | None = None, rich_ui: bool = True
 ) -> Iterator[str | ToolStarted | ToolFinished | FormShown | AgentResult]:
     """Answer one user message, streaming.
 
     Yields, as they happen: the reply's text in pieces (str), a ToolStarted before and a ToolFinished
     after each tool call, a FormShown when the model asks for details with a form, and finally, as the
     very last item, an AgentResult with the whole reply, the tools used and the steps to store.
-    `history` is the earlier conversation (oldest first). `forms=False` (POST /chat, which can't show
-    a form) makes the model ask for missing details in text instead.
+    `history` is the earlier conversation (oldest first). `rich_ui=False` (POST /chat, which only
+    shows text) means no forms and no approval buttons: details and delete confirmations go by text.
     """
     earlier = history or []
     turn: list[dict[str, Any]] = [_text_step("user_input", message)]
@@ -165,10 +184,10 @@ def stream(
         yield TOOLS_UNAVAILABLE
         yield AgentResult(reply=TOOLS_UNAVAILABLE, tool_calls=tool_calls, steps=turn)
         return
-    if forms:
+    if rich_ui:
         # The assistant's one tool of its own: it shows a form and touches no data (data tools are MCP's).
         declarations = [*declarations, a2ui.SHOW_FORM_TOOL]
-    instruction = _system_instruction(today, category_names, forms)
+    instruction = _system_instruction(today, category_names, rich_ui)
 
     for step in range(1, MAX_STEPS + 1):
         logger.info("step %d/%d: asking Gemini", step, MAX_STEPS)
@@ -207,6 +226,10 @@ def stream(
                 turn.append(_function_result(call, "The form is on the user's screen; they will submit it.", True))
                 continue
 
+            if rich_ui:
+                # Human in the loop: whatever the model asked, a delete runs only as a preview. The real
+                # one waits for the user's Approve (approval_turn below).
+                arguments = approvals.guard(call["name"], arguments)
             yield ToolStarted(call_id=call["id"], name=call["name"], arguments=arguments)
             result = _run_tool(call["name"], arguments)
             changed = result.ok and mcp_client.changes_data(call["name"])
@@ -233,10 +256,41 @@ def stream(
     yield AgentResult(reply=reply + apology, tool_calls=tool_calls, steps=turn)
 
 
+def approval_turn(expense_id: int | None, approved: bool) -> Iterator[str | ToolStarted | ToolFinished | AgentResult]:
+    """The user pressed Approve or Cancel on a delete card. No model is asked: the decision is theirs.
+
+    `expense_id` is what the server remembered for that card (approvals.take), or None if the card was
+    already answered or forgotten. Yields the same kinds of items as stream().
+    """
+    tool_calls: list[ToolCall] = []
+    if expense_id is None:
+        said, reply = "I pressed a button on an old delete card.", STALE_APPROVAL
+    elif not approved:
+        said, reply = (
+            f"I pressed Cancel: don't delete expense #{expense_id}.",
+            f"Okay, I won't delete #{expense_id}. Nothing was changed.",
+        )
+    else:
+        said = f"I pressed Approve: delete expense #{expense_id}."
+        arguments = {"expense_id": expense_id, "confirmed": True}
+        call_id = f"approved_{expense_id}"
+        yield ToolStarted(call_id=call_id, name=approvals.DELETE_TOOL, arguments=arguments)
+        result = _run_tool(approvals.DELETE_TOOL, arguments)
+        changed = result.ok and mcp_client.changes_data(approvals.DELETE_TOOL)
+        yield ToolFinished(call_id=call_id, name=approvals.DELETE_TOOL, ok=result.ok, text=result.text, changed_data=changed)
+        tool_calls.append(ToolCall(name=approvals.DELETE_TOOL, arguments=arguments, ok=result.ok))
+        reply = f"Done: expense #{expense_id} is deleted." if result.ok else f"I couldn't delete #{expense_id}: {result.text}"
+    logger.info("approval: %s -> %s", said, reply)
+    yield reply
+    # Stored as plain text, so the conversation remembers what was decided and what happened.
+    steps = [_text_step("user_input", said), _text_step("model_output", reply)]
+    yield AgentResult(reply=reply, tool_calls=tool_calls, steps=steps)
+
+
 def run(message: str, today: date, history: list[dict[str, Any]] | None = None) -> AgentResult:
     """The same loop without streaming (POST /chat): wait for the end and return the whole result."""
-    # JSON replies can't carry a form, so the model asks for missing details in text.
-    for item in stream(message, today, history, forms=False):
+    # JSON replies can't carry forms or buttons, so details and delete confirmations go by text.
+    for item in stream(message, today, history, rich_ui=False):
         if isinstance(item, AgentResult):
             return item
     raise RuntimeError("The agent loop ended without a result.")  # can't happen: stream() always ends with one

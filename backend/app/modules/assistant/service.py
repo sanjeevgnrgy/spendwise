@@ -29,7 +29,7 @@ from app.core.errors import BusinessRuleError, ExternalServiceError, NotFoundErr
 
 # Another module's public interface: the only way in to it.
 from app.modules import categories
-from app.modules.assistant import a2ui, agent, parse, repository
+from app.modules.assistant import a2ui, agent, approvals, parse, repository
 from app.modules.assistant.models import ChatMessage
 from app.modules.assistant.schemas import (
     MAX_MESSAGE_LENGTH,
@@ -123,11 +123,8 @@ def _form_action(run: RunAgentInput) -> a2ui.UserAction | None:
         raise BusinessRuleError("The form submission isn't valid.") from exc
 
 
-def _agent_input(run: RunAgentInput) -> str:
-    """What the agent should respond to: a form submission if there is one, else the newest message."""
-    if not 1 <= len(run.thread_id) <= MAX_THREAD_ID_LENGTH:
-        raise BusinessRuleError(f"threadId must be 1 to {MAX_THREAD_ID_LENGTH} characters long.")
-    action = _form_action(run)
+def _agent_input(run: RunAgentInput, action: a2ui.UserAction | None) -> str:
+    """What the model should respond to: a form submission if there is one, else the newest message."""
     if action is None:
         return _newest_user_text(run)
     text = a2ui.describe_action(action)
@@ -157,13 +154,23 @@ def agent_run(session: Session, run: RunAgentInput) -> Iterator[BaseEvent]:
     # after every tool that changed data. A new number is what makes the pages reload.
     data_version = _data_version(run.state)
     try:
-        message = _agent_input(run)
+        if not 1 <= len(run.thread_id) <= MAX_THREAD_ID_LENGTH:
+            raise BusinessRuleError(f"threadId must be 1 to {MAX_THREAD_ID_LENGTH} characters long.")
+        action = _form_action(run)
         # AG-UI clients name their threads themselves, so an unknown id starts a new
         # conversation here (POST /chat answers 404 instead, because there the server names them).
         turn = (repository.last_turn(session, run.thread_id) or 0) + 1
-        history = _history(session, run.thread_id, turn)
 
-        for item in agent.stream(message, date.today(), history):
+        if action is not None and action.name in approvals.DECISIONS:
+            # Approve or Cancel on a delete card: the user's decision, carried out without asking the model.
+            # WHICH expense comes from the server's record of that card, not from what the browser sent.
+            expense_id = approvals.take(run.thread_id, action.surface_id)
+            items = agent.approval_turn(expense_id, approved=action.name == approvals.APPROVE)
+        else:
+            history = _history(session, run.thread_id, turn)
+            items = agent.stream(_agent_input(run, action), date.today(), history)
+
+        for item in items:
             if isinstance(item, str):
                 if text_id is None:
                     text_id = uuid4().hex  # every piece names the message it belongs to
@@ -192,6 +199,10 @@ def agent_run(session: Session, run: RunAgentInput) -> Iterator[BaseEvent]:
                     yield StateSnapshotEvent(snapshot={"dataVersion": data_version})
                 card = a2ui.card_for(item.name, item.text) if item.ok else None
                 if card is not None:
+                    waiting_on = a2ui.approval_needed(item.name, item.text)
+                    if waiting_on is not None:
+                        # A delete card with Approve/Cancel: remember what its Approve may delete.
+                        approvals.request(run.thread_id, card.create_surface.surface_id, waiting_on)
                     # A2UI has no event of its own in AG-UI, so it travels in AG-UI's extension event.
                     yield CustomEvent(name="a2ui", value=card.to_json())
 

@@ -58,14 +58,16 @@ export function useChat() {
     updateSurface(surfaceId, (surface) => ({ ...surface, data: setAt(surface.data, path, value) }))
   }
 
-  // A form's Save: lock the form (one submission only), then send its action as the next run.
+  // A button on a card or form (Save, Approve, Cancel): lock that card (it decides once), then send
+  // its action as the next run.
   async function submitForm(action: A2uiAction) {
     updateSurface(action.surfaceId, (surface) => ({ ...surface, submitted: true }))
-    // Your side of the chat shows what was sent, e.g. "Sent: 250 · Food · Subway · 2026-11-13 · upi".
+    // Your side of the chat shows the button's own message ("Approve deleting #14"), or else what a
+    // form sent, e.g. "Sent: 250 · Food · Subway · 2026-11-13 · upi".
     const values = Object.values(action.context)
       .map((value) => (Array.isArray(value) ? value.join(", ") : value))
       .filter((value) => value !== "" && value !== null && value !== undefined)
-    const ok = await run(`Sent: ${values.join(" · ")}`, { action })
+    const ok = await run(action.userMessage ?? `Sent: ${values.join(" · ")}`, { action })
     // If the run failed, unlock the form so it can be sent again.
     if (!ok) updateSurface(action.surfaceId, (surface) => ({ ...surface, submitted: false }))
   }

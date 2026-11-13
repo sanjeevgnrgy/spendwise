@@ -144,12 +144,22 @@ def get_summary(
     month: Annotated[str, Field(description="The month as YYYY-MM, e.g. '2026-11'.", pattern=r"^\d{4}-(0[1-9]|1[0-2])$")],
     currency: Annotated[str, Field(description="ISO currency code. INR unless asked otherwise.")] = "INR",
 ) -> dict[str, Any]:
-    """Get one month's total spending and the total for each category, biggest first."""
+    """Get one month's total spending and the total for each category, biggest first, plus the
+    previous month's total for comparison. Use it for questions like "where did my money go?"."""
     year, month_number = (int(part) for part in month.split("-"))
+    previous_year, previous_number = (year, month_number - 1) if month_number > 1 else (year - 1, 12)
     with _tool_session() as session:
         summary = expenses.monthly_summary(session, year, month_number, currency)
+        previous = expenses.monthly_summary(session, previous_year, previous_number, currency)
         # mode="json" turns Decimals into strings like "450.50".
-        return summary.model_dump(mode="json")
+        result = summary.model_dump(mode="json")
+        # Added alongside the existing fields, so clients that read the old shape keep working.
+        result["previous_month"] = {
+            "month": f"{previous_year}-{previous_number:02d}",
+            "total": str(previous.total),
+            "expense_count": previous.expense_count,
+        }
+        return result
 
 
 @server.tool(annotations=CHANGES_DATA)

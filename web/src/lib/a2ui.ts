@@ -3,6 +3,11 @@
 // JSON "data model" that inputs read from and write to.
 // Everything here comes from the network, so nothing is trusted: each message is checked before use.
 
+// The catalogs this renderer supports. A component's catalog is its own "@catalogId", else its
+// surface's catalogId (the spec's order). A component from any other catalog isn't drawn.
+export const BASIC_CATALOG = "https://a2ui.org/specification/v1_0/catalogs/basic/catalog.json"
+export const INSIGHTS_CATALOG = "urn:spendwise:catalog:insights:v1" // SpendWise's own: Chart, Stat
+
 export interface A2uiComponent {
   id: string
   component: string // "Text", "Card", ...; anything outside our catalog renders as a placeholder
@@ -11,6 +16,7 @@ export interface A2uiComponent {
 
 export interface A2uiSurface {
   id: string
+  catalogId: string | null // the surface's default catalog (null: every component must name its own)
   // A Map, not a plain object: ids come from the server, and an id like "__proto__" must stay just a key.
   components: Map<string, A2uiComponent>
   data: Record<string, unknown> // the data model: what the form's inputs show and change
@@ -24,6 +30,7 @@ export interface A2uiAction {
   sourceComponentId: string
   timestamp: string // ISO 8601, when it was clicked
   context: Record<string, unknown> // the button's bindings, read from the data model at the click
+  userMessage?: string // how the click reads in the chat, e.g. "Approve deleting #14"
 }
 
 // What a component is drawn with: its surface, and what to call when the user types or clicks.
@@ -36,6 +43,12 @@ export interface A2uiRenderContext {
 
 export function isObject(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value)
+}
+
+// Look a server value up in a fixed table (class names, icons...); anything else gives undefined.
+// Server values are only ever used as keys like this, never pasted into class names or styles.
+export function pick<T>(table: Record<string, T>, value: unknown): T | undefined {
+  return typeof value === "string" && Object.hasOwn(table, value) ? table[value] : undefined
 }
 
 function isComponent(value: unknown): value is A2uiComponent {
@@ -118,7 +131,8 @@ export function applyA2uiMessage(surfaces: A2uiSurface[], message: unknown): A2u
     // The spec treats creating an existing surface as an error: keep the first one.
     if (surfaces.some((surface) => surface.id === id)) return surfaces
     const data = isObject(createSurface.dataModel) ? createSurface.dataModel : {}
-    return [...surfaces, { id, components: addComponents(new Map(), createSurface.components), data }]
+    const catalogId = typeof createSurface.catalogId === "string" ? createSurface.catalogId : null
+    return [...surfaces, { id, catalogId, components: addComponents(new Map(), createSurface.components), data }]
   }
   if (isObject(updateComponents) && typeof updateComponents.surfaceId === "string") {
     return surfaces.map((surface) =>

@@ -2,7 +2,9 @@
 
 > **Later changes:** in Phase 17 the catalog gained TextField, ChoicePicker and DateTimeInput with data bindings,
 > Text can be bound too, Button actions work, and Columns space their children a little more (`gap-2`).
-> See [phase-17-a2ui-forms.md](phase-17-a2ui-forms.md).
+> See [phase-17-a2ui-forms.md](phase-17-a2ui-forms.md). In Phase 18 the month summary card became an insight card
+> (Stats and a donut chart), and the delete check card got Approve and Cancel buttons
+> ([phase-18-insight-cards.md](phase-18-insight-cards.md)).
 
 **Goal:** after the assistant saves an expense, the chat panel shows a small "Expense saved" card (amount, merchant,
 category, date). The card isn't HTML from the server. It's an **A2UI** description, which the browser draws with its

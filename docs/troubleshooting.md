@@ -161,8 +161,8 @@ on your tier, or temporarily overloaded).
   stays pending" above).
 
 ### Assistant panel: "Waiting for your OK" after asking to delete
-- That's the delete safety rule (decisions D53): the first `delete_expense` call only looks the expense up, and nothing is
-  deleted. Reply "yes" to confirm; the chip then reads "Deleting expense…" → "Expense deleted".
+- That's the delete safety rule (decisions D53, D129): the assistant's `delete_expense` call only looks the expense up,
+  and nothing is deleted. Press **Approve** on the card; the chip then reads "Deleting expense…" → "Expense deleted".
 
 ### Assistant panel: the conversation disappeared
 - **Cause:** a browser reload clears it (it's kept in memory across pages and panel toggles, not across reloads), or
@@ -180,6 +180,22 @@ on your tier, or temporarily overloaded).
   instead is deliberate (decisions D118).
 - **Fix:** none needed in the browser. If a card from SpendWise's own backend shows this, its card builder
   (`modules/assistant/a2ui/cards.py`) has a bug.
+
+### Assistant panel: Approve says "That card can't be used any more"
+- **Cause:** the server has no record of that delete card. It was already answered (each card decides once), or the
+  backend restarted since it was shown (records live in memory), or it belongs to an earlier conversation. Nothing was
+  deleted.
+- **Fix:** ask to delete it again, and press Approve on the new card.
+
+### Assistant panel: I said "yes, delete it" but nothing was deleted
+- **Cause:** that's the design (D129). In the web panel, only the **Approve** button deletes; the model can't, whatever
+  it's told. Saying "yes" just gets you a new card to approve.
+- **Fix:** press Approve on the card.
+
+### Assistant panel: the insight card's donut is empty or squashed
+- **Cause:** the chart is drawn by Recharts, which measures the space it has; a very narrow panel leaves little room.
+  The legend beside it always lists every category and amount.
+- **Fix:** drag the panel wider. If the card says "Can't show a chart without data", the month has no spending.
 
 ### Assistant panel: "add lunch" got questions in text, not a form
 - **Cause:** the model chose to ask instead of calling `show_expense_form`. It's guided by its instructions, not

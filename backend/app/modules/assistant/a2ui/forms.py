@@ -162,8 +162,13 @@ def _model_form(form: Any) -> CreateSurfaceMessage:
     # The surface id and catalog are ours to choose; the model only describes components and data.
     surface = CreateSurface(surface_id=_surface_id(), components=data.get("components"), data_model=data.get("dataModel"))
     # Valid A2UI isn't enough: the form must also be usable, i.e. it must be possible to submit it.
-    if not any(isinstance(c, Button) for c in surface.components):
+    buttons = [c for c in surface.components if isinstance(c, Button)]
+    if not buttons:
         raise ValueError(f"the form has no {SAVE_ACTION} button")
+    # Only the server may show approval buttons: a model-written button labelled "Save" must not be
+    # able to approve a delete.
+    if any(button.action.event.name != SAVE_ACTION for button in buttons):
+        raise ValueError(f"a form's buttons may only use the {SAVE_ACTION} action")
     return CreateSurfaceMessage(create_surface=surface)
 
 

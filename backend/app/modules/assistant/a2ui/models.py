@@ -13,14 +13,19 @@ from pydantic.alias_generators import to_camel
 A2UI_VERSION = "1.0"
 # The catalog our components come from. A surface names it so the renderer knows how to read them.
 BASIC_CATALOG_ID = "https://a2ui.org/specification/v1_0/catalogs/basic/catalog.json"
+# SpendWise's own catalog, for what the basic one doesn't have (Chart, Stat). A catalog can't extend
+# another, so its components sit on basic-catalog surfaces and name their catalog with "@catalogId".
+# The id is just a name ("not a resolvable URI", says the spec); a URN doesn't pose as a web address.
+INSIGHTS_CATALOG_ID = "urn:spendwise:catalog:insights:v1"
 
 # The spec asks for identifier-style ids: letters, digits and underscores, no hyphens.
 ComponentId = Annotated[str, Field(pattern=r"^[A-Za-z_][A-Za-z0-9_]*$")]
 Justify = Literal["start", "center", "end", "spaceBetween", "spaceAround", "spaceEvenly", "stretch"]
 Align = Literal["start", "center", "end", "stretch"]
 
-# The only actions a button may trigger. A form the model writes can't invent new ones.
-ActionName = Literal["save_expense"]
+# The only actions a button may trigger. A form the model writes can't invent new ones (and may only
+# use save_expense: the approval buttons are the server's alone, see forms.py).
+ActionName = Literal["save_expense", "approve_delete", "cancel_delete"]
 
 
 class _A2uiModel(BaseModel):
@@ -131,7 +136,10 @@ class DateTimeInput(_A2uiModel):
 class EventAction(_A2uiModel):
     name: ActionName
     # What to send with the action: bindings are read from the data model at the moment of the click.
-    context: dict[str, DataBinding | str | float | bool] | None = None
+    # int before float, or Pydantic would turn an id like 14 into 14.0.
+    context: dict[str, DataBinding | str | bool | int | float] | None = None
+    # How the click reads in the chat, e.g. "Approve deleting #14" (the spec's userMessage).
+    user_message: str | None = None
 
 
 class Action(_A2uiModel):
@@ -147,9 +155,39 @@ class Button(_A2uiModel):
     variant: Literal["default", "primary", "borderless"] | None = None
 
 
+# ---------- SpendWise's insights catalog: Chart and Stat ----------
+# Data and labels only: no colours, sizes or code. How a chart looks is the renderer's decision.
+
+
+class ChartPoint(_A2uiModel):
+    label: str = Field(max_length=40)
+    value: float = Field(allow_inf_nan=False)  # NaN or infinity isn't valid JSON, nor a sensible bar
+
+
+class Chart(_A2uiModel):
+    id: ComponentId
+    component: Literal["Chart"] = "Chart"
+    catalog_id: Literal["urn:spendwise:catalog:insights:v1"] = Field(INSIGHTS_CATALOG_ID, alias="@catalogId")
+    chart_type: Literal["bar", "line", "donut"]
+    data: list[ChartPoint] = Field(min_length=1, max_length=24)
+    unit: str | None = Field(None, max_length=4)  # shown before values, e.g. "₹"
+
+
+class Stat(_A2uiModel):
+    """One number worth noticing: "Spent in November: ₹9,265.85, +12% vs October"."""
+
+    id: ComponentId
+    component: Literal["Stat"] = "Stat"
+    catalog_id: Literal["urn:spendwise:catalog:insights:v1"] = Field(INSIGHTS_CATALOG_ID, alias="@catalogId")
+    label: str
+    value: str
+    change: str | None = None
+    trend: Literal["up", "down", "flat"] | None = None  # which arrow to show next to `change`
+
+
 # The "component" field says which model applies, so Pydantic checks each one against the right rules.
 Component = Annotated[
-    Text | Card | Row | Column | List | Button | Divider | TextField | ChoicePicker | DateTimeInput,
+    Text | Card | Row | Column | List | Button | Divider | TextField | ChoicePicker | DateTimeInput | Chart | Stat,
     Field(discriminator="component"),
 ]
 
@@ -228,7 +266,8 @@ class UserAction(_A2uiModel):
     source_component_id: str
     timestamp: str  # ISO 8601, when it was clicked
     # Strings, or lists of strings from a ChoicePicker. Never trusted: it's what the user typed.
-    context: dict[str, str | list[str] | float | bool | None]
+    context: dict[str, str | list[str] | bool | int | float | None]
+    user_message: str | None = Field(None, max_length=200)
 
 
 class ActionMessage(_A2uiModel):

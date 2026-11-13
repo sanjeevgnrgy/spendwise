@@ -1,10 +1,16 @@
 import { A2uiChoicePicker, A2uiDateTimeInput, A2uiTextField } from "@/components/a2ui/a2ui-inputs"
+import { A2uiInsight } from "@/components/a2ui/a2ui-insights"
+import { Unsupported } from "@/components/a2ui/a2ui-unsupported"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent } from "@/components/ui/card"
 import { Separator } from "@/components/ui/separator"
 import {
+  BASIC_CATALOG,
+  INSIGHTS_CATALOG,
   isObject,
+  pick,
   resolve,
+  textOf,
   type A2uiAction,
   type A2uiComponent,
   type A2uiRenderContext,
@@ -32,11 +38,6 @@ const BUTTON_VARIANT = { default: "outline", primary: "default", borderless: "gh
 // A component that lists itself (or an ancestor) as a child would nest forever; stop well before that.
 const MAX_DEPTH = 12
 
-// Look a server value up in one of the tables above; anything else gives undefined.
-function pick<T>(table: Record<string, T>, value: unknown): T | undefined {
-  return typeof value === "string" && Object.hasOwn(table, value) ? table[value] : undefined
-}
-
 interface A2uiSurfaceViewProps {
   surface: A2uiSurface
   locked?: boolean // e.g. while another run is in progress
@@ -59,12 +60,18 @@ function A2uiNode({ ctx, id, depth }: { ctx: A2uiRenderContext; id: unknown; dep
 }
 
 // A button's action, or null if it isn't one we can send.
-function readAction(action: unknown): { name: string; context: Record<string, unknown> } | null {
+function readAction(action: unknown) {
   if (!isObject(action) || !isObject(action.event) || typeof action.event.name !== "string") return null
-  return { name: action.event.name, context: isObject(action.event.context) ? action.event.context : {} }
+  const { name, context, userMessage } = action.event
+  return { name, context: isObject(context) ? context : {}, userMessage }
 }
 
 function A2uiComponentView({ ctx, node, depth }: { ctx: A2uiRenderContext; node: A2uiComponent; depth: number }) {
+  // Which catalog defines this component: its own "@catalogId", else the surface's (the spec's order).
+  const catalog = node["@catalogId"] ?? ctx.surface.catalogId
+  if (catalog === INSIGHTS_CATALOG) return <A2uiInsight node={node} />
+  if (catalog !== BASIC_CATALOG) return <Unsupported what="a component from a catalog this app doesn't know" />
+
   const data = ctx.surface.data
   const child = (id: unknown) => <A2uiNode ctx={ctx} id={id} depth={depth + 1} />
   const children = (ids: unknown) =>
@@ -156,6 +163,7 @@ function A2uiComponentView({ ctx, node, depth }: { ctx: A2uiRenderContext; node:
           timestamp: new Date().toISOString(),
           // Each binding is read now, so the agent gets what's in the form at the moment of the click.
           context: Object.fromEntries(Object.entries(action.context).map(([key, value]) => [key, resolve(value, data)])),
+          userMessage: textOf(action.userMessage, data) || undefined,
         }
         ctx.onAction?.(sent)
       }
@@ -174,11 +182,4 @@ function A2uiComponentView({ ctx, node, depth }: { ctx: A2uiRenderContext; node:
     default:
       return <Unsupported what={`a "${node.component}" component`} />
   }
-}
-
-// What an unknown or broken part of the description becomes: a visible, harmless note.
-function Unsupported({ what }: { what: string }) {
-  return (
-    <div className="rounded-md border border-dashed px-2 py-1 text-xs text-muted-foreground">Can't show {what}</div>
-  )
 }

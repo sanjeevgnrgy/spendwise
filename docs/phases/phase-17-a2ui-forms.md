@@ -1,5 +1,9 @@
 # Phase 17: A2UI forms
 
+> **Later changes:** in Phase 18 `agent.stream`'s `forms` switch became `rich_ui`; the allowed actions gained
+> `approve_delete` and `cancel_delete` (which a model-written form may not use); and buttons carry a `userMessage` for
+> the chat bubble ([phase-18-insight-cards.md](phase-18-insight-cards.md)).
+
 **Goal:** when you ask to add an expense but leave details out ("add lunch"), the assistant doesn't ask questions in
 text. It shows a **form**, pre-filled with what it understood. Pressing **Save** sends the form's values back to the
 agent, which saves the expense. The model writes the form itself from the A2UI catalog. The server checks it, and

@@ -8,18 +8,26 @@ import json
 import logging
 from collections.abc import Callable
 from datetime import date
-from typing import Any
+from decimal import Decimal
+from typing import Any, Literal
 from uuid import uuid4
 
 from app.modules.assistant.a2ui.models import (
+    Action,
+    ActionName,
+    Button,
     Card,
+    Chart,
+    ChartPoint,
     Column,
     Component,
     CreateSurface,
     CreateSurfaceMessage,
     Divider,
+    EventAction,
     List,
     Row,
+    Stat,
     Text,
 )
 
@@ -49,9 +57,19 @@ def _expense_id(expense: dict[str, Any]) -> str:
     return f"#{expense['id']}"
 
 
-def _expense_card(prefix: str, title: str, expense: dict[str, Any], footer: str | None = None) -> CreateSurfaceMessage:
-    """One expense: a small title with its id, the amount, the merchant, then category and date."""
+def _expense_card(
+    prefix: str,
+    title: str,
+    expense: dict[str, Any],
+    footer: str | None = None,
+    extra: list[Component] | None = None,
+) -> CreateSurfaceMessage:
+    """One expense: a small title with its id, the amount, the merchant, then category and date.
+
+    `extra` adds components at the bottom of the card; the first one is the one placed there.
+    """
     body = ["header", "amount", "merchant", "divider", "details"] + (["footer"] if footer else [])
+    body += [extra[0].id] if extra else []
     components: list[Component] = [
         Card(id="root", child="body"),
         Column(id="body", children=body),
@@ -67,7 +85,19 @@ def _expense_card(prefix: str, title: str, expense: dict[str, Any], footer: str 
     ]
     if footer:
         components.append(Text(id="footer", text=footer, variant="caption"))
+    components += extra or []
     return _surface(prefix, components)
+
+
+def _button(
+    id: str, label: str, name: ActionName, expense_id: int, user_message: str, primary: bool = False
+) -> list[Component]:
+    """A Button and its label. The click reads as `user_message` in the chat."""
+    event = EventAction(name=name, context={"expense_id": expense_id}, user_message=user_message)
+    return [
+        Button(id=id, child=f"{id}_label", action=Action(event=event), variant="primary" if primary else None),
+        Text(id=f"{id}_label", text=label),
+    ]
 
 
 def expense_saved_card(expense: dict[str, Any]) -> CreateSurfaceMessage:
@@ -80,35 +110,83 @@ def expense_updated_card(expense: dict[str, Any]) -> CreateSurfaceMessage:
 
 def delete_card(result: dict[str, Any]) -> CreateSurfaceMessage:
     """delete_expense has two outcomes; the card must never claim a delete that didn't happen."""
+    expense = result["expense"]
     if result["deleted"]:
-        return _expense_card("expense_deleted", "Expense deleted", result["expense"])
-    # Without confirmation nothing was deleted (D53): show exactly what would go, and how to confirm.
-    footer = 'Nothing is deleted until you reply "yes".'
-    return _expense_card("expense_delete_check", "Delete this expense?", result["expense"], footer)
+        return _expense_card("expense_deleted", "Expense deleted", expense)
+    # Nothing was deleted yet: show exactly what would go, with the user's two choices. Only the
+    # server can turn Approve into a delete (approvals.py); the button just says which card was approved.
+    buttons = [
+        Row(id="decision", children=["approve", "cancel"]),
+        *_button("approve", "Approve", "approve_delete", expense["id"], f"Approve deleting #{expense['id']}", True),
+        *_button("cancel", "Cancel", "cancel_delete", expense["id"], f"Cancel deleting #{expense['id']}"),
+    ]
+    footer = "Nothing is deleted unless you press Approve."
+    return _expense_card("expense_delete_check", "Delete this expense?", expense, footer, buttons)
+
+
+def approval_needed(tool_name: str, result_text: str) -> int | None:
+    """The expense id a delete preview is waiting on (its card has Approve/Cancel), or None."""
+    if tool_name != "delete_expense":
+        return None
+    try:
+        result = json.loads(result_text)
+        return int(result["expense"]["id"]) if result["deleted"] is False else None
+    except (ValueError, KeyError, TypeError):
+        return None
+
+
+def _versus(total: Decimal, previous: Decimal, previous_month: date) -> tuple[str, Literal["up", "down", "flat"]]:
+    """'+12% vs October', and which way it went."""
+    name = f"{previous_month:%B}"
+    if previous == 0:
+        return f"Nothing spent in {name}", "flat"
+    percent = round((total - previous) / previous * 100)
+    if percent == 0:
+        return f"Same as {name}", "flat"
+    return f"{percent:+d}% vs {name}", "up" if percent > 0 else "down"
 
 
 def summary_card(summary: dict[str, Any]) -> CreateSurfaceMessage:
-    """One month: the total, the number of expenses, and each category's total, biggest first."""
+    """Where the money went in one month: two Stats (vs last month, biggest category) and a donut chart."""
     month = date.fromisoformat(f"{summary['month']}-01")
+    currency = summary["currency"]
+    total = Decimal(summary["total"])
     count = summary["expense_count"]
-    categories = summary["by_category"]
-    body = ["title", "total", "count"] + (["divider", "categories"] if categories else [])
+    categories = summary["by_category"]  # biggest first
+
+    stats = ["stat_total"]
     components: list[Component] = [
-        Card(id="root", child="body"),
-        Column(id="body", children=body),
-        Text(id="title", text=f"Spending in {month:%B %Y}", variant="caption"),
-        Text(id="total", text=_money(summary["total"], summary["currency"])),
-        Text(id="count", text=f"{count} expense{'' if count == 1 else 's'}", variant="caption"),
+        Text(id="title", text=f"Where your money went in {month:%B %Y}", variant="caption"),
     ]
+    previous = summary.get("previous_month")
+    change, trend = (
+        _versus(total, Decimal(previous["total"]), date.fromisoformat(f"{previous['month']}-01"))
+        if previous
+        else (None, None)
+    )
+    components.append(
+        Stat(id="stat_total", label=f"Spent in {month:%B}", value=_money(summary["total"], currency), change=change, trend=trend)
+    )
+
     if categories:
-        rows = [f"category_{i}" for i in range(len(categories))]
-        components += [Divider(id="divider"), List(id="categories", children=rows)]
-        for i, category in enumerate(categories):
-            components += [
-                Row(id=f"category_{i}", children=[f"category_{i}_name", f"category_{i}_total"], justify="spaceBetween"),
-                Text(id=f"category_{i}_name", text=category["category_name"]),
-                Text(id=f"category_{i}_total", text=_money(category["total"], summary["currency"])),
-            ]
+        top = categories[0]
+        share = round(Decimal(top["total"]) / total * 100) if total else 0
+        stats.append("stat_top")
+        components.append(
+            Stat(id="stat_top", label="Biggest category", value=top["category_name"], change=f"{_money(top['total'], currency)} · {share}%")
+        )
+        # A donut reads best with a few slices, and the theme has five chart colours: the top four
+        # categories, then everything else together.
+        slices = [ChartPoint(label=c["category_name"], value=float(c["total"])) for c in categories[:4]]
+        rest = sum(Decimal(c["total"]) for c in categories[4:])
+        if rest:
+            slices.append(ChartPoint(label="Everything else", value=float(rest)))
+        components.append(Chart(id="chart", chart_type="donut", data=slices, unit="₹" if currency == "INR" else None))
+
+    footer = f"{count} expense{'' if count == 1 else 's'}" if count else "No expenses yet this month"
+    components.append(Text(id="footer", text=footer, variant="caption"))
+    body = ["title", "stats"] + (["chart"] if categories else []) + ["footer"]
+    components += [Card(id="root", child="body"), Column(id="body", children=body), Row(id="stats", children=stats)]
     return _surface("summary", components)
 
 

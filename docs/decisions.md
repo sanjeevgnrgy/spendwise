@@ -318,6 +318,7 @@ add a new entry and mark the old one **Superseded by D<n>**.
   The system instruction says to show it and ask, and to use `confirmed=true` only when the user clearly confirms.
 - **Limitation:** this is a *soft* guard, because the model decides when `confirmed=true` is justified.
 - **Revisit when:** conversation threads exist; then confirmation can be enforced on the server (e.g. a pending action the user approves).
+- **Updated by D129:** in the web panel, the server now enforces it with Approve/Cancel buttons; `POST /chat` keeps this soft guard.
 
 ### D54. `/chat` is single-turn for now
 - Each message starts a new conversation, so a follow-up must repeat the details.
@@ -776,6 +777,7 @@ is natural. It's still a soft, model-judged guard.
   forbids creating a surface twice.
 - Which tool gets which card is a table in `cards.py`, like the chip wording in the browser (D114). If a result can't be
   read, the card is skipped and logged; the reply still arrives. `/chat` sends no cards.
+- **Updated by D128, D129:** the month summary is now an insight card, and the delete check card has Approve/Cancel.
 
 ### D118. The renderer: an allowlist mapped to our components, and nothing else
 - `components/a2ui/a2ui-surface.tsx` maps each allowed component to our shadcn components: Card to `Card`, Divider to
@@ -870,4 +872,71 @@ is natural. It's still a soft, model-judged guard.
   The date defaults to today.
 - `CUSTOM` `metadata.source` is `"model"` or `"fallback"`, so you can see which happened. **Revisit when:** fallbacks
   are frequent; then shorten the catalog text, or send it as structured output.
+- **Updated by D129:** a model-written form's buttons may only use `save_expense`.
+
+---
+
+## Insight cards and approvals (Phase 18)
+
+> Checked offline: a scripted fake Gemini (which tried to delete with `confirmed=true` itself) against the real app and
+> MCP server. Approve was attacked with a forged card id, another thread, a reused card and a different expense id, and
+> a disguised approve button was tried in a model-written form. The renderer was checked with real and hostile cards.
+> `npm run build` passes. **Live** with real Gemini (flash-lite), against the running app: the insight card and the
+> full delete flow (preview card, expense still there, Approve, deleted) worked. Not yet tried in a browser.
+
+### D126. Chart and Stat live in SpendWise's own catalog, mixed onto basic surfaces
+- The basic catalog has no chart or stat, and a catalog can't extend another. So `urn:spendwise:catalog:insights:v1`
+  holds Chart and Stat, and each such component carries `"@catalogId"`. Surfaces keep the basic catalog as their
+  default.
+- The renderer resolves each component's catalog (its own `@catalogId`, then the surface's; the spec's order) and
+  draws only these two catalogs. Anything else gets "a catalog this app doesn't know".
+- The id is a URN: the spec says it's a name, not a resolvable address. No `catalog_definition.json` is published; the
+  Pydantic models are the definition. **Revisit when:** another client needs our catalog; then publish a definition
+  file.
+
+### D127. Charts are data and labels only, drawn with a fixed config
+- **Chart:** `chartType` (bar, line or donut), `data` of 1 to 24 `{label, value}` points with finite numbers, optional
+  `unit` (at most 4 characters). **Stat:** `label`, `value`, optional `change` and `trend` (up, down or flat).
+- shadcn's `ChartStyle` writes the config's keys and colours into a `<style>` tag (`dangerouslySetInnerHTML`). So the
+  config is fixed (`value` and `--chart-1`), and donut slices use the theme's five chart colours. Agent labels only
+  ever appear as chart text.
+- The donut has a legend list with every value, which is also its text version for screen readers. Stat arrows show
+  direction without red or green, since whether "up" is good depends on what's measured.
+
+### D128. "Where did my money go?" is the month summary, now as an insight card
+- `get_summary` also returns `previous_month` (month, total, count). It's added alongside the old fields, so existing
+  clients don't break.
+- Its card is now the insight card: Stats "Spent in <month>" ("+12% vs October", "Same as …", or "Nothing spent in …")
+  and "Biggest category" (amount · share), plus a donut of the top 4 categories and "Everything else" (5 slices, 5
+  colours). This replaces Phase 16's list-style summary card (D117).
+- With the web panel, the instruction asks for a reply of a sentence or two when a card shows the details.
+
+### D129. Deleting is human-in-the-loop, enforced by the server
+- **The guard:** with the web panel (`rich_ui`), `approvals.guard()` runs every delete the model asks for as a preview
+  (`confirmed=false`), and the instruction tells the model it can't delete.
+- **The card:** a delete preview card has Approve and Cancel (`approve_delete` / `cancel_delete`, with `userMessage`).
+  When it's sent, the server records `(thread id, surface id) -> expense id`.
+- **The decision:** Approve or Cancel goes to `agent.approval_turn()`, with no model involved. Approve deletes the
+  **recorded** expense through MCP, so the browser's `expense_id` is ignored. Each record is used once (`take()`)
+  and only in its own thread.
+- **The history:** the turn is stored as plain text ("I pressed Approve…", "Done…"), so later messages know what
+  happened.
+- **Closing the gaps:** a model-written form can't contain approval buttons (D125). The records are kept in memory
+  only, so a restart forgets them and the user asks again.
+- `POST /chat` (no buttons) keeps D53's text confirmation.
+- **Revisit when:** there's more than one server process; then store the records in the database.
+
+### D130. Which actions need approval
+- **Only deleting:** it can't be undone.
+- **No approval needed:** reads change nothing; adds and updates are visible (chips, cards, the page refresh) and
+  reversible.
+- Asking for approval too often trains people to click without reading. **Revisit when:** bulk changes, payments,
+  messages to other people, or anything outside the app arrive.
+- The delete *preview* still sends a `STATE_SNAPSHOT` (D111's known trade-off: the pages reload once for nothing).
+
+### D131. Smaller fixes in Phase 18
+- **Button messages:** a button's `userMessage` ("Approve deleting #14") is what your chat bubble shows for the click.
+- **Whole numbers:** action contexts list `int` before `float`, so an id stays `3` (it came out as `3.0`).
+- **The agent's switch:** `agent.stream`'s `forms` became `rich_ui`, because it now covers forms, cards and approval
+  buttons.
 

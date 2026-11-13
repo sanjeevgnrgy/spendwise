@@ -4,7 +4,7 @@ Internal to the assistant module (other modules don't use it). The service sends
 to the browser as AG-UI CUSTOM events named "a2ui", and receives form submissions as A2UI actions.
 """
 
-from app.modules.assistant.a2ui.cards import card_for
+from app.modules.assistant.a2ui.cards import approval_needed, card_for
 from app.modules.assistant.a2ui.forms import (
     SHOW_FORM_TOOL,
     SHOW_FORM_TOOL_NAME,
@@ -21,6 +21,7 @@ __all__ = [
     "ActionMessage",
     "CreateSurfaceMessage",
     "UserAction",
+    "approval_needed",
     "card_for",
     "describe_action",
     "expense_form_from_call",

@@ -2,13 +2,14 @@
 
 An agentic expense tracker, built one small phase at a time as a learning project.
 
-**Current state (Phase 17):** a React web app (`web/`) with a sidebar layout, light/dark theme, a
+**Current state (Phase 18):** a React web app (`web/`) with a sidebar layout, light/dark theme, a
 Dashboard (this month's total, category and 6-month trend charts, recent expenses), an
 Expenses page (sortable table, filters, add/edit/delete) and an Assistant chat panel on every page
 that shows the agent's reply as it's written, each tool it uses as a live status chip ("Saving expense…" → "Expense
-saved"), a card for each tool's result (expense saved, updated or deleted, the month's summary, found expenses) drawn
-from an A2UI description, a pre-filled form (written by the model and checked, or a built-in one) when details are
-missing, and refreshes the page as soon as a tool changes data, on top of a modular-monolith FastAPI
+saved"), a card for each tool's result drawn from an A2UI description (an insight card with stats and a donut chart for
+"where did my money go?", expenses saved, updated or found), a pre-filled form (written by the model and checked, or a
+built-in one) when details are missing, Approve/Cancel buttons before anything is deleted, and refreshes the page as
+soon as a tool changes data, on top of a modular-monolith FastAPI
 backend with a REST API for expenses
 (create, list with filters, read, update, delete), a monthly summary, a categories list,
 `POST /ask` (sends a prompt to Gemini), `POST /parse` (turns a note like "Paid 450 at Swiggy

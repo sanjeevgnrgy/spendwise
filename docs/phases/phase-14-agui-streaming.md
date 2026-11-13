@@ -18,7 +18,8 @@ pause. A new endpoint, `POST /agent`, accepts an **AG-UI** run input (`threadId`
 >
 > **Live check (gemini-3.5-flash-lite):** a real streamed reply arrived as `interaction.created`, a `thought` step with its
 > `thought_signature` delta, a `model_output` step with two `text` deltas, then `interaction.completed` without steps,
-> exactly the shape `GeminiStream` expects. A streamed *function call* (`arguments_delta`) hasn't been seen live yet.
+> exactly the shape `GeminiStream` expects. A streamed *function call* (`arguments_delta`) was first seen live in
+> Phase 18 (`get_summary`, `delete_expense`), and its arguments were rebuilt correctly.
 >
 > **Found while testing:** the chat hung forever. Live probes showed the free-tier quota was used up (Gemini answered
 > 429), and the SDK silently slept before retrying. Fixed by never retrying a 429 ([decisions.md](../decisions.md) D108).

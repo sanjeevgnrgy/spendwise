@@ -1,6 +1,6 @@
 # Sources: what the official docs and libraries say
 
-The facts that Phases 14 to 17 are built on: where each came from, what it says, and what SpendWise does with it.
+The facts that Phases 14 to 18 are built on: where each came from, what it says, and what SpendWise does with it.
 Earlier phases' doc facts are in [gemini.md](gemini.md) and the phase notes.
 
 All checked on **2026-11-13**. Each fact is marked with where it came from:
@@ -54,7 +54,8 @@ Gaps and conflicts we found:
 
 **Observed:** a live streamed reply from `gemini-3.5-flash-lite` came as `interaction.created`, a `thought` step with a
 `thought_signature` delta, a `model_output` step with two `text` deltas, then `interaction.completed` without steps.
-A streamed function call (`arguments_delta`) hasn't been seen live yet.
+In Phase 18, live streamed function calls (`get_summary`, `delete_expense`) were rebuilt correctly from their
+`arguments_delta` pieces.
 
 **Used in:** `core/llm.py` `GeminiStream` rebuilds the steps from the deltas ([decisions.md](decisions.md) D102).
 
@@ -247,6 +248,25 @@ What they say:
 - More pages read: https://a2ui.org/concepts/messages/,
   https://raw.githubusercontent.com/a2ui-project/a2ui/main/specification/v1_0/json/renderer_to_agent.json,
   https://docs.ag-ui.com/introduction, https://docs.ag-ui.com/concepts/generative-ui-specs.md
+
+**Custom catalogs (Phase 18):**
+- **The id:** a catalog's `catalogId` is "an arbitrary string ID and not a resolvable URI". It's conventionally a
+  URI, with a version in the path for breaking changes.
+- **Self-contained:** a `$ref` into another catalog "makes the catalog invalid".
+- **No extending:** a custom catalog can't extend the basic one. Catalogs are combined on one surface: a component
+  names its own with `"@catalogId"`.
+- **Resolution order** (verbatim): "1. Explicit Component/Function-Level Catalog ID", then "Surface Default
+  `catalogId`", else a resolution error, with "**no fallback**" to the renderer's declared catalogs.
+- **Renderers** advertise `supportedCatalogIds` (in `a2uiRendererCapabilities`). An unresolvable component "is not
+  rendered".
+- **No official chart:** the basic catalog has no chart; A2UI's `@a2ui/catalog-vegachart` is "Not published yet".
+- **Buttons** may carry a `userMessage` (DynamicString), sent along with the `action`.
+- Pages read: https://a2ui.org/concepts/catalogs/, https://a2ui.org/guides/defining-a-catalog/,
+  https://raw.githubusercontent.com/a2ui-project/a2ui/main/specification/v1_0/json/catalog_definition.json
+
+**Package** (shadcn's `web/src/components/ui/chart.tsx`): `ChartStyle` writes each config key and colour into a
+`<style>` tag with `dangerouslySetInnerHTML` (`--color-${key}: ${color};`). That's why the A2UI Chart uses a fixed
+config (D127).
 
 **Package** (ag-ui-protocol 1.0.0): `CustomEvent` has `name` and `value`. Its docstring: "The protocol's extension point
 for an application's own events. Anything a consumer does with one is outside the protocol."

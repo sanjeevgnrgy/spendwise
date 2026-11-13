@@ -2,6 +2,10 @@
 
 > **Later changes:** in Phase 16 the Expenses table gained a sortable **ID** column (`#14`), so ids shown by the
 > assistant can be matched to rows ([decisions.md](../decisions.md) D120).
+>
+> **Refactor (after Phase 18):** the folders are now feature slices (`src/features/…`, `src/shared`, `src/app`).
+> `api.ts` was split per feature, over a typed client generated from the backend's OpenAPI; data loads through
+> TanStack Query. See [refactor-architecture.md](refactor-architecture.md).
 
 **Goal:** a React web app in `web/` with a sidebar layout, light/dark theme, and a full Expenses page (sortable
 table, filters, row selection, add dialog, inline edit, delete with confirmation, toasts), talking to the backend,

@@ -1,5 +1,11 @@
 # Phase 3: Modular structure and data model
 
+> **Later changes:**
+> **Refactor (after Phase 18):** modules now speak in commands and queries through a bus (CQRS). Files were renamed by
+> role (`models.py` → `tables.py`, `schemas.py` → `contracts.py`, `service.py` → `commands.py` / `queries.py`,
+> `router.py` → `api.py`); `bootstrap.py` is the composition root; Alembic migrations create the tables instead of
+> `create_all`. See [refactor-architecture.md](refactor-architecture.md).
+
 **Goal:** restructure the backend into a modular monolith, add a database with `categories` and `expenses`
 modules, money helpers, and a seed script, keeping `/health` and `/ask` working.
 

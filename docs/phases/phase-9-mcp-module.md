@@ -1,5 +1,10 @@
 # Phase 9: MCP module
 
+> **Later changes:**
+> **Refactor (after Phase 18):** the server is built by `create_server(bus)`; tools return typed results
+> (`outputSchema`); new `get_expense`; `delete_expense` needs a strict `confirmed=true`; `/mcp/` is served over HTTP
+> only with `MCP_TOKEN`, as a bearer token. See [refactor-architecture.md](refactor-architecture.md).
+
 **Goal:** expose SpendWise's expense tools and data over the **Model Context Protocol (MCP)**, so any MCP-capable
 AI app (MCP Inspector, Claude Desktop, and later our own assistant) can use them. The server is mounted in the
 FastAPI app at `/mcp/`, and can also run over stdio for local tools.

@@ -5,6 +5,9 @@
 > See [phase-17-a2ui-forms.md](phase-17-a2ui-forms.md). In Phase 18 the month summary card became an insight card
 > (Stats and a donut chart), and the delete check card got Approve and Cancel buttons
 > ([phase-18-insight-cards.md](phase-18-insight-cards.md)).
+>
+> **Refactor (after Phase 18):** cards are built from the tools' typed results (MCP structured output); catalog ids
+> and action names are enums; money reads `₹1,234.50`. See [refactor-architecture.md](refactor-architecture.md).
 
 **Goal:** after the assistant saves an expense, the chat panel shows a small "Expense saved" card (amount, merchant,
 category, date). The card isn't HTML from the server. It's an **A2UI** description, which the browser draws with its

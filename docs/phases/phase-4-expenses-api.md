@@ -1,5 +1,10 @@
 # Phase 4: Expenses REST API
 
+> **Later changes (refactor after Phase 18):** routes moved to `/api/v1`. Router → service → repository became api → bus → command
+> or query handler (repositories only stage writes; the bus commits). Errors are RFC 9457 problem details; `GET
+> /expenses` returns `{items, total}` with `limit` and `offset`; `POST` answers with a `Location` header. See
+> [refactor-architecture.md](refactor-architecture.md).
+
 **Goal:** full CRUD for expenses over HTTP, a monthly summary, and a categories list. Amounts are typed in
 rupees and stored as paise.
 

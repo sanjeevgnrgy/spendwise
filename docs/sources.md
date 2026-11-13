@@ -1,6 +1,6 @@
 # Sources: what the official docs and libraries say
 
-The facts that Phases 14 to 18 are built on: where each came from, what it says, and what SpendWise does with it.
+The facts that Phases 14 to 18 and the architecture refactor are built on: where each came from, what it says, and what SpendWise does with it.
 Earlier phases' doc facts are in [gemini.md](gemini.md) and the phase notes.
 
 All checked on **2026-11-13**. Each fact is marked with where it came from:
@@ -287,6 +287,174 @@ for an application's own events. Anything a consumer does with one is outside th
 - Repository: `github.com/shadcn-ui/cn`.
 - It was added to `web/package.json` in Phase 11 by shadcn's setup, and shadcn's components import it. This corrects
   D99 (D119).
+
+---
+
+## 10. MCP Python SDK 2.3.0: in-process clients, structured output, HTTP security (refactor)
+
+**Package** (`.venv\Lib\site-packages\mcp\`):
+- `client/client.py`, class `Client`: "Pass a URL string (Streamable HTTP), a `StdioServerParameters` ..., any
+  `Transport`, or - in tests - a `Server` or `MCPServer` instance to connect to it in-process." With `mode="auto"`, "for
+  an in-process `Server`/`MCPServer` it dispatches directly without JSON-RPC framing". SpendWise's `McpExpenseTools`
+  passes the server object by default, or a URL with an `httpx2.AsyncClient` carrying the bearer token
+  (`streamable_http_client(url, http_client=...)`: "To configure headers, authentication ... create an
+  httpx2.AsyncClient and pass it here").
+- `server/mcpserver/server.py`, `tool(structured_output=None)`: "If None, auto-detects based on the function's return
+  type annotation". A tool annotated `-> ExpenseSaved` (a Pydantic model) gets an `outputSchema`, and its result
+  arrives as `CallToolResult.structured_content` (`mcp_types/_types.py`).
+- `server/lowlevel/server.py`, `streamable_http_app()`: "Auto-enable DNS rebinding protection for localhost": when no
+  `transport_security` is given and `host` is `127.0.0.1` (the default), only Host `127.0.0.1:*`, `localhost:*`,
+  `[::1]:*` and the matching `http://` Origins are accepted. **Observed:** a bad Host gets 421, a bad Origin 403.
+- `server/mcpserver/utilities/func_metadata.py`: tool arguments are validated by an `ArgModelBase` Pydantic model with
+  the default config, so **undeclared arguments are ignored**. **Observed:** `delete_expense(expense_id=1,
+  confirmed=false)` against a tool without `confirmed` deleted the expense. Hence the required, strict `confirmed`
+  (D145).
+- The SDK has no hook for a simple shared-secret check (its auth is OAuth), so `/mcp/` is wrapped in a small ASGI
+  middleware (`mcp/http.py`, D150).
+
+**Web:** the MCP spec's Streamable HTTP security warning
+(https://modelcontextprotocol.io/specification/2025-06-18/basic/transports):
+- "Servers MUST validate the Origin header on all incoming connections to prevent DNS rebinding attacks"
+- "When running locally, servers SHOULD bind only to localhost (127.0.0.1) rather than all network interfaces"
+- "Servers SHOULD implement proper authentication for all connections"
+
+---
+
+## 11. AG-UI in TypeScript: `@ag-ui/core` 1.0.4 (refactor)
+
+**Package** (`web/node_modules/@ag-ui/core`):
+- README: "`@ag-ui/core` delivers the strongly-typed building blocks ... Runtime validation – schemas catch malformed
+  payloads early." The validators live at `@ag-ui/core/schemas`; zod is an optional peer dependency ("the main entry
+  never loads it").
+- `dist/index.d.ts` exports the `EventType` enum (also at runtime) and the `Event` union; `dist/schemas.d.ts` exports
+  `EventSchemas` (a zod discriminated union). Each event schema keeps `metadata` (`z.ZodOptional<...Record<string,
+  any>>`), so our `metadata.ok` and `metadata.labels` survive validation.
+
+**Package** (`.venv\...\ag_ui\_generated\models.py`): every event's `BaseEvent` has `metadata: Optional[Metadata]`,
+"Extra information attached to this event". `TOOL_CALL_START` carries the chip labels there (D157).
+
+---
+
+## 12. Alembic 1.20.1 (refactor)
+
+**Web:**
+- https://alembic.sqlalchemy.org/en/latest/batch.html: "The SQLite database presents a challenge to migration tools in
+  that it has almost no support for the ALTER statement". Batch mode copies the table into a new one instead. "To
+  support rendering of migration commands in batch mode for autogenerate, configure the
+  EnvironmentContext.configure.render_as_batch flag in env.py". It's "safe to use in all cases, as the
+  Operations.batch_alter_table() directive by default only takes place for SQLite".
+- Running commands from code: `alembic.command.upgrade(config, "head")`.
+  https://alembic.sqlalchemy.org/en/latest/api/commands.html
+- Checking the version: `MigrationContext.configure(connection).get_current_revision()` and
+  `ScriptDirectory.from_config(config).get_current_head()`.
+  https://alembic.sqlalchemy.org/en/latest/api/runtime.html
+
+**Package:** `alembic/templates/generic/script.py.mako` was copied as `backend/migrations/script.py.mako`.
+
+---
+
+## 13. RFC 9457: problem details for HTTP APIs (refactor)
+
+**Web:** https://www.rfc-editor.org/rfc/rfc9457
+- "When serialized in a JSON document, that format is identified with the "application/problem+json" media type."
+  Members: `type`, `title`, `status`, `detail`, `instance`; extension members (our `errors` list) are allowed.
+- "The "type" member is a JSON string containing a URI reference that identifies the problem type." "The type URI is
+  allowed to be a non-resolvable URI" (its example is a `tag:` URI), "However, resolvable type URIs are encouraged".
+  SpendWise uses non-resolvable `urn:spendwise:problem:<kind>` names, as it has no public documentation site to point
+  them at yet (D149).
+
+---
+
+## 14. TanStack Query v5 (refactor)
+
+**Web:**
+- https://tanstack.com/query/v5/docs/framework/react/guides/query-cancellation: "TanStack Query provides each query
+  function with an AbortSignal instance. When a query becomes out-of-date or inactive, this signal will become
+  aborted." Cancelling only works if the signal is passed on (we pass it to openapi-fetch and `fetch`).
+- https://tanstack.com/query/v5/docs/framework/react/guides/query-invalidation: an invalidated query "is marked as
+  stale", and "If the query is currently being rendered via useQuery or related hooks, it will also be refetched in
+  the background".
+- `placeholderData: keepPreviousData` keeps showing the last results while new ones load:
+  https://tanstack.com/query/v5/docs/framework/react/guides/paginated-queries
+- Typing `meta` app-wide by declaring it on the `Register` interface:
+  https://tanstack.com/query/v5/docs/framework/react/typescript
+
+**Package** (`web/node_modules/@tanstack/query-core`, 5.107.1, its `.d.ts`): a mutation's `meta` can be "read back from
+`mutationFn`, callbacks and cache-level handlers. Defaults to `Record<string, unknown>`; declare `mutationMeta` on
+Register to narrow it." That's how `app/query-client.ts` reads `meta.changes` in one `MutationCache` handler, and why
+`shared/config/data-scopes.ts` declares `mutationMeta` (a misspelt scope is a compile error) (D168).
+
+---
+
+## 15. openapi-typescript 7.13.0 and openapi-fetch 0.17.0 (refactor)
+
+**Web:** https://openapi-ts.dev/cli and https://openapi-ts.dev/openapi-fetch/
+- `--enum-values` (default false): "Export enum values as arrays." We use `paymentMethodValues`.
+- `--default-non-nullable` (default true): "Treat schema objects with default values as non-nullable (with the
+  exception of parameters)". That made `currency` required in `CreateExpense`, though the server fills it in, so
+  `gen:api` passes `--default-non-nullable false`.
+- openapi-fetch's calls resolve to `{ data, error, response }`, typed from the same `paths`.
+
+**Observed:** `npm view openapi-typescript@7.13.0 peerDependencies` is `typescript: ^5.x` (no release supports
+TypeScript 7 yet), so it can't be a dev dependency here; `gen:api` runs it pinned through `npx` (D160).
+
+---
+
+## 16. oxlint 1.93 and React (refactor)
+
+**Observed:** oxlint's `no-restricted-imports` accepts ESLint's `patterns` with `group` and `message`, and `overrides`
+apply it per folder. Patterns match the import text (gitignore-style), so `../../**` from one folder deep means
+"leaves the feature". Each rule was checked with a deliberate violation.
+
+**Web:**
+- Catching rendering errors needs a class component's `componentDidCatch` / `getDerivedStateFromError`: "There is no
+  direct equivalent for componentDidCatch in function components yet."
+  https://react.dev/reference/react/Component#catching-rendering-errors-with-an-error-boundary
+- `useSyncExternalStore` subscribes to a source outside React (here, a media query) without setState in an effect:
+  https://react.dev/reference/react/useSyncExternalStore
+
+---
+
+## 17. SQLAlchemy 2.1.8 and SQLite transactions (code review)
+
+**Package:** `sqlalchemy/dialects/sqlite/base.py`, section "Transactions with SQLite and the sqlite3 driver" (the
+pysqlite docs' "Serializable isolation / Savepoints / Transactional DDL" section now points there).
+- Python's `sqlite3` driver by default uses a "legacy transaction mode" that "does not "begin" a transaction
+  automatically", "skips it for DDL (e.g. CREATE TABLE etc.) statements", and "Statements such as SAVEPOINT are also
+  skipped".
+- So: "**Incorrect support for transactional DDL**", and "**Incorrect behavior for SAVEPOINT**".
+- The fix for all Python versions: "Using SQLAlchemy to emit BEGIN in lieu of SQLite's transaction control": set the
+  driver connection's `isolation_level = None` in a `connect` event, and emit `BEGIN` in a `begin` event.
+  `core/db.py` does exactly that, so `begin_nested()` (SAVEPOINT) and transactional migrations work (D163).
+
+**Web:** the same recipe in the 2.0 docs:
+https://docs.sqlalchemy.org/en/20/dialects/sqlite.html#serializable-isolation-savepoints-transactional-ddl
+
+**Observed:** before the fix, a migration that failed half-way left the table renamed but not converted; after it,
+the same failure left the database exactly as it was, and a failing nested command undid only its own row.
+
+---
+
+## 18. RFC 9110: the authentication scheme is case-insensitive (code review)
+
+**Web:** https://www.rfc-editor.org/rfc/rfc9110#section-11.1: HTTP "uses a case-insensitive token to identify the
+authentication scheme". So `bearer abc` is as valid as `Bearer abc`; the MCP endpoint's check accepts both (D165).
+
+---
+
+## 19. Starlette 1.10.0: the order of middleware (code review)
+
+**Package:** `starlette/applications.py`.
+- `add_middleware()` does `self.user_middleware.insert(0, ...)`: the middleware added **last** is the **outermost**.
+- "`ServerErrorMiddleware` is added as the very outermost middleware", and "`ExceptionMiddleware` is added as the very
+  innermost". An unexpected error reaching `ServerErrorMiddleware` has already left CORS, so its 500 carries no CORS
+  headers and the browser can't read it.
+
+So `main.py` adds `UnexpectedErrorMiddleware` first and CORS after: CORS wraps it, and a 500 problem is readable
+(D165).
+
+**Observed:** a route that raised a plain exception answered 500 with `access-control-allow-origin` set and a problem
+body.
 
 ---
 

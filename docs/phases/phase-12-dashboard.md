@@ -1,5 +1,9 @@
 # Phase 12: Dashboard
 
+> **Later changes (refactor after Phase 18):** the Dashboard loads through TanStack Query (`useMonthlySummary`, `useMonthlyTrend`,
+> `useExpenses`), with one shared chart config; amounts read `₹1,234.50`. See
+> [refactor-architecture.md](refactor-architecture.md).
+
 **Goal:** a Dashboard page with this month's total, a category breakdown chart, a 6-month trend line and the 5 most
 recent expenses, built from shadcn Cards and shadcn charts, with loading skeletons and empty states. Backed by a new
 `GET /summary/trend?months=6`.

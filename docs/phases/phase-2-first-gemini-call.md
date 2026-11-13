@@ -1,5 +1,10 @@
 # Phase 2: First Gemini call
 
+> **Later changes:**
+> **Refactor (after Phase 18):** `POST /ask` was removed: it sent any prompt to Gemini, an open proxy to your quota.
+> `core/llm.py` became `core/llm/`, a provider-neutral port with a Gemini adapter. See
+> [refactor-architecture.md](refactor-architecture.md).
+
 **Goal:** `POST /ask` takes `{"prompt": "..."}` and returns Gemini's answer, with the API key and model read from `.env`.
 
 > **Later changes:** in Phase 3, `ask_gemini` moved to `backend/app/core/llm.py`, `/ask` moved to

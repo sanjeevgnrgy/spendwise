@@ -1,5 +1,9 @@
 # Phase 6: Structured output
 
+> **Later changes:**
+> **Refactor (after Phase 18):** `/parse` is `POST /api/v1/parse`, a query (`ParseExpenseText`) in the assistant
+> module; the model call is `core.llm.ask_for_json()`. See [refactor-architecture.md](refactor-architecture.md).
+
 **Goal:** `POST /parse` turns a note like *"Paid 450.50 at Swiggy yesterday via GPay"* into a structured
 expense (amount, currency, category, merchant, date, payment method, note), using Gemini's structured
 output, **without saving it**.

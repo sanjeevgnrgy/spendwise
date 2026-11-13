@@ -1,5 +1,9 @@
 # Phase 8: Memory
 
+> **Later changes (refactor after Phase 18):** threads moved to a new **conversations** module (`conversation_message`) and are
+> stored as provider-neutral messages, not raw Gemini steps; a migration converted the old ones. `GET
+> /api/v1/threads/{id}`. See [refactor-architecture.md](refactor-architecture.md).
+
 **Goal:** `/chat` remembers the conversation. Each conversation is a **thread** with a `thread_id`. Its messages
 (the user's, the model's, tool calls and their results) are stored in a `ChatMessage` table owned by the assistant
 module, and the recent ones are sent with every new message so follow-ups like *"actually it was 300"* work.

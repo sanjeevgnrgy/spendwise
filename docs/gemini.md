@@ -52,11 +52,14 @@ are in AI Studio at https://aistudio.google.com/rate-limit.
 
 ## How the app calls Gemini
 
-All Gemini code is in `backend/app/core/llm.py`:
+The rest of the app talks to an **LLM port**, the `LanguageModel` protocol in `backend/app/core/llm/port.py`, in
+SpendWise's own provider-neutral message types (`core/llm/messages.py`). All Gemini code is in one adapter,
+`GeminiModel` in `backend/app/core/llm/gemini.py` (D142), which `bootstrap.py` creates and injects (D166); the chat
+history is stored in the neutral types, not Gemini's format (D141).
+At its core:
 
 ```python
-interaction = client.interactions.create(model=settings.gemini_model, input=prompt, store=False)
-return interaction.output_text
+client.interactions.create(model=settings.gemini_model, store=False, **request)
 ```
 
 It uses the **Interactions API** (`client.interactions.create`), which Google recommends for new projects.
@@ -65,7 +68,7 @@ See [decisions.md](decisions.md) D6–D9 for the reasoning.
 
 ## Structured output
 
-`ask_gemini_for_json(prompt, schema, system_instruction)` makes Gemini answer with JSON that fits a schema
+`llm.ask_for_json(prompt, schema, system_instruction)` makes Gemini answer with JSON that fits a schema
 (used by `POST /parse`, see [phases/phase-6-structured-output.md](phases/phase-6-structured-output.md)):
 
 ```python
@@ -83,8 +86,8 @@ response_format={"type": "text", "mime_type": "application/json", "schema": Some
 
 ## Function calling
 
-`stream_gemini_with_tools(history, tools, system_instruction, thinking_level)` runs one step of a tool-using
-conversation, streamed (used by `POST /chat` and `POST /agent`, see
+`llm.stream_with_tools(history, tools, system_instruction, effort)` runs one step of a tool-using conversation,
+streamed (used by `POST /api/v1/chat` and `POST /api/v1/agent`, see
 [phases/phase-7-function-calling-chat.md](phases/phase-7-function-calling-chat.md) and
 [phases/phase-14-agui-streaming.md](phases/phase-14-agui-streaming.md)):
 
@@ -95,7 +98,8 @@ conversation, streamed (used by `POST /chat` and `POST /agent`, see
   a function call's name and id with empty arguments), `step.delta` pieces (`text`, `arguments_delta` JSON fragments,
   `thought_signature`, `thought_summary`) and `step.stop`, then `interaction.completed` (status and usage, **no steps**),
   or an `error` event. `GeminiStream` yields the `text` pieces and rebuilds the steps from the deltas, because the
-  next request must resend them unchanged.
+  next request must resend them unchanged. It hands them back as neutral messages (`.messages`); `to_steps()` turns
+  the history back into Gemini steps for the next request, including the thought signatures.
 - **Results (stateless, `store=False`):** resend the whole history every time. That means the `user_input`, then
   every step Gemini returned **unchanged**, then one `{"type": "function_result", "name", "call_id", "is_error",
   "result": [{"type": "text", "text": "<json>"}]}` per call.
@@ -106,8 +110,8 @@ conversation, streamed (used by `POST /chat` and `POST /agent`, see
 
 ## Conversation memory and cost
 
-Gemini remembers nothing between requests, and with `store=False` Google keeps nothing either. So `/chat` stores each
-thread's steps in the `ChatMessage` table and resends the **last 10 turns** with every new message
+Gemini remembers nothing between requests, and with `store=False` Google keeps nothing either. So the conversations module stores each
+thread's messages (`conversation_message`, provider-neutral) and resends the **last 10 turns** with every new message
 ([phases/phase-8-memory.md](phases/phase-8-memory.md)). Every token of that history is billed on every request, and
 again on every step of the agent loop, so the cap keeps long conversations from getting ever more expensive. The
 console shows `tokens: N in, M out` for each step.
@@ -116,7 +120,7 @@ console shows `tokens: N in, M out` for each step.
 
 The client gives up on an attempt after **60 s** and makes **at most 2 attempts**, retrying **only 5xx errors**
 (`HttpOptions(timeout=60_000, retry_options=HttpRetryOptions(attempts=2, http_status_codes=[500, 502, 503, 504]))`
-in `core/llm.py`):
+in `core/llm/gemini.py`):
 - The SDK's defaults (5 attempts, up to 60 s apart) made requests hang for many minutes while Gemini was down.
 - The limit was 30 s in Phase 6, but function-calling steps can legitimately take 20–30 s.
 - Google's quick "high demand" errors still fail fast; only a hung connection takes up to about 2 minutes.
@@ -126,9 +130,9 @@ in `core/llm.py`):
 
 ## When something goes wrong
 
-| What you see from `POST /ask` or `POST /parse` | Meaning | Where to look |
+| What you see from `POST /api/v1/parse` (or `/chat`) | Meaning | Where to look |
 |---|---|---|
-| `422` | The request body is invalid, e.g. an empty prompt or over 4000 characters | The `detail` field says which rule failed |
+| `422` | The request body is invalid, e.g. empty text or too long | The problem's `detail` and `errors` say which rule failed |
 | `500 Internal Server Error` | Our setup is wrong: `GEMINI_API_KEY` or `GEMINI_MODEL` isn't set | The server terminal says which setting is missing |
 | `502` with "API key not valid" | Gemini rejected the key | Re-copy the key into `.env`, then restart |
 | `502` with a quota or rate-limit message | Free-tier limit reached | AI Studio rate-limit page; wait for the reset |
@@ -143,6 +147,6 @@ in `core/llm.py`):
 
 - A token is a chunk of text, about **4 characters** for Gemini; 100 tokens is roughly 60–80 English words.
 - Input (your prompt), output (the answer) and the model's thinking are all counted.
-- `/ask` caps prompts at 4000 characters (about 1000 tokens) to limit cost and abuse.
+- `/parse` caps notes at 500 characters and `/chat` messages at 2000, to limit cost and abuse. (`/ask`, which sent any prompt to Gemini, was removed: D150.)
 - Each response reports its usage (`interaction.usage`: `total_input_tokens`, `total_output_tokens`,
-  `total_thought_tokens`, `total_tokens`). SpendWise doesn't show these yet.
+  `total_thought_tokens`, `total_tokens`). The agent logs input and output tokens for each step.

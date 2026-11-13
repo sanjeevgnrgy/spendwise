@@ -1,213 +1,282 @@
-# Architecture: modular monolith
+# Architecture
 
-## The idea
+SpendWise is **one backend** (FastAPI, a modular monolith with CQRS) and **one web app** (React, organised as feature
+slices). Each half has strict boundaries, and the two share one contract that's generated from the backend.
 
-SpendWise's backend is **one FastAPI app, deployed as one unit, with one database**, but divided
-inside into **modules by business domain**: expenses, categories, assistant, and later budgets,
-splits, receipts, auth and mcp.
+## The backend: a modular monolith
 
-Think of an apartment building. Everyone shares the foundation and the plumbing (`core/`).
-Each flat (module) has its own locked door. When you need something from a neighbour, you knock
-(call their public interface); you don't walk through the wall.
+**One app, deployed as one unit, with one database**, divided inside into **modules by business domain**:
+categories, expenses, conversations, assistant, and an MCP adapter.
 
-- **Compared with microservices** (separate buildings): one process to run, debug and deploy;
-  calls between modules are plain function calls, not network requests.
-- **Compared with a "big ball of mud"** (one open-plan floor): the boundaries keep code from
-  tangling, so each part can change without breaking the others.
-- **Escape hatch:** because modules only meet through their public interfaces, any one of them
-  can later be moved out into its own service.
+Think of an apartment building. Everyone shares the foundation and the plumbing (`core/`). Each flat (module) has its
+own locked door. When you need something from a neighbour, you knock (send a command or query through the bus, using
+their contract); you don't walk through the wall.
 
-## Layout
+- **Compared with microservices** (separate buildings): one process to run, debug and deploy; calls between modules
+  are plain function calls, not network requests.
+- **Compared with a "big ball of mud"** (one open-plan floor): the boundaries keep code from tangling, so each part can
+  change without breaking the others.
+- **Escape hatch:** because modules only meet through their contracts, any one of them can later move into its own
+  service.
+
+### CQRS: commands and queries
+
+Every business operation is one of two kinds:
+
+- a **command** asks for a change (`CreateExpense`, `DeleteExpense`) and returns at most an id;
+- a **query** asks for data (`GetMonthlySummary`, `ListExpenses`) and changes nothing.
+
+Each is a small frozen Pydantic model with exactly one handler. Nobody calls a handler directly: everything goes
+through the **bus** (`core/cqrs.py`): `bus.execute(command)`, `bus.ask(query)`.
+
+The bus is also the **unit of work**. The outermost message opens a database session. A command's session is
+committed when its handler returns, and rolled back if it raises. A message sent from inside a handler (`ctx.bus`)
+joins the same session, so a command and the checks it makes are one transaction. A command sent from inside another
+runs in a **SAVEPOINT**: if it fails and the caller carries on, only its own changes are undone. A query can't send a
+command. `with bus.unit_of_work():` groups several commands into one transaction (D163).
+
+This is "CQRS-lite": reads and writes are separate operations on the **same** database. Separate read databases or
+event sourcing would be overkill here (D139).
+
+### Layout
 
 ```
-spendwise/
-  backend/
-    app/
-      main.py           composition root: creates the app, wires in every module
-      core/             shared technical code, no business rules
-        config.py       settings from .env
-        db.py           engine, table creation, get_session / SessionDep
-        errors.py       NotFoundError (404), BusinessRuleError (422), ExternalServiceError (502), handlers
-        logging.py      console logging for spendwise.* loggers
-        money.py        rupees <-> paise
-        llm.py          ask_gemini(), ask_gemini_for_json(), stream_gemini_with_tools()
-      modules/
-        assistant/      POST /ask, /parse, /chat, /agent (AG-UI stream), GET /threads; ChatMessage table (parse, agent, mcp_client)
-          a2ui/         A2UI v1.0 models (the basic subset + SpendWise's insights catalog: Chart, Stat),
-                        ready-made cards, and the expense form (model-written, checked, or the built-in one),
-                        sent as AG-UI CUSTOM events
-          approvals.py  human in the loop: deletes run only after Approve (the server's record of each card)
-        mcp/            MCP server "spendwise": 5 tools (with read-only/destructive annotations), 2 resources; mounted at /mcp/ (no tables)
-        categories/     Category table, GET /categories, public interface
-        expenses/       Expense table, CRUD routes + GET /summary, /summary/trend, public interface
-    seed.py             sample data, using modules' public interfaces
-    mcp_stdio.py        runs the MCP server over stdio (Inspector, Claude Desktop)
-  agents/               (planned) A2A agents: receipt, insights, currency; separate services
-  skills/               (planned) Agent Skills
-  web/                  React + Vite + TypeScript, Tailwind, shadcn/ui (talks to the backend over HTTP)
+backend/
+  app/
+    main.py              the web app: FastAPI, error handlers, CORS, routes under /api/v1, /health, /mcp/
+    bootstrap.py         the composition root: the one list of modules; builds the bus, the MCP server, the routers
+    migrations.py        run / check the Alembic migrations from code
+    core/                shared technical code, no business rules; never imports a module
+      config.py          settings from .env; API_PREFIX, API_VERSION, MCP_PATH
+      cqrs.py            Command, Query, MessageBus (also the unit of work)
+      db.py              the engine (SQLite made transactional: DDL, savepoints), new_session(), RecordId, MAX_ID
+      errors.py          NotFoundError, BusinessRuleError, ExternalServiceError -> RFC 9457 problem details;
+                         the unexpected-error middleware
+      clock.py           Clock (today, now), instead of date.today()
+      dependencies.py    BusDep, ClockDep, IdPath for routes
+      months.py          YearMonth: "2026-11", its range and arithmetic
+      money.py           rupees <-> paise, CURRENCY_PATTERN, format_money
+      logging.py         console logging for our own loggers ("app.*")
+      llm/               the LLM port (port.py: LanguageModel, LlmStream, LlmError), neutral messages
+                         (messages.py), the Gemini adapter (gemini.py: GeminiModel)
+    modules/
+      categories/        contracts.py, tables.py, commands.py, queries.py, api.py, module.py
+      expenses/          the same, plus domain.py (rules) and repository.py (the write side's table access)
+      conversations/     stored chat threads (provider-neutral messages); GET /threads/{id}
+      assistant/         the agent: api.py, agui.py (AG-UI adapter), turns.py (use cases), agent.py (the loop),
+                         tools.py (expense-tools port + MCP adapter), approvals.py, parse.py (the /parse use
+                         case), a2ui/ (cards, forms),
+                         events.py, protocol.py, schemas.py, tables.py (pending_approval)
+      mcp/               MCP adapter: contracts.py (tool and argument names, typed results; all __init__ exports),
+                         server.py, http.py (bearer token), module.py (for the composition root)
+  migrations/            Alembic: env.py and versions/0001_baseline, 0002_neutral_conversations, 0003_expense_version
+  scripts/               export_contracts.py (the contract for the web app)
+  seed.py                sample data, through the bus
+  mcp_stdio.py           the MCP server over stdio (Inspector, Claude Desktop)
 ```
 
-Modules and folders are added only in the phase that needs them.
-
-## The rules
+### The rules
 
 1. **Split by business domain**, never by technical layer. There is no app-wide `models/` or `routers/` folder.
-2. **Each module lives in `backend/app/modules/<name>/`** and owns its tables (`models.py`), `schemas.py`,
-   `repository.py`, `service.py` and `router.py`. It only grows the files it actually needs.
-3. **Layers inside a module:** router (HTTP only) → service (business rules) → repository (database).
-   No business logic in routers.
-4. **Modules talk only through public interfaces:** the names exported from `modules/<name>/__init__.py`
-   (service functions and DTOs). Never import another module's models, repository or router, and never
-   query another module's tables.
-5. **Services return DTOs** (frozen Pydantic models such as `CategoryRead`), never table rows.
-6. **Links between modules are plain ids** with no database foreign key. They are checked through the
-   other module's service.
-7. **`core/` never imports from `modules/`.** It holds config, db, errors, money and the LLM client;
-   logging and events come later.
-8. **`main.py` is the composition root:** the only file that knows every module.
-9. **Cross-module reactions** ("an expense was created") will go through a small in-process event bus
-   in `core/`, added when first needed.
+2. **Each module lives in `backend/app/modules/<name>/`** and owns its tables, contracts and handlers:
+   - `contracts.py`: commands, queries and the data they carry: everything other code may use;
+   - `tables.py`: its tables, private;
+   - `commands.py` / `queries.py`: one handler per message;
+   - `domain.py`: business rules (if any);
+   - `repository.py`: the write side's table access (if needed);
+   - `api.py`: HTTP routes, which only translate HTTP into messages;
+   - `module.py`: what the composition root plugs in (handlers, routes, tables).
+3. **Modules talk only through contracts and the bus.** Another module's names come from its package
+   (`from app.modules import categories` → `categories.GetCategory`), never from its files. Never query another
+   module's tables.
+4. **Commands return at most an id; queries change nothing.** A route that must answer with data sends the command,
+   then asks a query. A query that tries to send a command is refused.
+5. **Handlers never commit.** The bus does, once per outermost command. Repositories only stage changes.
+6. **Links between modules are plain ids** with no database foreign key, checked through the other module's queries.
+7. **`core/` never imports from `modules/`.**
+8. **`bootstrap.py` is the composition root:** the only file that knows every module. `main.py`, `seed.py`,
+   `mcp_stdio.py` and the migrations all build from it. Nothing registers itself just by being imported.
+9. **Adapters translate, use cases decide.** REST routes, the MCP server and the AG-UI adapter are adapters over the
+   same commands and queries. The assistant's use cases yield plain events; `agui.py` turns them into AG-UI.
+10. **Ports for the outside world:** the LLM (`core/llm/port.py`: `LanguageModel`) and the expense tools
+    (`assistant/tools.py`: `ExpenseTools`) are protocols with one adapter each (`GeminiModel`; `McpExpenseTools`,
+    in-process by default). `bootstrap.build()` creates the adapters and injects them; nothing else imports a provider
+    (D166).
+11. **No magic strings:** protocol names, tool names, keys and limits are enums or constants, defined once and
+    exported from the module that owns them.
+12. **No slow work inside a unit of work.** A model call can take two minutes; it never runs while a database session
+    is open (D164).
 
-## Why each module owns its tables
+### Why each module owns its tables
 
-If any module can query any table, that table's columns become a promise to everyone. Renaming a column
-or adding a rule then means hunting down every place that reads it. When only `expenses` touches the
-expense table, it can rename columns, add indexes or move to another database, and nobody else notices,
-as long as its public functions keep working the same way.
+If any module can query any table, that table's columns become a promise to everyone. Renaming a column or adding a
+rule then means hunting down every place that reads it. When only `expenses` touches the expense table, it can rename
+columns, add indexes or move to another database, and nobody else notices, as long as its contract keeps working.
 
-That's also why `expense.category_id` has **no foreign key**. A foreign key would tie the two modules'
-tables together at the database level. Instead, `expenses.create_expense()` asks
-`categories.get_category()` whether the category exists. The trade-off: the database no longer guards
-that link, so the service must, and it does.
+That's also why `expense.category_id` has **no foreign key**. A foreign key would tie the two modules' tables together
+at the database level. Instead, `CreateExpense`'s handler asks `categories.GetCategory` whether the category exists.
 
-## Public interfaces today
+### Public interfaces today
 
-| Module | Exports (`from app.modules import <name>`) | Used by |
+| Module | Contract (`from app.modules import <name>`) | Used by |
 |---|---|---|
-| `categories` | `CategoryCreate`, `CategoryRead`, `create_category`, `get_category`, `list_categories` | `expenses`, `assistant`, `seed.py` |
-| `expenses` | `ExpenseCreate`, `ExpenseUpdate`, `ExpenseRead`, `ExpenseFilters`, `MonthlySummary`, `CategoryTotal`, `PaymentMethod`, `create_expense`, `get_expense`, `list_expenses`, `update_expense`, `delete_expense`, `monthly_summary`, `monthly_trend` (+ `MonthlyTrend`, `MonthTotal`) | `mcp`, `assistant` (`PaymentMethod` only, for `/parse`), `seed.py` |
-| `assistant` | nothing yet | — |
+| `categories` | `CategoryRead`, `CreateCategory`, `ListCategories`, `GetCategory`, `FindCategoryByName`, `CategoryId`, `MAX_NAME_LENGTH`, `UNKNOWN_CATEGORY`, `NO_CATEGORIES_YET` | expenses, mcp, assistant, seed |
+| `expenses` | `ExpenseRead`, `ExpenseList`, `CreateExpense`, `UpdateExpense` + `ExpenseChanges`, `DeleteExpense` (with `expected_version`), `GetExpense`, `ListExpenses`, `GetMonthlySummary`, `GetMonthlyTrend` (+ their result types), `ExpenseId`, `MAX_LIST_LIMIT`, `PaymentMethod`, `PAYMENT_METHOD_LABELS` | mcp, assistant (`PaymentMethod`, labels), seed |
+| `conversations` | `AppendTurn`, `GetLastTurn`, `GetHistory`, `GetThread`, `ThreadRead`, `ThreadId`, `THREAD_ID_MAX_LENGTH` | assistant |
+| `mcp` | `ToolName`, `ResourceUri`, `SERVER_NAME`, the argument names (`EXPENSE_ID_ARGUMENT`, `CONFIRM_ARGUMENT`, `EXPECTED_VERSION_ARGUMENT`, `CLEAR_NOTE_ARGUMENT`), the typed results (`ExpenseView`, `ExpenseSaved`, `MonthSpending`, ...). The server itself (`create_server`, `create_http_app`) comes from `mcp/module.py`, for the composition root only | assistant |
+| `assistant` | nothing (the composition root uses its `module.py`) | — |
 
-| `mcp` | nothing | — (it *uses* `expenses` and `categories`) |
+Each module's `module.py` is what `bootstrap.py` plugs in: `register_handlers(bus)`, its router (or a function that
+builds one), its `TABLES`. Only `bootstrap.py` and `main.py` import a `module.py`.
 
-Routers and the MCP `server` object are not part of any public interface; only `main.py` (and `mcp_stdio.py`)
-import them.
+### Migrations
 
-**Two adapters, one set of services.** The REST routers and the MCP module each translate their own protocol
-(HTTP/JSON, MCP) into calls to the same public service functions. The business rules live in the services, so they
-apply to every way in.
+Tables are created and changed by **Alembic migrations** (`backend/migrations`), never by the app. `.\run.ps1` runs
+`alembic upgrade head` before starting, and the app refuses to start on an out-of-date database. To change a table:
+change its `tables.py`, then `.\.venv\Scripts\python.exe -m alembic -c backend\alembic.ini revision --autogenerate -m "..."`,
+read the generated file, and run `upgrade head`.
 
-**The assistant's agent goes through MCP** (since Phase 10). It doesn't import the expenses module: it connects to
-`MCP_URL` as an MCP client, discovers the tools there, and asks the MCP server to run them. By default that URL is
-this same app, so `/chat` makes HTTP calls to `/mcp/` on its own server.
+An upgrade runs in **one transaction, schema changes included**: if any step fails, the database is left exactly as it
+was (D163). Details of every table and migration: [database_schema.md](database_schema.md).
 
-## How a request flows
+### Changes that can't be lost: versions
 
-`POST /ask`:
+`expense.version` starts at 1 and every update raises it. `DeleteExpense` can carry an `expected_version`, checked in
+the `DELETE` statement itself (`WHERE id = ? AND version = ?`). The assistant's Approve passes the version its card
+showed, so an expense edited while the card waited is never deleted unseen (D162).
+
+### Errors
+
+Handlers raise `NotFoundError`, `BusinessRuleError` or `ExternalServiceError` (e.g. `LlmError`). `core/errors.py` turns
+them, FastAPI's validation errors and its own 404/405 into one shape, RFC 9457 problem details:
+
+```json
+{"type": "urn:spendwise:problem:not-found", "title": "Not found", "status": 404,
+ "detail": "Expense 14 not found", "instance": "/api/v1/expenses/14"}
+```
+
+Anything else (a bug) becomes a generic 500 problem in `UnexpectedErrorMiddleware`, which sits **inside** CORS so the
+browser can still read it; the traceback goes only to the log. FastAPI's own errors keep their headers (`Allow` on a
+405) (D165).
+
+### How a request flows
+
+`POST /api/v1/expenses`:
 
 ```
 HTTP request
-  -> main.py (app)                      includes the assistant router
-  -> modules/assistant/router.py        validates the body (AskRequest)
-  -> modules/assistant/service.py       answer(prompt): orchestration grows here later
-  -> core/llm.py                        ask_gemini(): the only code that talks to Gemini
-  -> Gemini API
+  -> expenses/api.py         FastAPI validates the body (the CreateExpense command) -> 422 problem if malformed
+  -> bus.execute(command)    opens a session (the unit of work)
+       -> expenses/commands.create_expense()
+            -> domain.require_positive_amount()
+            -> ctx.bus.ask(categories.GetCategory(...))   another module's query, in the same session
+            -> repository.add()                          staged; flush assigns the id
+       <- the bus commits
+  -> bus.ask(GetExpense(id)) the answer, as a query
+  <- 201, Location: /api/v1/expenses/{id}, the ExpenseRead
 ```
 
-`POST /expenses`:
+`POST /api/v1/agent` (AG-UI over Server-Sent Events; the chat panel uses this one):
 
 ```
-HTTP request
-  -> modules/expenses/router.py         FastAPI validates the body (ExpenseCreate) -> 422 with a list if malformed
-  -> modules/expenses/service.py        create_expense(): amount > 0? category exists?
-       -> categories.get_category()     public interface of another module: "does category 3 exist?"
-       -> rupees_to_paise()             core/money.py
-       -> expenses/repository.add()     the only code that writes the expense table
-  <- ExpenseRead (frozen copy)           router returns it with 201
+HTTP request (RunAgentInput)
+  -> assistant/api.py        a sync generator with EventSourceResponse (a worker thread; a ping every 15 s)
+  -> agui.read_request       a dependency: checks the thread id and reads the run (a button click in
+                             forwardedProps.a2uiAction, or the newest message); a bad run is a 422 before streaming
+  -> assistant/agui.py       RUN_STARTED, then:
+       Approve / Cancel  -> turns.Assistant.decide():  TakeApproval (the snapshot) -> agent.approval_turn(): no model;
+                            the whole decision completes (or the card is put back) before anything streams
+       a message or Save -> turns.Assistant.run_turn(): GetHistory -> agent.run() -> AppendTurn when it finishes
+  -> assistant/agent.py      the loop (at most 5 model calls), yielding events:
+       llm.stream_with_tools()          the model streams text and/or tool calls (neutral messages)
+       tools.call()                     McpExpenseTools -> the MCP server (in-process) -> the bus
+       a delete in the web panel        -> get_expense + RequestApproval -> ApprovalRequested (nothing deleted)
+  <- agui.py translates:    TextDelta -> TEXT_MESSAGE_*; ToolStarted -> TOOL_CALL_START (metadata.labels) / ARGS / END;
+                             ToolFinished -> TOOL_CALL_RESULT (metadata.ok), STATE_SNAPSHOT if data changed,
+                             CUSTOM "a2ui" card; ApprovalRequested -> the Approve/Cancel card; FormRequested -> the form
+  <- RUN_FINISHED, or RUN_ERROR on any failure (the turn isn't saved)
 ```
 
-`POST /parse`:
+### Adding a module
+
+1. `backend/app/modules/<name>/` with `contracts.py`, `tables.py`, `commands.py` / `queries.py`, `api.py`, `module.py`
+   and an `__init__.py` that exports the contract.
+2. Add it to `MODULES` (and its router to `api_routers`) in `bootstrap.py`.
+3. If it has tables: write a migration (above).
+4. `.\.venv\Scripts\python.exe backend\scripts\export_contracts.py`, then `npm run gen:api` in `web/`, so the web app
+   sees the new API.
+
+## The web app: feature slices
 
 ```
-HTTP request
-  -> modules/assistant/router.py        validates the body (ParseRequest)
-  -> modules/assistant/service.py       parse_expense_text(): today's date + category names
-       -> categories.list_categories()  public interface: the names Gemini may choose from
-  -> modules/assistant/parse.py         builds the schema (category enum) and system instruction
-  -> core/llm.ask_gemini_for_json()     structured output: JSON shaped by the schema
-  <- ParsedExpense + missing_fields      validated with Pydantic; nothing is saved
+web/src/
+  app/          the composition: main.tsx (root error boundary), providers.tsx (TanStack Query, theme, router,
+                assistant), query-client.ts (the cache and the one refresh rule), pages.tsx (every page once),
+                app.tsx (routes), layout/ (sidebar, top bar, the page area's and chat panel's error boundaries)
+  features/     one folder per feature, each owning its components, hooks, API calls, types and constants:
+    expenses/     the Expenses page, table, edit row, add and delete dialogs, filters; api.ts, queries.ts
+    categories/   categories API and queries, CategorySelect, category names
+    dashboard/    the Dashboard page, stat cards, charts, recent list; api.ts, queries.ts
+    assistant/    the chat panel; model/ (useChat, AssistantProvider); api/ (the AG-UI stream); a2ui/ (renderer)
+  shared/       knows no feature: ui/ (shadcn kit), api/ (typed HTTP client, generated contract), config/ (app name,
+                env, routes, locale, data scopes), lib/ (formatting, guards, errors, ids), components/ (empty state,
+                error boundary, section error, refresh notice, placeholder page), hooks/, theme/
 ```
 
-`POST /chat`:
+### The rules
+
+1. **A feature owns everything it needs.** Nothing about expenses lives outside `features/expenses/`.
+2. **Other code imports a feature only through its `index.ts`** (`@/features/expenses`), never a file inside it.
+   Inside a feature, imports are relative. Fewer cross-feature imports is better.
+3. **`shared/` imports no feature and not `app/`. Only `app/` wires features together.** For example, a mutation only
+   declares `meta: { changes: DATA_SCOPES.expenses }` and the assistant only reports "data changed"; one rule in
+   `app/query-client.ts` (`refreshExpenseData`) decides that means reloading the expenses and Dashboard queries
+   (D168).
+4. **Server data goes through TanStack Query** (each feature's `queries.ts`): no fetching in effects, outdated requests
+   cancelled, changes invalidate their keys.
+5. **Nothing is copied from the backend by hand:** API types come from `schema.gen.ts`, protocol names and labels from
+   `contracts.gen.ts` (both generated).
+6. **Defined once:** the app's name (`APP_NAME`), the pages (`PAGES`, for both router and sidebar), the theme's boot
+   script (generated from `theme-constants.ts` into `index.html` by a Vite plugin) (D169).
+7. **A failure stays small:** error boundaries at the root, the page area, the chat panel and every A2UI card; a page
+   keeps its data with a "couldn't refresh" notice when a reload fails.
+
+`.oxlintrc.json` enforces rules 2 and 3 (`no-restricted-imports`, including relative imports out of `shared/` and deep
+imports from `app/`); `npx oxlint` fails on a violation. It also runs the `jsx-a11y` accessibility rules.
+
+Working guides: [backend_onboarding.md](backend_onboarding.md), [frontend_onboarding.md](frontend_onboarding.md).
+The full review that shaped these rules: [architecture-review.md](architecture-review.md).
+
+## The shared contract
 
 ```
-HTTP request
-  -> modules/assistant/router.py        validates the body (ChatRequest: message, optional thread_id)
-  -> modules/assistant/service.py       chat(): new thread, or load its last 10 turns
-       -> assistant/repository.py       ChatMessage rows (the assistant module's own table)
-  -> modules/assistant/agent.py         run(): waits for agent.stream(), the loop (at most 5 Gemini calls):
-       -> assistant/mcp_client.py              lists the tools and categories from the MCP server (MCP_URL)
-       -> core/llm.stream_gemini_with_tools()  Gemini streams text and/or function calls; steps rebuilt from the pieces
-       -> assistant/mcp_client.call_tool()     HTTP to /mcp/ -> modules/mcp/server.py -> expenses/categories services
-  -> assistant/repository.add_turn()    saves every step of this turn, in one commit
-  <- ChatResponse(thread_id, reply, tool_calls)   every step, tool call and token count is logged
+backend  --export_contracts.py-->  web/openapi.json  --npm run gen:api-->  web/src/shared/api/schema.gen.ts
+                                   web/src/shared/api/contracts.gen.ts
 ```
 
-`POST /agent` (AG-UI over Server-Sent Events; the chat panel uses this one):
+- `schema.gen.ts`: every REST request and response type, and enum values (openapi-typescript). The client
+  (`shared/api/http.ts`, openapi-fetch) won't compile a request the API doesn't accept.
+- `contracts.gen.ts`: what OpenAPI doesn't describe: A2UI catalogs and actions, AG-UI event names and keys, payment
+  method labels, limits.
 
-```
-HTTP request
-  -> modules/assistant/router.py        validates the body (ag_ui RunAgentInput) -> 422 if malformed; then a 200 stream
-       (a sync generator with EventSourceResponse: FastAPI runs it in a worker thread and pings every 15 s)
-  -> modules/assistant/service.py       agent_run(): RUN_STARTED; the input: forwardedProps.a2uiAction or the newest
-                                          user message; load the thread (new if unknown)
-       Approve / Cancel on a delete card -> approvals.take() -> agent.approval_turn(): no model; delete via MCP
-       a form's Save, or a message        -> agent.stream() (below); a delete the model asks for runs as a preview
-  -> modules/assistant/agent.py         stream(): the same loop as /chat, yielding as things happen:
-       text pieces                        -> TEXT_MESSAGE_START (if none open), TEXT_MESSAGE_CONTENT
-       ToolStarted (before an MCP call)   -> TEXT_MESSAGE_END (if open), TOOL_CALL_START, TOOL_CALL_ARGS, TOOL_CALL_END
-       ToolFinished (after it)            -> TOOL_CALL_RESULT (metadata.ok); if it changed data (MCP annotations,
-                                             mcp_client.changes_data): STATE_SNAPSHOT {"dataVersion": state + 1};
-                                             if a2ui.card_for(tool) has a card: CUSTOM {"name": "a2ui", "value": <A2UI message>}
-                                             (a delete preview's card is recorded with approvals.request())
-       FormShown (show_expense_form)      -> CUSTOM "a2ui" with the form and metadata.source (model | fallback); the turn ends
-  -> assistant/repository.add_turn()    saves the turn when the loop ends
-  <- TEXT_MESSAGE_END, RUN_FINISHED   or RUN_ERROR on any failure (nothing saved)
-```
-
-If a service raises `NotFoundError`, `BusinessRuleError` or `ExternalServiceError` (e.g. `GeminiError`), the
-handlers registered from `core/errors.py` turn it into a 404, 422 or 502 response. Routers never catch anything
-themselves.
-
-## Startup
-
-`main.py` imports each module's router. That also imports the module itself, which defines its table classes
-and registers them with SQLModel. The app's `lifespan` then calls `create_db_and_tables()`, which creates
-every registered table that doesn't exist yet. `core` can't do the importing itself, because core never
-imports modules.
-
-## Adding a new module
-
-1. Create `backend/app/modules/<name>/` with an `__init__.py` docstring saying what the module is for.
-2. Add only the layers you need: `models.py` (tables), `schemas.py` (DTOs), `repository.py` (database
-   access), `service.py` (rules, returns DTOs), `router.py` (HTTP).
-3. Export the public interface from `__init__.py` with `__all__`.
-4. Need another module? Import it as `from app.modules import <other>` and use only its exports.
-5. In `main.py`: import the module if it has tables, and `include_router` if it has routes.
-6. Document it: phase notes, plus [decisions.md](decisions.md) for any new decision.
+After changing an API or one of those values: run the export script, then `npm run gen:api`.
 
 ## Checking the rules
 
-Nothing checks the rules automatically at the moment: the architecture test was removed along with the other
-tests (see [decisions.md](decisions.md) D64). These scans, run from the project folder, catch violations:
+The web app's rules are checked by `npx oxlint` in `web/`. The backend has no automated check at the moment (the
+architecture test was removed with the other tests, D64), so run these scans from the project folder:
 
 ```powershell
-# Core must never import modules. Expect no output.
-Select-String -Path backend\app\core\*.py -Pattern '^\s*(from|import)\s+app\.modules'
+# 1. core/ never imports a module. Expect no output.
+Get-ChildItem backend\app\core -Recurse -Filter *.py | Select-String -Pattern '^\s*(from|import)\s+app\.modules'
 
-# Imports that reach into a module's internals. Each line must be inside that same module's folder
-# (e.g. categories/service.py importing app.modules.categories.repository is fine).
-Select-String -Path backend\app\modules\*\*.py -Pattern '^\s*(from|import)\s+app\.modules\.'
+# 2. Imports of a module's files. Every line must be inside that same module's folder
+#    (expenses/commands.py importing app.modules.expenses.repository is fine; anything else isn't).
+Get-ChildItem backend\app\modules -Recurse -Filter *.py | Select-String -Pattern '^\s*from\s+app\.modules\.\w+\.'
+
+# 3. Only the composition root imports a module.py. Expect bootstrap.py and main.py.
+Get-ChildItem backend -Recurse -Filter *.py | Select-String -Pattern 'import module as' | Split-Path -Leaf | Sort-Object -Unique
+
+# 4. Only bootstrap.py picks the LLM provider. Expect bootstrap.py, and gemini.py itself.
+Get-ChildItem backend -Recurse -Filter *.py | Select-String -Pattern 'llm\.gemini|from google'
 ```
-
-`main.py` (the composition root) is allowed to import routers.

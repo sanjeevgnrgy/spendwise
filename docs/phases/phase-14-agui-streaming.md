@@ -3,6 +3,10 @@
 > **Later changes:** in Phase 15 each MCP call also streams `TOOL_CALL_START/ARGS/END/RESULT`, a text message is closed
 > before a tool call, a `STATE_SNAPSHOT` follows each data-changing tool, and `RUN_FINISHED` no longer carries
 > `result.toolCalls`. See [phase-15-tool-progress.md](phase-15-tool-progress.md). This page records Phase 14 as it was built.
+>
+> **Refactor (after Phase 18):** the AG-UI translation moved to `assistant/agui.py` (the use cases yield plain
+> events); the browser validates each event with `@ag-ui/core`'s schemas; the chat has a **Stop** button. See
+> [refactor-architecture.md](refactor-architecture.md).
 
 **Goal:** the assistant's reply appears in the chat panel **as Gemini writes it**, instead of all at once after a
 pause. A new endpoint, `POST /agent`, accepts an **AG-UI** run input (`threadId`, `runId`, `messages`) and streams

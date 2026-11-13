@@ -6,6 +6,10 @@
 > In Phase 14, Gemini is always called with streaming: `llm.stream_gemini_with_tools()` replaces
 > `ask_gemini_with_tools()`, and the loop lives in `agent.stream()`, which `agent.run()` waits on (D102).
 > This page records Phase 7 as it was built.
+>
+> **Refactor (after Phase 18):** `/chat` is `POST /api/v1/chat`. The loop yields events and speaks provider-neutral
+> messages. To delete by text, the model calls `get_expense`, asks, then `delete_expense` with a strict
+> `confirmed=true`. See [refactor-architecture.md](refactor-architecture.md).
 
 **Goal:** `POST /chat {"message": "..."}` lets you talk to SpendWise in plain language. Gemini decides
 which tools to call (add, list, summarise, update, delete expenses), we run them, and it answers.

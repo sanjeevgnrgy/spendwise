@@ -9,6 +9,10 @@
 > - **No needless reload:** a delete preview no longer reloads the pages.
 >
 > See [decisions.md](../decisions.md) D132–D138.
+>
+> **Refactor (after Phase 18):** approvals are stored in the database (`pending_approval`); a delete in the web panel
+> is a `get_expense` lookup plus a card; `delete_expense` needs a strict `confirmed=true`. See
+> [refactor-architecture.md](refactor-architecture.md).
 
 **Goal:** questions like "where did my money go this month?" get a short answer plus an **insight card**: two Stats
 (this month vs last, the biggest category) and a donut chart. Deleting becomes **human-in-the-loop**: the assistant

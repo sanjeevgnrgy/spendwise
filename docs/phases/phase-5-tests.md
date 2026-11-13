@@ -1,5 +1,10 @@
 # Phase 5: Tests
 
+> **Later changes:**
+> **Refactor (after Phase 18):** the web app's architecture rules are enforced by lint (`.oxlintrc.json`), and the
+> backend's by the structure in [architecture.md](../architecture.md). See
+> [refactor-architecture.md](refactor-architecture.md).
+
 **Goal:** automated tests for the categories and expenses modules (over HTTP and at the service level),
 plus an architecture test that fails if anyone breaks the module boundaries.
 

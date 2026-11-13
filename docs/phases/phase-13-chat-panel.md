@@ -9,6 +9,10 @@
 > **Correction (Phase 16):** the "shadcn bug" described below wasn't one. `cn` is a real npm package (shadcn's class-name
 > merger) that all the shadcn components import; see [decisions.md](../decisions.md) D119.
 > This page records Phase 13 as it was built.
+>
+> **Refactor (after Phase 18):** the conversation lives in the assistant feature's `AssistantProvider`. The
+> data-version context is gone: the assistant reports changes, and the app invalidates the expenses and Dashboard
+> queries. See [refactor-architecture.md](refactor-architecture.md).
 
 **Goal:** an Assistant chat panel available on every page: a resizable side panel on desktop, a Sheet on mobile.
 It keeps a `thread_id`, sends messages to `POST /chat`, shows replies with the tools used, and refreshes the current

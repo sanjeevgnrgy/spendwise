@@ -2,6 +2,10 @@
 
 > **Later changes:** in Phase 16, `ToolFinished` also carries the tool's `name`, and a successful `add_expense` is
 > followed by a `CUSTOM` "a2ui" event with an "Expense saved" card ([phase-16-a2ui-card.md](phase-16-a2ui-card.md)).
+>
+> **Refactor (after Phase 18):** chip labels come from the backend (`TOOL_CALL_START`'s `metadata.labels`);
+> `dataVersion` is still AG-UI state, but pages refresh through TanStack Query. See
+> [refactor-architecture.md](refactor-architecture.md).
 
 **Goal:** while the assistant works, the chat panel shows each tool it uses as a small status chip ("Saving
 expense…" → "Expense saved", or "Couldn't save expense"). The backend streams AG-UI tool events around every MCP call.

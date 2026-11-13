@@ -44,7 +44,7 @@ the project folder (the repo root, where `run.ps1` is) unless noted.
   `Get-CimInstance Win32_Process -Filter "Name='python.exe'" | Select ProcessId, CommandLine` and stop the
   leftover one with `Stop-Process -Id <id>`.
 
-## Gemini (`POST /ask`, `POST /parse`)
+## Gemini (`/parse`, `/chat`, the assistant)
 
 See the error table in [gemini.md](gemini.md#when-something-goes-wrong). In short: `500` means a setting
 is missing (the terminal says which); `502` means Gemini refused or failed (bad key, quota, model not available
@@ -63,7 +63,7 @@ on your tier, or temporarily overloaded).
   [gemini.md](gemini.md)), or set another free-tier model in `GEMINI_MODEL` and restart. Every agent step is one Gemini
   request, so a single chat message can use 2–5 of them.
 
-### `/ask`, `/parse` or `/chat` takes a very long time
+### `/parse` or `/chat` takes a very long time
 - **Cause (fixed in Phase 6):** the SDK used to retry up to 5 times, up to 60 s apart, while Gemini was down.
 - **Now:** each attempt gives up after 60 s and there are at most 2. If it still hangs much longer, check your network.
 
@@ -88,7 +88,7 @@ on your tier, or temporarily overloaded).
 - **Fix:** check the id, or leave `thread_id` out to start a new conversation.
 
 ### The assistant forgot something from much earlier in a long thread
-- **Cause:** only the last 10 turns are sent (`MAX_HISTORY_TURNS` in `modules/assistant/service.py`), to keep cost down.
+- **Cause:** only the last 10 turns are sent (`MAX_HISTORY_TURNS` in `modules/assistant/turns.py`), to keep cost down.
   Older turns are still stored (`GET /threads/{id}`), but the model doesn't see them.
 - **Fix:** repeat the detail, or start a new thread for a new topic.
 
@@ -147,8 +147,9 @@ on your tier, or temporarily overloaded).
 - **Fix:** use `curl.exe -N` to watch the events arrive, or `POST /chat` for a plain JSON reply.
 
 ### Assistant panel: the assistant added an expense but the page didn't update
-- **Cause:** the page reloads when the agent sends a `STATE_SNAPSHOT` with a new `dataVersion`, which happens only after
-  a tool that may change data **succeeded** (a ✓ chip such as "Expense saved"). A red ✗ chip means the backend refused it.
+- **Cause:** the pages reload when the agent sends a `STATE_SNAPSHOT` (the assistant then reports "data changed", and
+  `app/providers.tsx` invalidates the expenses and Dashboard queries). That happens only after a tool that may change
+  data **succeeded** (a ✓ chip such as "Expense saved"). A red ✗ chip means the backend refused it.
 - **Check:** in the raw stream (`curl.exe -N`, see [phases/phase-15-tool-progress.md](phases/phase-15-tool-progress.md)),
   a `STATE_SNAPSHOT` should follow that tool's `TOOL_CALL_RESULT`. If it doesn't, the tool may be marked
   `read_only_hint=True` in `modules/mcp/server.py`. After changing a tool's annotations, restart the app: the assistant
@@ -161,14 +162,14 @@ on your tier, or temporarily overloaded).
   stays pending" above).
 
 ### Assistant panel: "Waiting for your OK" after asking to delete
-- That's the delete safety rule (decisions D53, D129): the assistant's `delete_expense` call only looks the expense up,
-  and nothing is deleted. Press **Approve** on the card; the chip then reads "Deleting expense…" → "Expense deleted".
+- That's the delete safety rule (decisions D129, D145): in the web panel, the assistant's `delete_expense` call only looks
+  the expense up (`get_expense`), and nothing is deleted. Press **Approve** on the card; the chip then reads "Deleting expense…" → "Expense deleted".
 
 ### Assistant panel: the conversation disappeared
 - **Cause:** a browser reload clears it (it's kept in memory across pages and panel toggles, not across reloads), or
-  **New conversation** was clicked. The thread itself is still on the server: `GET /threads/{id}`.
+  **New conversation** was clicked. The thread itself is still on the server: `GET /api/v1/threads/{id}`.
 
-### Build error: `Cannot find module 'cn'` in a `components/ui/` file
+### Build error: `Cannot find module 'cn'` in a `shared/ui/` file
 - **Cause:** `cn` is a real npm package, shadcn's class-name merger, listed in `web/package.json`. The shadcn components
   import it. This error means `node_modules` is missing or out of date. (An earlier version of this entry blamed
   shadcn and said to edit the import; that was wrong, see decisions D119.)
@@ -238,7 +239,7 @@ on your tier, or temporarily overloaded).
 - **Fix:** read that log line. After changing backend code, check that the server reloaded.
 
 ### Dashboard shows "Couldn't load the dashboard"
-- **Cause:** one of its four requests failed, most often because the backend isn't running.
+- **Cause:** one of its requests failed, most often because the backend isn't running.
 - **Fix:** start the backend (`.\run.ps1`) and click **Try again**. The message under the title is the actual error.
 
 ### Dashboard charts say "No spending…" but I have expenses
@@ -251,8 +252,31 @@ on your tier, or temporarily overloaded).
 - **Fix:** run `npm install` in `web/`, then `npm run dev` again.
 
 ### A shadcn component looks wrong, or I want to change it
-- shadcn/ui components are source files in `web/src/components/ui/`. Edit them like any other file.
+- shadcn/ui components are source files in `web/src/shared/ui/` (`components.json` points shadcn there). Edit them like
+  any other file.
   `npx shadcn@latest add <name>` adds new ones; re-adding an existing one asks before overwriting.
+
+### `404` for `/expenses`, `/summary`, `/chat` ... (the old URLs)
+- **Cause:** the REST API moved under `/api/v1` (D149): `/api/v1/expenses`, `/api/v1/chat`, ... `/health` and `/mcp/`
+  stay where they were.
+
+### TypeScript errors after changing the backend's API, or a type doesn't match what the API sends
+- **Cause:** the web app's API types are generated from the backend, and they're out of date.
+- **Fix:** `.\.venv\Scripts\python.exe backend\scripts\export_contracts.py`, then `cd web; npm run gen:api`.
+
+### `npm install openapi-typescript` fails with `ERESOLVE` (peer typescript ^5)
+- **Cause:** openapi-typescript 7.13 wants TypeScript 5; this app uses 7 (D160).
+- **Fix:** don't install it; `npm run gen:api` runs it pinned through `npx`, in its own install.
+
+### `npx oxlint`: "… import is restricted from being used by a pattern"
+- **Cause:** an import breaks the feature-slice rules (D153): a file inside another feature, a relative import out of a
+  feature, `@/app` in a feature, or a feature in `shared/`.
+- **Fix:** import the other feature's public API (`@/features/<name>`; export what you need from its `index.ts`), or
+  move the shared piece into `shared/`.
+
+### Assistant panel: "Stopped." under a reply
+- You pressed **Stop**. What already arrived stays; a tool that was running shows "?" (it may or may not have finished),
+  and the pages reload so they show what really happened.
 
 ## MCP
 
@@ -260,9 +284,13 @@ on your tier, or temporarily overloaded).
 - **Cause:** MCP SDK 2.x renamed `FastMCP` to `MCPServer`.
 - **Fix:** `from mcp.server.mcpserver import MCPServer`, as `modules/mcp/server.py` does.
 
-### An MCP client can't connect to `http://127.0.0.1:8000/mcp`
-- **Cause:** the endpoint is `/mcp/` (with a trailing slash); `/mcp` answers with a 307 redirect that some clients don't follow.
-- **Fix:** use `http://127.0.0.1:8000/mcp/`, with the app running (`.\run.ps1`).
+### An MCP client can't connect to `http://127.0.0.1:8000/mcp/`: 404, 401, 421 or 403
+- **404:** MCP over HTTP is off until `MCP_TOKEN` is set in `.env` (D150). Set it, restart, and use
+  `http://127.0.0.1:8000/mcp/` (with the trailing slash; `/mcp` answers with a redirect some clients don't follow).
+- **401:** the client must send `Authorization: Bearer <MCP_TOKEN>` (in MCP Inspector, as a custom header). Stdio
+  (`backend\mcp_stdio.py`) needs no token.
+- **421 "Invalid Host header" or 403:** the SDK only accepts local Host and Origin headers; connect to 127.0.0.1 or
+  localhost, not another hostname.
 
 ### A tool call returns only "Error executing tool <name>"
 - **Cause:** an *unexpected* exception; the SDK hides its text from clients on purpose.
@@ -270,9 +298,10 @@ on your tier, or temporarily overloaded).
   unknown category, come with a clear message instead.
 
 ### `/chat` replies "Sorry, I can't reach the expense tools right now"
-- **Cause:** the assistant couldn't connect to the MCP server at `MCP_URL` (default `http://127.0.0.1:8000/mcp/`).
-  Most often the app is running on a different port, e.g. `.\run.ps1 --port 8001`.
-- **Fix:** set `MCP_URL=http://127.0.0.1:<port>/mcp/` in `.env` and restart. The terminal logs the URL it tried.
+- **Cause:** by default the tools run in-process, so this means `MCP_URL` is set in `.env` and that server didn't answer
+  (wrong URL or port, server down, or a wrong `MCP_TOKEN`: it answers 401).
+- **Fix:** remove `MCP_URL` from `.env` (and restart) unless the tools really run as a separate service. The terminal
+  logs where it tried.
 
 ### `/chat` doesn't see a tool I just added to the MCP server
 - **Cause:** the assistant lists the tools once, on the first chat, and caches them.
@@ -292,17 +321,33 @@ on your tier, or temporarily overloaded).
 ### I want fresh sample data
 1. Stop the server.
 2. Delete `backend\spendwise.db`.
-3. Start the server (it recreates empty tables).
-4. Run `.\.venv\Scripts\python.exe backend\seed.py`.
+3. Run `.\.venv\Scripts\python.exe backend\seed.py` (it runs the migrations, which create empty tables, then fills them).
 
-### I changed a model's fields, but the database didn't change
-- **Cause:** tables are created with `create_all`, which never alters existing tables (no migrations yet,
-  see [decisions.md](decisions.md) D18).
-- **Fix:** delete `backend\spendwise.db` and re-seed, as above.
+### The server won't start: "The database is at migration …, but the code needs …"
+- **Cause:** the code expects newer tables than the database has (D148). `.\run.ps1` runs the migrations first, but
+  starting uvicorn some other way doesn't.
+- **Fix:** `.\.venv\Scripts\python.exe -m alembic -c backend\alembic.ini upgrade head`, then start again. Your data is kept.
+  (After the code-review fixes, a database at `0002` needs `0003`, which adds `expense.version`: restarting
+  `.\run.ps1` applies it.)
+
+### A migration failed half-way: is my database half-changed?
+- **No.** An upgrade runs in one transaction, schema changes included (D163), so a failure leaves the database at the
+  migration it was at before. The error above the traceback says which step failed.
+- **Fix:** fix the cause, then run `upgrade head` again.
+
+### I changed a table's fields, but the database didn't change
+- **Cause:** tables change only through migrations (D148).
+- **Fix:** `.\.venv\Scripts\python.exe -m alembic -c backend\alembic.ini revision --autogenerate -m "what changed"`,
+  read the new file in `backend\migrations\versions\`, then `upgrade head`.
 
 ### Seed says "Already seeded; nothing to do"
 - **Cause:** categories already exist, and the seed refuses to duplicate them.
 - **Fix:** that's expected. Delete the database first if you want to start over.
+
+### Approve says "I couldn't confirm that expense … is still what the card showed", or "has changed since it was shown"
+- **Cause:** the expense was edited (or deleted) after its card appeared. Approve deletes only the exact version the card
+  showed (D162), so nothing was deleted.
+- **Fix:** ask the assistant again; the new card shows the expense as it is now.
 
 ## VS Code
 

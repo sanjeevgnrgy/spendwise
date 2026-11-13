@@ -1,5 +1,9 @@
 # Phase 1: Project setup
 
+> **Later changes:**
+> **Refactor (after Phase 18):** `. un.ps1` now runs the database migrations before starting, and the REST API is
+> under `/api/v1`. See [refactor-architecture.md](refactor-architecture.md).
+
 **Goal:** a Python project with a virtual environment, pinned dependencies, and a FastAPI app with two routes.
 
 > **Later changes:** in Phase 3, `backend/main.py` moved to `backend/app/main.py`, `/hello` was removed,

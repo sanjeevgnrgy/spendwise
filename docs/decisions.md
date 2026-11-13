@@ -18,6 +18,7 @@ add a new entry and mark the old one **Superseded by D<n>**.
 - **Why:** every machine installs the same versions, so "works on my machine" means it works everywhere.
 - **How:** only packages we import directly are listed, as `package==x.y.z`; pip resolves the rest.
   For example, `python-dotenv` isn't listed because `pydantic-settings` installs it (Phase 3).
+- **Updated by D160:** the web app's `package.json` is pinned the same way.
 
 ### D3. Run tools as `python -m <tool>` (Phase 1)
 - **Why:** guarantees `pip` / `uvicorn` run with the venv's Python, even if another copy comes first on `PATH`.
@@ -79,6 +80,7 @@ add a new entry and mark the old one **Superseded by D<n>**.
   The rules are in [architecture.md](architecture.md).
 - **Boundaries:** the MCP server becomes an `mcp` module mounted at `/mcp`. The A2A agents (receipt,
   insights, currency) are separate services outside the monolith, in `agents/`.
+- **Updated by D139, D140:** modules now speak in commands and queries through a bus, and plug in through `module.py`.
 
 ### D13. No database foreign keys between modules
 - **Why:** a foreign key would tie two modules' tables together at the database level. Ids are checked
@@ -87,6 +89,7 @@ add a new entry and mark the old one **Superseded by D<n>**.
 
 ### D14. Services return frozen DTOs, never table rows
 - **Why:** callers get a read-only copy, so they can't change or lazy-load another module's data through it.
+- **Updated by D139:** queries return frozen DTOs; commands return at most an id.
 
 ### D15. Money as integer paise plus a currency code
 - **What:** `amount_minor: int` (450.50 rupees is `45050`) and `currency` (default `INR`).
@@ -108,6 +111,7 @@ add a new entry and mark the old one **Superseded by D<n>**.
 - **Consequence:** `create_all` creates missing tables but **never changes existing ones**. After changing
   a model, delete `backend/spendwise.db` and re-seed.
 - **Revisit when:** there's data worth keeping, or before moving to Postgres. Add migrations (Alembic) then.
+- **Superseded by D148:** Alembic migrations create and change the tables; the app no longer calls `create_all`.
 
 ### D19. `created_at` stored in UTC
 - **Why:** one unambiguous time zone in storage; converting to local time is the frontend's job.
@@ -155,6 +159,7 @@ add a new entry and mark the old one **Superseded by D<n>**.
 - **Services:** amount > 0, the category exists.
 - **Why:** shape errors are caught before any code runs. Business rules live in the one place every caller
   passes through.
+- **Updated by D139:** business rules live in each module's `domain.py` and command handlers.
 
 ### D28. Service errors become HTTP responses in one place
 - **What:** services raise `NotFoundError` or `BusinessRuleError` (`core/errors.py`). `main.py` registers
@@ -162,6 +167,7 @@ add a new entry and mark the old one **Superseded by D<n>**.
 - **Why:** services stay free of HTTP (so MCP tools can reuse them), and routers need no try/except.
 - **Revisit when:** a third kind of error appears, or to move `/ask`'s Gemini → 502 mapping here too.
 - **Updated by D48:** a third kind was added (`ExternalServiceError` → 502).
+- **Updated by D149:** every error is now an RFC 9457 problem-details response.
 
 ### D29. 404 only for the resource in the URL
 - An unknown `category_id` in a request body is **422**, not 404: the endpoint exists, the body is invalid.
@@ -191,6 +197,7 @@ add a new entry and mark the old one **Superseded by D<n>**.
 ### D34. No pagination on `GET /expenses` yet
 - It returns every matching row. Fine for a learning dataset.
 - **Revisit when:** lists get long. Add `limit` / `offset` then.
+- **Superseded by D149:** `GET /expenses` returns `{items, total}` with `limit` and `offset`.
 
 ### D35. `get_expense` raises; `get_category` returns `None`
 - `expenses.get_expense()` raises `NotFoundError`, because callers asking for a specific expense expect it to exist.
@@ -272,6 +279,7 @@ add a new entry and mark the old one **Superseded by D<n>**.
 ### D46. "Today" is the server's date
 - Good enough for one user running locally.
 - **Revisit when:** there's auth and users in different time zones; then the client should send its date.
+- **Updated by D151:** "today" comes from a Clock (still the server's date).
 
 ### D47. The note is treated as data
 - The system instruction tells Gemini the note is data to extract from, and to ignore any instructions inside it.
@@ -319,6 +327,7 @@ add a new entry and mark the old one **Superseded by D<n>**.
 - **Limitation:** this is a *soft* guard, because the model decides when `confirmed=true` is justified.
 - **Revisit when:** conversation threads exist; then confirmation can be enforced on the server (e.g. a pending action the user approves).
 - **Updated by D129:** in the web panel, the server now enforces it with Approve/Cancel buttons; `POST /chat` keeps this soft guard.
+- **Updated by D145:** the preview is the read-only `get_expense`; `delete_expense` needs a strict `confirmed=true`.
 
 ### D54. `/chat` is single-turn for now
 - Each message starts a new conversation, so a follow-up must repeat the details.
@@ -339,6 +348,7 @@ add a new entry and mark the old one **Superseded by D<n>**.
 - `core/logging.py` (called in `main.py`) sets `spendwise.*` loggers to INFO; libraries stay at WARNING.
 - The agent logs the user message, each step, each tool call with its arguments, and each result (first 300 characters).
 - These logs contain expense data. Fine on your own console; don't ship them to an external service without thinking about privacy.
+- **Updated by D152:** message text and tool arguments are logged only at DEBUG.
 
 ---
 
@@ -350,6 +360,7 @@ add a new entry and mark the old one **Superseded by D<n>**.
 - **Why raw steps:** stateless function calling needs the history resent exactly as received, thoughts included.
   Storing anything else would mean rebuilding Gemini's format later.
 - **No separate `Thread` table:** a thread is just the rows that share a `thread_id`. Add one if threads need titles or owners.
+- **Superseded by D141:** threads are stored as provider-neutral messages in the conversations module.
 
 ### D59. The server picks thread ids; an unknown id is a 404
 - New threads get `uuid4().hex` (32 characters). Sending an id that doesn't exist returns 404 instead of starting a
@@ -425,10 +436,12 @@ is natural. It's still a soft, model-judged guard.
 - Anyone who can reach the server can read and change expenses through MCP, as with the REST API today. Fine on
   `127.0.0.1`. The SDK's default DNS-rebinding protection only accepts local Host headers.
 - **Revisit when:** auth is added, or before exposing the server beyond localhost.
+- **Superseded by D150:** `/mcp/` is served only with `MCP_TOKEN`, as a bearer token.
 
 ### D71. Deletes over MCP use the same soft confirmation as the assistant
 - `delete_expense(confirmed=false)` only reports what would be deleted. Hosts such as Claude Desktop also ask the
   person to approve tool calls, which is a second check.
+- **Superseded by D145.**
 
 ---
 
@@ -442,6 +455,7 @@ is natural. It's still a soft, model-judged guard.
 - `assistant/tools.py` is deleted. `agent.py` imports no business module and takes no database session; category
   names come from the `expenses://categories` resource.
 - **Still direct:** `/parse` uses the `categories` and `expenses.PaymentMethod` public interfaces.
+- **Updated by D143:** by default the client connects to this app's MCP server in-process, not over HTTP.
 
 ### D73. Tools are listed on first use and cached
 - Not at app startup: by default the MCP server is this same app, which isn't serving yet during startup.
@@ -452,6 +466,7 @@ is natural. It's still a soft, model-judged guard.
   one thing and closes, with a 15 s timeout.
 - `/chat` must remain a plain `def` route, or calling the app's own `/mcp` would deadlock the event loop.
 - **Revisit when:** the extra round trips matter; then keep one session per chat turn.
+- **Updated by D143:** the SDK's `Client`, in-process by default; still one short session per operation.
 
 ### D75. MCP input schemas are simplified for Gemini
 - `anyOf [X, null]` becomes `X`; only `type`, `description`, `enum`, `items`, `format` are kept.
@@ -465,6 +480,7 @@ is natural. It's still a soft, model-judged guard.
 ### D77. Running on another port needs `MCP_URL`
 - The default assumes port 8000. With `--port 8001`, set `MCP_URL=http://localhost:8001/mcp`.
 - **Updated by D136:** the default is now `http://127.0.0.1:8000/mcp/` (no redirect, no IPv6 attempt).
+- **Superseded by D143:** `MCP_URL` is unset by default (in-process); set it only for a separate MCP server.
 
 ---
 
@@ -504,6 +520,7 @@ is natural. It's still a soft, model-judged guard.
   (`detail` string or validation list), or "Can't reach the SpendWise API" when there's no response at all.
 - The base URL is `VITE_API_URL` (default `http://localhost:8000`). Nothing secret may go in `web/.env`:
   `VITE_` variables are visible to anyone using the app.
+- **Superseded by D153, D155:** each feature has its own `api.ts`, over a generated, typed client in `shared/api`.
 
 ### D84. CORS allows only the Vite dev server
 - `CORSMiddleware` with `settings.cors_origins` (default `http://localhost:5173`, `http://127.0.0.1:5173`), methods
@@ -549,6 +566,7 @@ is natural. It's still a soft, model-judged guard.
 ### D91. `GET /expenses` gains `limit`
 - Optional, 1–500, applied in SQL after the newest-first ordering. Added for the Dashboard's "5 most recent"
   instead of downloading every expense.
+- **Updated by D149:** `limit` now defaults to 100, with `offset` and a `total`.
 
 ### D92. The Dashboard loads four requests in parallel
 - Summary, trend, 5 recent expenses and categories, with `Promise.all`. If any fails, the whole page shows an error
@@ -575,6 +593,7 @@ is natural. It's still a soft, model-judged guard.
 - **Revisit when:** changes can come from outside this browser tab (other devices, background jobs); then the server
   must push updates (e.g. the later AG-UI / SSE work).
 - **Updated by D112:** the number now comes from the agent's `STATE_SNAPSHOT`; `setDataVersion` replaces `notifyDataChanged`.
+- **Superseded by D154:** TanStack Query; the assistant reports changes and the app invalidates queries.
 
 ### D95. "Did the assistant change data?" is decided in the browser from the tool calls
 - `add_expense` / `update_expense` that succeeded, or `delete_expense` with `confirmed: true`, in `hooks/use-chat.ts`.
@@ -586,6 +605,7 @@ is natural. It's still a soft, model-judged guard.
 - So it survives closing the panel, switching between desktop panel and mobile sheet, and changing pages.
 - It doesn't survive a browser reload; the thread stays on the server (`GET /threads/{id}`). **Revisit when:**
   reloading should restore the chat; then save `thread_id` in localStorage and load the thread on start.
+- **Superseded by D154:** the conversation lives in the assistant feature's `AssistantProvider`.
 
 ### D97. Desktop: resizable panel with ids; mobile: Sheet
 - `ResizablePanelGroup orientation="horizontal"`; the page panel (`id="page"`, min 40%) and the chat panel
@@ -666,6 +686,7 @@ is natural. It's still a soft, model-judged guard.
   `RUN_ERROR` throws; a stream that ends without `RUN_FINISHED` throws too.
 - **Why not `@ag-ui/client`:** about 40 lines of our own code show exactly how SSE works, without another dependency.
   **Revisit when:** we adopt an AG-UI frontend framework (e.g. CopilotKit) or need more event types.
+- **Updated by D156:** events are now validated with `@ag-ui/core`'s schemas.
 
 ### D108. Gemini calls never retry a 429; only 5xx errors are retried
 - **Found:** after a few test questions the chat hung forever ("Thinking…", the request pending). Two live probes showed
@@ -732,6 +753,7 @@ is natural. It's still a soft, model-judged guard.
 - If the run fails, chips still spinning turn into failures, so nothing keeps spinning forever.
 - "Thinking…" shows only while nothing else shows progress: before the first event, or between finished tools and the
   start of the answer's text.
+- **Superseded by D157:** the backend sends each chip's labels.
 
 ---
 
@@ -929,6 +951,7 @@ is natural. It's still a soft, model-judged guard.
 - **Updated by D133:** the code review found the guard could be bypassed (`confirmed: "true"`); approvals now also keep
   a snapshot, expire, and survive a failed run.
 - **Revisit when:** there's more than one server process; then store the records in the database.
+- **Updated by D146:** the records are in the database now (`pending_approval`).
 
 ### D130. Which actions need approval
 - **Only deleting:** it can't be undone.
@@ -981,6 +1004,7 @@ is natural. It's still a soft, model-judged guard.
   copy of the preview result says nothing was deleted and the user now sees Approve/Cancel, so it doesn't retry.
 - Approval stays delete-only, keyed on the tool's name, not on every `destructive_hint` tool: the preview/confirm
   protocol exists only for delete, and updates are reversible (D130).
+- **Updated by D145, D146:** previews are `get_expense` lookups; records are stored in the database.
 
 ### D134. MCP tool inputs
 - **Empty means not given:** optional text arguments are plain `str`, with `""` meaning "not given". Models fill unused
@@ -1062,4 +1086,252 @@ is natural. It's still a soft, model-judged guard.
 - **Every bubble re-rendering on each streamed token:** fine at chat sizes. **Revisit when:** long chats feel slow;
   then memoize the bubbles.
 - **The same one-line error-to-text conversion in three places:** not worth a shared helper yet.
+- **Updated by D158, D139, D140, D149:** the Stop button, the shared error helper, the `total` duplication, `mcp_stdio.py`'s import side effects and list counting were addressed in the refactor.
 
+---
+
+## Architecture refactor: CQRS and feature slices (after Phase 18)
+
+> An architecture review of the whole codebase (no magic strings, no duplication, a strict modular monolith with CQRS,
+> feature slices in the web app, no tight coupling) found about 40 issues; all are addressed below except D161.
+> Checked offline:
+> - the migrations on a copy of the real database (up, down, up; the chat history converts losslessly both ways);
+> - REST, problem details, `/health` and `/mcp/` (token, Host and Origin checks) over HTTP;
+> - every agent flow with a scripted fake model (insight card, delete with Approve/Cancel, a stale or foreign card, an
+>   edit before Approve, the form, `/chat` deletes);
+> - the in-process and remote tool adapters;
+> - the real web modules through Vite's SSR loader against that backend (API calls, the validated stream, cards,
+>   both pages with TanStack Query data).
+>
+> `npm run build` and `npx oxlint` pass. See [phases/refactor-architecture.md](phases/refactor-architecture.md).
+
+### D139. Commands and queries (CQRS-lite), run by one bus that is also the unit of work
+- Every module's business operations are **commands** (change data, return at most an id) or **queries** (read,
+  change nothing): small frozen Pydantic models with one handler each, in `commands.py` and `queries.py`.
+- Callers send them through `MessageBus` (`core/cqrs.py`): `bus.execute(CreateExpense(...))`, `bus.ask(GetExpense(...))`.
+- The bus opens one session per outermost message and **commits only after a command's handler returns** (rolls back
+  if it raises). Messages sent from inside a handler (`ctx.bus`) share that session, so a command and its checks are
+  one transaction. Repositories only stage changes; `bus.unit_of_work()` groups several commands (the seed).
+- A query can't send a command (refused at runtime).
+- Same database for reads and writes: full CQRS (separate read models, event sourcing) would be overkill here.
+- **Why:** one `service.py` per module mixed reads and writes, and repositories committed on their own, so two writes
+  couldn't be one transaction.
+- **Revisit when:** reads and writes need different storage, or a handler needs to run after another commits (events).
+
+### D140. Modules plug in through `module.py`; `bootstrap.py` is the composition root
+- Each module has `module.py` (handlers, routes, tables) for the composition root, and `__init__.py` (its contract)
+  for other modules. `app/bootstrap.py` holds the one list of modules; `main.py`, `seed.py`, `mcp_stdio.py` and the
+  migrations all build from it. Nothing registers itself just by being imported.
+- Shared services reach routes through FastAPI dependencies (`BusDep`, `ClockDep`), not globals.
+- **Why:** tables used to register as a side effect of importing routers, and the module list was implied.
+
+### D141. Conversations are their own module, stored as provider-neutral messages
+- `modules/conversations` owns the chat history (`conversation_message`, renamed from `chatmessage`) with
+  `AppendTurn`, `GetLastTurn`, `GetHistory`, `GetThread`, and `GET /threads/{id}`.
+- Messages are SpendWise's own types (`core/llm/messages.py`): `UserText`, `AssistantText`, `ToolCall`, `ToolResult`,
+  `Reasoning`. A provider's private reasoning (Gemini's thought signature) is kept as opaque data for that provider.
+- Migration 0002 converted the stored history; converting it back gives the original rows exactly.
+- **Why:** the history was stored in Gemini's wire format, so changing provider meant migrating every conversation.
+
+### D142. The LLM is a port; Gemini is one adapter
+- `core/llm/__init__.py` is the port (`stream_with_tools`, `ask_for_json`, `LlmError`, the message types);
+  `core/llm/gemini.py` is the only code that knows Gemini's steps, events and schema subset. Its wire names are enums.
+- `ask_gemini()` went with `/ask` (D150).
+- **Updated by D166:** the port is a `LanguageModel` protocol, injected from `bootstrap.py`.
+
+### D143. The assistant's tools are a port; this app's MCP server is called in-process by default
+- The agent only knows `ExpenseTools` (`assistant/tools.py`). `McpExpenseTools` implements it with the MCP SDK's
+  `Client`, which connects to an `MCPServer` **object in-process**, or to a URL.
+- `MCP_URL` is unset by default: no HTTP request to our own port, no handshake per call. Set it only when the tools
+  run as a separate service (then `MCP_TOKEN` is sent as a bearer token).
+- The tools still go through MCP, so the agent stays decoupled from the expenses module (D72).
+- **Why:** calling ourselves over HTTP was what forced sync routes and a connection per tool call.
+
+### D144. MCP tools return typed results; the contract lives in the mcp module
+- Each tool returns a Pydantic model (`ExpenseSaved`, `ExpenseSearch`, `MonthSpending`, ...). The SDK publishes it as
+  the tool's `outputSchema` and sends `structuredContent`; cards validate it with the same models.
+- Tool names, resource URIs and argument names are enums or constants in `mcp/contracts.py`, exported by the module.
+- **Why:** the cards read the result by dictionary key from a JSON string, so renaming a field silently removed cards.
+
+### D145. Previews are queries; `delete_expense` needs a strict `confirmed=true`
+- New read-only tool `get_expense`. `delete_expense` only deletes.
+- It requires `confirmed`, strictly `true`; anything else is an error and deletes nothing.
+- **Why:** a delete with a "preview" switch was a query and a command in one. The SDK ignores arguments a tool doesn't
+  declare, so without the required interlock a client still sending the old `confirmed=false` ("just show me") would
+  have deleted for real.
+- In the web panel the model never runs a delete: its `delete_expense` call becomes a `get_expense` lookup and an
+  Approve/Cancel card, and the model isn't shown `confirmed` (D146). `/chat` keeps the text confirmation.
+- **Updated by D162:** `delete_expense` also takes `expected_version`; Approve uses it.
+
+### D146. Approvals are stored in the database
+- `pending_approval` (assistant module): the card's id (its surface id), the thread, the expense snapshot, the time.
+  Commands `RequestApproval` and `TakeApproval`; expiry (15 minutes) and the cap (200) are enforced in SQL.
+- The rules of D129/D133 are unchanged: each card decides once, in its own thread; Approve deletes only if the
+  expense still matches the snapshot; a run that fails puts the card back.
+- **Why:** in memory, a second server process (or a restart) lost the cards.
+- **Updated by D164:** a decision completes before streaming; a restored card keeps its age.
+
+### D147. AG-UI and A2UI are adapters; the use cases yield plain events
+- `turns.py` holds the use cases (`Assistant.run_turn`, `decide`, `chat`); the agent yields `AgentEvent`s
+  (`TextDelta`, `ToolStarted`, `ToolFinished`, `ApprovalRequested`, `FormRequested`, `TurnFinished`).
+- `agui.py` turns them into AG-UI events, reads `forwardedProps`, and adds cards; `api.py` serves HTTP.
+- The names on the wire beyond AG-UI's own are in `assistant/protocol.py`.
+- **Why:** the service built AG-UI events itself, mixing a transport protocol into the use cases.
+
+### D148. Migrations with Alembic
+- `backend/alembic.ini` and `backend/migrations`. 0001 is the schema as it was, created only where missing, so existing
+  databases keep their data; 0002 is D141 + D146. SQLite changes run in "batch" mode.
+- `.\run.ps1` runs `alembic upgrade head` before starting; the app **refuses to start** on an out-of-date database and
+  says how to fix it. `seed.py` and `mcp_stdio.py` upgrade first.
+- A migration doesn't import app code: it must keep doing exactly what it did after the code changes.
+- **Why:** `create_all` never changes an existing table, so any schema change meant deleting the database.
+- **Updated by D163:** migrations run in one transaction, schema changes included, on SQLite too.
+
+### D149. Errors are RFC 9457 problem details; the API lives under `/api/v1`
+- Every error, including validation errors and FastAPI's own 404/405, is `application/problem+json` with `type`
+  (a `urn:spendwise:problem:...` name), `title`, `status`, `detail`, `instance`; validation adds `errors`.
+- REST routes moved under `/api/v1`. `/health` (now also checks the database) and `/mcp/` stay at the root.
+- `POST /expenses` answers 201 with a `Location` header; `GET /expenses` returns `{items, total}` with `limit` (default
+  100, max 500) and `offset`.
+- **Why:** errors had two shapes, and a breaking API change had nowhere to go.
+- **Updated by D165:** unexpected 500s carry CORS headers; FastAPI's own errors keep their headers.
+
+### D150. MCP over HTTP only with `MCP_TOKEN`; `/ask` removed
+- `/mcp/` is mounted only when `MCP_TOKEN` is set, and then answers only `Authorization: Bearer <token>` (compared in
+  constant time). The SDK's DNS-rebinding protection (Host and Origin checks for a server on 127.0.0.1) stays on.
+- `POST /ask` sent any prompt to Gemini: an open proxy to your quota, with no product use. Removed.
+- **Revisit when:** users exist (the planned auth phase); then the REST API and the web app get real login.
+
+### D151. A Clock instead of `date.today()`
+- `core/clock.py`: routes get it as `ClockDep`, handlers as `ctx.clock`. Created-at times come from it too.
+- **Why:** "today" was read in four places, always the server's local date, and impossible to pin.
+
+### D152. Message text and tool arguments are logged only at DEBUG
+- INFO lines say what happened (a message of N characters, a tool name, ok or error, token counts).
+- **Why:** they're one person's financial data, and INFO logs are the ones kept and shipped around.
+
+### D153. The web app is organised as feature slices, enforced by lint
+- `src/features/<name>/` (expenses, categories, dashboard, assistant) each own their components, hooks, API calls,
+  types and constants, and export through `index.ts`. `src/shared/` (ui kit, HTTP client, config, formatting, theme,
+  error boundary) knows no feature; `src/app/` (providers, routes, layout) composes them.
+- `.oxlintrc.json` (`no-restricted-imports`): no deep imports into another feature, no relative import out of a
+  feature, nothing from `app/` in a feature, nothing from features or `app/` in `shared/`.
+- Not Feature-Sliced Design's layers: plain feature folders, by choice.
+- **Why:** files were grouped by kind (`components/`, `hooks/`, `lib/`, `pages/`), and one `api.ts` held everything.
+
+### D154. Server data through TanStack Query; the assistant says "data changed", the app decides what reloads
+- Each feature has query keys and hooks (`useExpenses`, `useMonthlySummary`, `useCategories`, mutations that
+  invalidate their keys). Requests get an `AbortSignal`; outdated ones are cancelled.
+- `AssistantProvider` takes `onDataChanged`; `app/providers.tsx` wires it to invalidate the expenses and Dashboard
+  queries. The assistant doesn't know which pages exist.
+- **Why:** pages fetched in effects by hand, and every page had to remember to watch a shared `dataVersion`.
+
+### D155. One contract, generated from the backend
+- `npm run gen:api` turns `web/openapi.json` into `src/shared/api/schema.gen.ts` (openapi-typescript), and the
+  client is openapi-fetch: a request or response that doesn't match the API is a compile error.
+- `backend/scripts/export_contracts.py` writes `openapi.json` and `src/shared/api/contracts.gen.ts`: the A2UI
+  catalogs and actions, AG-UI names and keys, payment-method labels, limits, "Unknown".
+- **Why:** types, labels and protocol names were copied by hand into TypeScript.
+
+### D156. AG-UI events are validated with `@ag-ui/core`'s schemas
+- The stream client is still our own `fetch()` reader (D107), but every event goes through
+  `EventSchemas.safeParse()` and the code uses AG-UI's `EventType` enum and types.
+- **Why:** events were trusted with a type cast.
+
+### D157. Chip labels come from the backend
+- `TOOL_CALL_START` carries `metadata.labels` (running/done/failed). An approval check has its own labels.
+- **Why:** the browser knew MCP tool names and the delete tool's arguments.
+
+### D158. Error boundaries, Stop, and abortable requests
+- An error boundary around each A2UI card and around the page area: a crash shows a note, not a blank app.
+- The chat has a **Stop** button (aborts the stream); a tool cut off by it shows "?" and the pages reload.
+
+### D159. Money looks the same everywhere
+- `₹1,25,000.50` (Indian grouping, two decimals) in cards, charts and pages: `core.money.format_money` on the server,
+  `formatMoney` in the browser, same rule.
+
+### D160. Web dependencies pinned exactly; openapi-typescript runs through `npx`
+- `package.json` lists exact versions, like `requirements.txt` (D2).
+- openapi-typescript 7.13 wants TypeScript 5 and the app uses 7, so `gen:api` runs it pinned through `npx`, in its
+  own install.
+
+### D161. Not done on purpose
+- **Login for the REST API and the web app:** a feature, not a refactor; planned with users (auth phase).
+- **Two runs on one thread at once** (D138) and **re-rendering bubbles** (D138): unchanged.
+- **Splitting the bundle by page:** the assistant (always loaded) already pulls in the chart library.
+
+---
+
+## Code reviews of the refactor
+
+> Two independent reviews (backend, web) read the refactored code and reproduced findings with scratch scripts:
+> 11 backend bugs and 6 standards issues, 9 web bugs and 10 standards issues. All are resolved below except where
+> noted (D170). Full list: [architecture-review.md](architecture-review.md). Checked again offline: migrations (including
+> a failing one left untouched), the bus, REST and problem responses, MCP over HTTP, every agent flow with a fake model,
+> and the web modules against that backend; `tsc -b`, `oxlint` and `npm run build` clean.
+
+### D162. Optimistic concurrency for expenses
+- `expense.version` starts at 1 and every update raises it (migration 0003). `DeleteExpense` (and the MCP tool) take an
+  optional `expected_version`: `DELETE … WHERE id = ? AND version = ?`, so the check and the delete are one statement.
+- Approve passes the version the card showed. The snapshot comparison before it stays, for a clear message; the
+  version is the guarantee.
+- **Why:** the review found that an edit landing between Approve's check and the delete would be deleted unseen. A
+  version column is the standard fix: no lock is held while the user decides.
+
+### D163. SQLite made transactional: atomic migrations, savepoints
+- `core/db.py` applies SQLAlchemy's documented recipe for pysqlite (the driver's own transaction handling off, an
+  explicit `BEGIN`), so schema changes are transactional and SAVEPOINTs work. Migrations run with
+  `transactional_ddl=True`: an `upgrade` either completes or leaves the database exactly as it was.
+- A command sent from inside another runs in a SAVEPOINT (`begin_nested`): if it fails and the caller carries on, only
+  its own changes are undone.
+- **Why:** a failing 0002 left the table renamed but unconverted, and every later upgrade failed.
+
+### D164. No database session around slow work; approvals decided eagerly
+- `/parse` is a use case, not a query handler: it reads the categories (a short query), then calls the model with no
+  session open. A query handler holding a pooled connection for up to two minutes could starve the pool.
+- `Assistant.decide` completes the whole decision (take the card, check, delete, save the turn) before streaming the
+  result. On a failure the card goes back at once (`RestoreApproval`), keeping its original time, so it still
+  expires on schedule.
+- **Why:** the put-back used to run when the stream's generator was garbage-collected (after a disconnect): at an
+  unpredictable time, on the event loop.
+
+### D165. Errors, at the edges
+- Unexpected errors are turned into a 500 problem by a middleware **inside** CORS, so the browser can read it.
+- FastAPI's own errors keep their headers (`Allow` on a 405).
+- The MCP bearer scheme is matched case-insensitively (RFC 9110).
+- Only SQLite lock errors are reported to MCP clients as "busy"; other database errors aren't disguised.
+
+### D166. The LLM port is injected; the mcp package is its contract
+- `core/llm/port.py`: `LanguageModel` and `LlmStream` protocols and `LlmError`. `GeminiModel` (`gemini.py`) implements
+  it; `bootstrap.build()` creates it and hands it to the assistant. Nothing else imports the provider.
+- `app.modules.mcp` exports only the tool contract; the server and its HTTP endpoint come from `mcp/module.py`, used by
+  the composition root alone. Importing the contract loads no server code.
+- Approvals store the assistant's own `ExpenseSnapshot`, not the MCP contract's `ExpenseView`, so stored rows don't
+  break if that contract changes.
+- Tool descriptions are built from the contract's names, and the server checks its tools' parameters at start-up.
+
+### D167. `/agent` checks its input before streaming
+- A FastAPI dependency (`agui.read_request`) validates the thread id, the message or the button click: problems are a
+  422 problem response. The stream starts only with a valid run.
+
+### D168. Web: one refresh rule; data kept when a refresh fails; boundaries everywhere
+- Mutations declare `meta: { changes: DATA_SCOPES.expenses }`; `app/query-client.ts` has the one rule
+  (`refreshExpenseData`) for mutations and the assistant alike.
+- A page shows an error card only when nothing has loaded; if a reload fails, the data stays with a "couldn't refresh"
+  notice, and Retry refetches only what failed.
+- A form stays locked after a broken run if the server **may** have changed data (a tool was still running).
+- Error boundaries at the root and around the chat panel, as well as the page area and each card.
+
+### D169. Web: shared values from one place
+- The A2UI component names, chart types, trends and limits come from the generated contract; the basic catalog's own
+  vocabulary is named once (`basic-catalog.ts`).
+- The app's name (`APP_NAME`), every page (`PAGES`, for both the router and the sidebar), and the theme boot script
+  (generated from `theme-constants.ts` and injected into `index.html` by Vite) are each defined once.
+- oxlint gains the jsx-a11y plugin and rules for `app/` and for relative imports out of `shared/`.
+
+### D170. Not changed on purpose
+- **Text after a tool call** already starts with a paragraph break (the agent adds it), so the reviewer's "joined text"
+  isn't a bug.
+- **`TakeApproval` returns data:** reading and removing a card must be one step, or two clicks could both get it.
+- **A 405's `Allow` lists one method:** Starlette's per-method routes; the header now reaches the client.
+- **The `dark` class in `index.css`:** Tailwind's variant is CSS and can't import the constant.

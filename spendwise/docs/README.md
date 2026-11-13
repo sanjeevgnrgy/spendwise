@@ -16,6 +16,7 @@ covers setup and running; this folder explains **why** things are the way they a
 | [phases/phase-1-project-setup.md](phases/phase-1-project-setup.md) | Routes, path parameters, `/docs` |
 | [phases/phase-2-first-gemini-call.md](phases/phase-2-first-gemini-call.md) | Models, prompts, tokens, keeping the API key in `.env` |
 | [phases/phase-3-modular-structure.md](phases/phase-3-modular-structure.md) | Modular monolith, module-owned tables, money in paise |
+| [phases/phase-4-expenses-api.md](phases/phase-4-expenses-api.md) | Router → service → repository, CRUD, input vs output models, 201 / 404 / 422 |
 
 Each phase file has the concepts, what was built, how to run and test it, and the
 "check your understanding" questions. Answers are hidden; click to reveal them.

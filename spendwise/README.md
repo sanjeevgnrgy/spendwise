@@ -2,9 +2,9 @@
 
 An agentic expense tracker, built one small phase at a time as a learning project.
 
-**Current state (Phase 3):** a modular-monolith FastAPI backend with `GET /health`, `POST /ask`
-(sends a prompt to Gemini), and a database with `categories` and `expenses` modules.
-The modules have no HTTP routes yet; `backend/seed.py` fills them with sample data.
+**Current state (Phase 4):** a modular-monolith FastAPI backend with a REST API for expenses
+(create, list with filters, read, update, delete), a monthly summary, a categories list, and
+`POST /ask` (sends a prompt to Gemini). `backend/seed.py` fills the database with sample data.
 
 ## Requirements
 
@@ -55,7 +55,13 @@ package lives inside `backend/`.
 With the server running:
 
 - http://127.0.0.1:8000/health → `{"status":"ok"}`
-- http://127.0.0.1:8000/docs → interactive API docs (Swagger UI)
+- http://127.0.0.1:8000/docs → interactive API docs (Swagger UI): try every route from here
+- http://127.0.0.1:8000/categories → the 8 categories
+- http://127.0.0.1:8000/expenses?search=grocer → expenses whose merchant or note contains "grocer"
+- http://127.0.0.1:8000/summary?month=2026-11 → that month's total and per-category totals
+
+The full route list, filters, status codes and example requests are in
+[docs/phases/phase-4-expenses-api.md](docs/phases/phase-4-expenses-api.md).
 
 To try Gemini, open `/docs`, expand **POST /ask**, click **Try it out**, send
 `{"prompt": "Give me one tip to save money on groceries."}` and click **Execute**.
@@ -86,13 +92,14 @@ spendwise/
       main.py              composition root: creates the app, includes module routers
       core/
         config.py          settings from .env (pydantic-settings)
-        db.py              database engine, table creation, get_session dependency
+        db.py              database engine, table creation, get_session / SessionDep
+        errors.py          NotFoundError -> 404, BusinessRuleError -> 422
         money.py           rupees <-> paise helpers
         llm.py             ask_gemini(): the one place that talks to Gemini
       modules/
         assistant/         POST /ask (router, schemas, service)
-        categories/        Category table + public interface
-        expenses/          Expense table + public interface
+        categories/        Category table, GET /categories, public interface
+        expenses/          Expense table, CRUD routes, GET /summary, public interface
     seed.py                default categories and sample expenses
     spendwise.db           local SQLite database (git-ignored, created automatically)
   run.ps1                  one-command dev start (Windows)

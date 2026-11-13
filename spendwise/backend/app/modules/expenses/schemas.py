@@ -1,9 +1,14 @@
 from datetime import date, datetime
+from decimal import Decimal
 from enum import StrEnum
+from typing import Self
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, computed_field, model_validator
 
-from app.core.money import DEFAULT_CURRENCY
+from app.core.money import DEFAULT_CURRENCY, paise_to_rupees
+
+# These schemas check the *shape* of data (types, lengths, at most 2 decimal places).
+# Business rules (amount > 0, the category must exist) live in service.py.
 
 
 class PaymentMethod(StrEnum):
@@ -17,9 +22,10 @@ class PaymentMethod(StrEnum):
 
 
 class ExpenseCreate(BaseModel):
-    """What it takes to record an expense."""
+    """What a caller sends to record an expense. No id or created_at: the server sets those."""
 
-    amount_minor: int = Field(gt=0, description="Amount in paise: 450.50 rupees is 45050")
+    # Rupees, as people type them (450.50). The service converts to paise for storage.
+    amount: Decimal = Field(max_digits=12, decimal_places=2, examples=["450.50"])
     currency: str = Field(default=DEFAULT_CURRENCY, pattern=r"^[A-Z]{3}$")
     category_id: int
     merchant: str = Field(min_length=1, max_length=100)
@@ -28,10 +34,86 @@ class ExpenseCreate(BaseModel):
     payment_method: PaymentMethod
 
 
-class ExpenseRead(ExpenseCreate):
-    """What other modules get back: a frozen copy, not the table row."""
+class ExpenseUpdate(BaseModel):
+    """PATCH body: send only the fields you want to change."""
+
+    # These default to None but aren't typed "| None": leaving a field out means
+    # "don't change it", while sending null for it fails validation (422).
+    amount: Decimal = Field(default=None, max_digits=12, decimal_places=2)
+    currency: str = Field(default=None, pattern=r"^[A-Z]{3}$")
+    category_id: int = Field(default=None)
+    merchant: str = Field(default=None, min_length=1, max_length=100)
+    spent_on: date = Field(default=None)
+    payment_method: PaymentMethod = Field(default=None)
+    # The one field that can be cleared: send "note": null to remove it.
+    note: str | None = Field(default=None, max_length=500)
+
+
+class ExpenseRead(BaseModel):
+    """What callers get back: everything stored, plus the amount in rupees for display."""
 
     model_config = ConfigDict(from_attributes=True, frozen=True)
 
     id: int
+    # Paise: the exact stored value, safe for arithmetic.
+    amount_minor: int
+    currency: str
+    category_id: int
+    merchant: str
+    note: str | None
+    spent_on: date
+    payment_method: PaymentMethod
     created_at: datetime
+
+    @computed_field
+    @property
+    def amount(self) -> Decimal:
+        # Worked out from amount_minor every time, so the two can never disagree.
+        return paise_to_rupees(self.amount_minor)
+
+
+class ExpenseFilters(BaseModel):
+    """Query parameters for GET /expenses. All optional; combine as many as you like."""
+
+    # Reject unknown parameters, so a typo like ?catgory_id=3 is an error instead of silently ignored.
+    model_config = ConfigDict(extra="forbid")
+
+    start_date: date | None = None
+    end_date: date | None = None
+    category_id: int | None = None
+    merchant: str | None = Field(default=None, max_length=100, description="Exact merchant name, any letter case")
+    search: str | None = Field(
+        default=None, min_length=1, max_length=100, description="Text to find in the merchant or note"
+    )
+
+    @model_validator(mode="after")
+    def check_date_range(self) -> Self:
+        if self.start_date and self.end_date and self.start_date > self.end_date:
+            raise ValueError("start_date must be on or before end_date")
+        return self
+
+
+class CategoryTotal(BaseModel):
+    category_id: int
+    category_name: str
+    expense_count: int
+    total_minor: int
+
+    @computed_field
+    @property
+    def total(self) -> Decimal:
+        return paise_to_rupees(self.total_minor)
+
+
+class MonthlySummary(BaseModel):
+    month: str
+    currency: str
+    expense_count: int
+    total_minor: int
+    # Biggest spend first.
+    by_category: list[CategoryTotal]
+
+    @computed_field
+    @property
+    def total(self) -> Decimal:
+        return paise_to_rupees(self.total_minor)

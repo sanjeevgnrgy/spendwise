@@ -1,5 +1,7 @@
 from collections.abc import Iterator
+from typing import Annotated
 
+from fastapi import Depends
 from sqlmodel import Session, SQLModel, create_engine
 
 from app.core.config import settings
@@ -22,3 +24,7 @@ def get_session() -> Iterator[Session]:
     # A FastAPI dependency: one session per request, closed automatically when the request ends.
     with Session(engine) as session:
         yield session
+
+
+# Shorthand for route parameters: `session: SessionDep` gets a fresh session for each request.
+SessionDep = Annotated[Session, Depends(get_session)]

@@ -26,13 +26,14 @@ spendwise/
       main.py           composition root: creates the app, wires in every module
       core/             shared technical code, no business rules
         config.py       settings from .env
-        db.py           engine, table creation, get_session
+        db.py           engine, table creation, get_session / SessionDep
+        errors.py       NotFoundError (404), BusinessRuleError (422) and their handlers
         money.py        rupees <-> paise
         llm.py          ask_gemini()
       modules/
         assistant/      POST /ask
-        categories/     Category table + public interface
-        expenses/       Expense table + public interface
+        categories/     Category table, GET /categories, public interface
+        expenses/       Expense table, CRUD routes + GET /summary, public interface
     seed.py             sample data, using modules' public interfaces
     tests/              (planned) one folder per module + architecture tests
   agents/               (planned) A2A agents: receipt, insights, currency; separate services
@@ -55,8 +56,8 @@ Modules and folders are added only in the phase that needs them.
 5. **Services return DTOs** (frozen Pydantic models such as `CategoryRead`), never table rows.
 6. **Links between modules are plain ids** with no database foreign key. They are checked through the
    other module's service.
-7. **`core/` never imports from `modules/`.** It holds config, db, money, the LLM client, and later
-   logging, errors and events.
+7. **`core/` never imports from `modules/`.** It holds config, db, errors, money and the LLM client;
+   logging and events come later.
 8. **`main.py` is the composition root:** the only file that knows every module.
 9. **Cross-module reactions** ("an expense was created") will go through a small in-process event bus
    in `core/`, added when first needed.
@@ -78,8 +79,10 @@ that link, so the service must, and it does.
 | Module | Exports (`from app.modules import <name>`) | Used by |
 |---|---|---|
 | `categories` | `CategoryCreate`, `CategoryRead`, `create_category`, `get_category`, `list_categories` | `expenses`, `seed.py` |
-| `expenses` | `ExpenseCreate`, `ExpenseRead`, `PaymentMethod`, `create_expense`, `list_expenses` | `seed.py` |
-| `assistant` | nothing yet | `main.py` includes its router |
+| `expenses` | `ExpenseCreate`, `ExpenseUpdate`, `ExpenseRead`, `ExpenseFilters`, `MonthlySummary`, `CategoryTotal`, `PaymentMethod`, `create_expense`, `get_expense`, `list_expenses`, `update_expense`, `delete_expense`, `monthly_summary` | `seed.py` (later: mcp, assistant) |
+| `assistant` | nothing yet | — |
+
+Routers are not part of any public interface; only `main.py` imports them.
 
 ## How a request flows
 
@@ -94,21 +97,27 @@ HTTP request
   -> Gemini API
 ```
 
-Creating an expense (from `seed.py` today, from a route later):
+`POST /expenses`:
 
 ```
-expenses.create_expense(session, ExpenseCreate)
-  -> categories.get_category(...)       public interface of another module: "does category 3 exist?"
-  -> expenses/repository.add(...)       the only code that writes the expense table
-  <- ExpenseRead (frozen copy)
+HTTP request
+  -> modules/expenses/router.py         FastAPI validates the body (ExpenseCreate) -> 422 with a list if malformed
+  -> modules/expenses/service.py        create_expense(): amount > 0? category exists?
+       -> categories.get_category()     public interface of another module: "does category 3 exist?"
+       -> rupees_to_paise()             core/money.py
+       -> expenses/repository.add()     the only code that writes the expense table
+  <- ExpenseRead (frozen copy)           router returns it with 201
 ```
+
+If the service raises `NotFoundError` or `BusinessRuleError`, the handlers registered from `core/errors.py`
+turn it into a 404 or 422 response. The router never catches anything itself.
 
 ## Startup
 
-`main.py` imports `categories` and `expenses` even though it doesn't call them yet. Importing a module
-defines its table classes, which registers them with SQLModel. The app's `lifespan` then calls
-`create_db_and_tables()`, which creates every registered table that doesn't exist yet. `core` can't do
-the importing itself, because core never imports modules.
+`main.py` imports each module's router. That also imports the module itself, which defines its table classes
+and registers them with SQLModel. The app's `lifespan` then calls `create_db_and_tables()`, which creates
+every registered table that doesn't exist yet. `core` can't do the importing itself, because core never
+imports modules.
 
 ## Adding a new module
 

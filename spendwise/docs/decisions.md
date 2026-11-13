@@ -137,3 +137,58 @@ add a new entry and mark the old one **Superseded by D<n>**.
 ### D25. `.vscode/settings.json` is committed
 - **Why:** it points VS Code at `spendwise/.venv` and at `spendwise/backend` for imports. Everyone who opens
   the repo gets working import checking. It contains no secrets. The interpreter path is Windows-only.
+
+---
+
+## Expenses API (Phase 4)
+
+### D26. The API takes rupees; responses give both paise and rupees
+- **In:** `amount` as a decimal (`450.50`), sent as a JSON number or string. At most 2 decimal places and 12 digits.
+- **Out:** `amount_minor` (int, the exact stored value) and `amount` (computed from it, e.g. `"450.50"`).
+- **Why strings in JSON:** Pydantic writes `Decimal` as a string, so no client parses money into a float by accident.
+- **Where it's converted:** in the expenses service, so every caller (API, seed, later MCP) gets the same conversion.
+
+### D27. Schemas check shape; services check business rules
+- **Schemas:** types, lengths, ≤ 2 decimal places, currency pattern, date order in filters.
+- **Services:** amount > 0, the category exists.
+- **Why:** shape errors are caught before any code runs. Business rules live in the one place every caller
+  passes through.
+
+### D28. Service errors become HTTP responses in one place
+- **What:** services raise `NotFoundError` or `BusinessRuleError` (`core/errors.py`). `main.py` registers
+  handlers that turn them into 404 / 422 with `{"detail": "<message>"}`.
+- **Why:** services stay free of HTTP (so MCP tools can reuse them), and routers need no try/except.
+- **Revisit when:** a third kind of error appears, or to move `/ask`'s Gemini → 502 mapping here too.
+
+### D29. 404 only for the resource in the URL
+- An unknown `category_id` in a request body is **422**, not 404: the endpoint exists, the body is invalid.
+
+### D30. PATCH is a partial update
+- Only fields the client sent are changed (`model_dump(exclude_unset=True)`).
+- Required fields can't be set to `null` (422). `note` can, which clears it.
+- Changing `amount` or `category_id` re-runs the same rules as create.
+
+### D31. Filters for `GET /expenses`
+- Named `start_date`, `end_date` (both inclusive), `category_id`, `merchant` (exact, any case) and `search`
+  (contains, in merchant or note).
+- `%` and `_` in `search` are matched literally (`autoescape`), not as SQL wildcards.
+- Defined as one query model with `extra="forbid"`, so unknown parameters are a 422 instead of being ignored.
+- Filtering by category **id** rather than name keeps it exact; the frontend and AI can look up ids via `GET /categories`.
+
+### D32. `GET /summary` covers one month in one currency
+- `month=YYYY-MM` is required; `currency` defaults to `INR`, because adding different currencies is meaningless.
+- The database adds up the totals (`GROUP BY`); category names come from the categories module's public interface.
+- A category id with no matching category shows as "Unknown" instead of failing (possible because there's no foreign key).
+- Categories are listed biggest spend first. Categories with no spending that month are left out.
+
+### D33. `DELETE` is permanent and returns 204
+- No "are you sure?" at the API level. Confirmation is the assistant's job (project safety rule: confirm before deletes).
+- **Revisit when:** undo or soft-delete is wanted.
+
+### D34. No pagination on `GET /expenses` yet
+- It returns every matching row. Fine for a learning dataset.
+- **Revisit when:** lists get long. Add `limit` / `offset` then.
+
+### D35. `get_expense` raises; `get_category` returns `None`
+- `expenses.get_expense()` raises `NotFoundError`, because callers asking for a specific expense expect it to exist.
+- `categories.get_category()` returns `None`, because other modules use it as a "does this exist?" check.

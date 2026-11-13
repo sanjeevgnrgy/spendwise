@@ -3,6 +3,10 @@
 **Goal:** restructure the backend into a modular monolith, add a database with `categories` and `expenses`
 modules, money helpers, and a seed script, keeping `/health` and `/ask` working.
 
+> **Later changes:** in Phase 4, `ExpenseCreate` takes `amount` in rupees instead of `amount_minor`, and the
+> service does the conversion. `main.py` now imports each module through its router. The duplicate-category
+> error became `BusinessRuleError`. This page records Phase 3 as it was built.
+
 ## Concepts
 
 - **Modular monolith:** one app, deployed as one unit, with one database, divided inside into modules by

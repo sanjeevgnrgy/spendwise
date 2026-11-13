@@ -8,7 +8,7 @@ from datetime import date, timedelta
 from sqlmodel import Session
 
 from app.core.db import create_db_and_tables, engine
-from app.core.money import paise_to_rupees, rupees_to_paise
+from app.core.money import paise_to_rupees
 
 # Only the modules' public interfaces, exactly like any other caller would use them.
 from app.modules import categories, expenses
@@ -25,7 +25,8 @@ DEFAULT_CATEGORIES = [
 ]
 
 # (days ago, rupees, category, merchant, payment method, note)
-# Rupees are strings so they go through Decimal, never through a float.
+# Rupees are strings so they become exact Decimals, never floats. The expenses
+# service converts them to paise, exactly as it does for the API.
 SAMPLE_EXPENSES = [
     (1, "450.50", "Food", "Swiggy", "upi", "Dinner"),
     (2, "220.00", "Transport", "Uber", "upi", None),
@@ -60,7 +61,7 @@ def main() -> None:
             expenses.create_expense(
                 session,
                 expenses.ExpenseCreate(
-                    amount_minor=rupees_to_paise(rupees),
+                    amount=rupees,
                     category_id=category_ids[category],
                     merchant=merchant,
                     note=note,
@@ -72,8 +73,7 @@ def main() -> None:
         saved = expenses.list_expenses(session)
         print(f"Seeded {len(category_ids)} categories and {len(saved)} expenses:")
         for e in saved:
-            print(f"  {e.spent_on}  {e.currency} {paise_to_rupees(e.amount_minor):>8}  "
-                  f"(stored as {e.amount_minor:>6} paise)  {e.merchant}")
+            print(f"  {e.spent_on}  {e.currency} {e.amount:>8}  (stored as {e.amount_minor:>6} paise)  {e.merchant}")
         total = sum(e.amount_minor for e in saved)
         print(f"  Total: INR {paise_to_rupees(total)} (stored as {total} paise)")
 

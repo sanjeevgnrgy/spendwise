@@ -1,8 +1,13 @@
-"""The only code that reads or writes the expenses table."""
+"""The only code that reads or writes the expenses table. Queries only, no business rules."""
 
+from datetime import date
+from typing import Any
+
+from sqlalchemy import func, or_
 from sqlmodel import Session, col, select
 
 from app.modules.expenses.models import Expense
+from app.modules.expenses.schemas import ExpenseFilters
 
 
 def add(session: Session, expense: Expense) -> Expense:
@@ -13,8 +18,54 @@ def add(session: Session, expense: Expense) -> Expense:
     return expense
 
 
-def list_all(session: Session) -> list[Expense]:
+def get(session: Session, expense_id: int) -> Expense | None:
+    return session.get(Expense, expense_id)
+
+
+def search(session: Session, filters: ExpenseFilters) -> list[Expense]:
+    statement = select(Expense)
+    # Each condition is added only when that filter was given, so no filters means "everything".
+    if filters.start_date:
+        statement = statement.where(Expense.spent_on >= filters.start_date)
+    if filters.end_date:
+        statement = statement.where(Expense.spent_on <= filters.end_date)
+    if filters.category_id is not None:
+        statement = statement.where(Expense.category_id == filters.category_id)
+    if filters.merchant:
+        statement = statement.where(func.lower(Expense.merchant) == filters.merchant.lower())
+    if filters.search:
+        # autoescape: a % or _ the user types is searched for literally, not used as a wildcard.
+        statement = statement.where(
+            or_(
+                col(Expense.merchant).icontains(filters.search, autoescape=True),
+                col(Expense.note).icontains(filters.search, autoescape=True),
+            )
+        )
     # Newest first: that's how people read a list of expenses.
-    # col() tells the type checker these are database columns, which have .desc().
-    statement = select(Expense).order_by(col(Expense.spent_on).desc(), col(Expense.id).desc())
+    statement = statement.order_by(col(Expense.spent_on).desc(), col(Expense.id).desc())
     return list(session.exec(statement))
+
+
+def update(session: Session, expense: Expense, changes: dict[str, Any]) -> Expense:
+    for field, value in changes.items():
+        setattr(expense, field, value)
+    session.add(expense)
+    session.commit()
+    session.refresh(expense)
+    return expense
+
+
+def delete(session: Session, expense: Expense) -> None:
+    session.delete(expense)
+    session.commit()
+
+
+def totals_by_category(session: Session, start: date, end: date, currency: str) -> list[tuple[int, int, int]]:
+    """(category_id, number of expenses, total paise) for expenses from start up to, not including, end."""
+    # The database does the adding up (GROUP BY), instead of loading every row into Python.
+    statement = (
+        select(Expense.category_id, func.count(col(Expense.id)), func.sum(Expense.amount_minor))
+        .where(Expense.spent_on >= start, Expense.spent_on < end, Expense.currency == currency)
+        .group_by(col(Expense.category_id))
+    )
+    return [(category_id, count, total) for category_id, count, total in session.exec(statement)]

@@ -181,6 +181,7 @@ export type AgentEvent =
   | { type: "TOOL_CALL_END"; toolCallId: string } // the arguments are complete; the tool runs next
   | { type: "TOOL_CALL_RESULT"; toolCallId: string; content: string; metadata?: { ok?: boolean } }
   | { type: "STATE_SNAPSHOT"; snapshot: AgentState }
+  | { type: "CUSTOM"; name: string; value: unknown } // name "a2ui": value is one A2UI message, checked in lib/a2ui.ts
   | { type: "RUN_FINISHED"; threadId: string; runId: string }
   | { type: "RUN_ERROR"; message: string; code?: string }
 

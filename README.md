@@ -2,11 +2,12 @@
 
 An agentic expense tracker, built one small phase at a time as a learning project.
 
-**Current state (Phase 15):** a React web app (`web/`) with a sidebar layout, light/dark theme, a
+**Current state (Phase 16):** a React web app (`web/`) with a sidebar layout, light/dark theme, a
 Dashboard (this month's total, category and 6-month trend charts, recent expenses), an
 Expenses page (sortable table, filters, add/edit/delete) and an Assistant chat panel on every page
 that shows the agent's reply as it's written, each tool it uses as a live status chip ("Saving expense…" → "Expense
-saved"), and refreshes the page as soon as a tool changes data, on top of a modular-monolith FastAPI
+saved"), a card for each tool's result (expense saved, updated or deleted, the month's summary, found expenses) drawn
+from an A2UI description, and refreshes the page as soon as a tool changes data, on top of a modular-monolith FastAPI
 backend with a REST API for expenses
 (create, list with filters, read, update, delete), a monthly summary, a categories list,
 `POST /ask` (sends a prompt to Gemini), `POST /parse` (turns a note like "Paid 450 at Swiggy
@@ -144,7 +145,7 @@ spendwise/
         money.py           rupees <-> paise helpers
         llm.py             the one place that talks to Gemini (plain, structured output, streamed tool steps)
       modules/
-        assistant/         POST /ask, /parse, /chat, /agent (AG-UI stream), GET /threads; ChatMessage table (+ parse, agent, mcp_client)
+        assistant/         POST /ask, /parse, /chat, /agent (AG-UI stream), GET /threads; ChatMessage table (+ parse, agent, mcp_client, a2ui/)
         mcp/               MCP server: expense tools and resources for any MCP client, mounted at /mcp/
         categories/        Category table, GET /categories, public interface
         expenses/          Expense table, CRUD routes, GET /summary, public interface
@@ -156,6 +157,7 @@ spendwise/
     src/pages/expenses/    the Expenses page: table, filters, add dialog, inline edit
     src/pages/dashboard/   the Dashboard: cards, charts, recent expenses
     src/components/chat/   the Assistant chat panel (state in src/hooks/use-chat.ts)
+    src/components/a2ui/   the A2UI renderer: allowed components -> shadcn/ui (messages checked in src/lib/a2ui.ts)
     src/components/ui/     shadcn/ui components (copied source, editable)
   run.ps1                  one-command dev start (Windows)
   requirements.txt         pinned direct dependencies

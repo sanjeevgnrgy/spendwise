@@ -168,9 +168,24 @@ on your tier, or temporarily overloaded).
 - **Cause:** a browser reload clears it (it's kept in memory across pages and panel toggles, not across reloads), or
   **New conversation** was clicked. The thread itself is still on the server: `GET /threads/{id}`.
 
-### Build error: `Cannot find module 'cn'` in `components/ui/resizable.tsx`
-- **Cause:** shadcn's generated file imports `cn` from `"cn"`. This happens again if the component is re-added with the CLI.
-- **Fix:** change it to `import { cn } from "@/lib/utils"`.
+### Build error: `Cannot find module 'cn'` in a `components/ui/` file
+- **Cause:** `cn` is a real npm package, shadcn's class-name merger, listed in `web/package.json`. The shadcn components
+  import it. This error means `node_modules` is missing or out of date. (An earlier version of this entry blamed
+  shadcn and said to edit the import; that was wrong, see decisions D119.)
+- **Fix:** run `npm install` in `web/`.
+
+### Assistant panel: a card says "Can't show …"
+- **Cause:** the agent's A2UI description contained something the renderer doesn't allow or support yet: a component
+  outside the catalog, a data-bound value, a broken child reference, or very deep nesting. Showing a harmless note
+  instead is deliberate (decisions D118).
+- **Fix:** none needed in the browser. If a card from SpendWise's own backend shows this, its card builder
+  (`modules/assistant/a2ui/cards.py`) has a bug.
+
+### Assistant panel: a tool ran but no card appeared
+- **Cause:** a card is only sent after a **successful** tool call (a ✓ chip); a red ✗ chip never gets one. If the tool's
+  result couldn't be read, the card is skipped on purpose and the text reply still arrives. The backend terminal then
+  logs `no A2UI card for <tool>: ...`.
+- **Fix:** read that log line. After changing backend code, check that the server reloaded.
 
 ### Dashboard shows "Couldn't load the dashboard"
 - **Cause:** one of its four requests failed, most often because the backend isn't running.

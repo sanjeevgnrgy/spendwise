@@ -6,6 +6,8 @@
 > [phase-14-agui-streaming.md](phase-14-agui-streaming.md). In Phase 15, the tool badges became live status chips, and
 > the refresh no longer guesses from tool names (`changedData()` is gone): the agent sends a new `dataVersion` in a
 > `STATE_SNAPSHOT`, and `setDataVersion` replaced `notifyDataChanged` ([phase-15-tool-progress.md](phase-15-tool-progress.md)).
+> **Correction (Phase 16):** the "shadcn bug" described below wasn't one. `cn` is a real npm package (shadcn's class-name
+> merger) that all the shadcn components import; see [decisions.md](../decisions.md) D119.
 > This page records Phase 13 as it was built.
 
 **Goal:** an Assistant chat panel available on every page: a resizable side panel on desktop, a Sheet on mobile.

@@ -598,6 +598,7 @@ is natural. It's still a soft, model-judged guard.
 
 ### D99. Fixed shadcn's generated `resizable.tsx`
 - It imported `cn` from `"cn"`; changed to `"@/lib/utils"`. Re-adding the component with the CLI could bring the bug back.
+- **Superseded by D119:** that import wasn't a bug; `cn` is shadcn's npm package.
 
 ### D100. The inner content wrapper is a `<div>`, not `<main>`
 - `SidebarInset` already renders `<main>`; the nested `<main>` from Phase 11 was invalid HTML.
@@ -697,6 +698,7 @@ is natural. It's still a soft, model-judged guard.
 - If Gemini wrote text before calling a tool ("Let me check."), `TEXT_MESSAGE_END` is sent before `TOOL_CALL_START`, and
   later text is a new message (starting with the `\n\n` from D106). Tool events never interleave with an open text
   message, which keeps strict AG-UI clients happy. The panel joins a run's text into one bubble.
+- **Updated by D115:** the "strict clients" reason was wrong; the behaviour stays, for a different reason.
 
 ### D111. "Did this tool change data?" comes from MCP tool annotations
 - The MCP server marks `list_expenses` and `get_summary` `read_only_hint=True`; `add_expense` is `destructive_hint=False`;
@@ -727,3 +729,80 @@ is natural. It's still a soft, model-judged guard.
 - If the run fails, chips still spinning turn into failures, so nothing keeps spinning forever.
 - "Thinking…" shows only while nothing else shows progress: before the first event, or between finished tools and the
   start of the answer's text.
+
+---
+
+## Sources (after Phase 15)
+
+### D115. Correction to D110's reason
+- D110 said closing the text message before a tool call "keeps strict AG-UI clients happy". That was from memory, not
+  a source. Checked against AG-UI's TypeScript event verifier ([sources.md](sources.md) §3), it's wrong: nothing there
+  forbids tool events while a text message is open.
+- **The behaviour stays:** each text message is then one continuous piece of the reply, and a client that shows messages
+  separately places the tool call between them in the right order. SpendWise's panel joins them into one bubble anyway.
+- **Lesson:** facts from docs, specs or library code now go in [sources.md](sources.md), with a link or file path. A
+  reason that can't be traced to a source is written as an assumption.
+
+---
+
+## A2UI card (Phase 16)
+
+> Checked offline: the models against valid and invalid cards, the card in the real `/agent` stream (fake Gemini, real
+> MCP), and the web renderer by rendering the card plus hostile descriptions to HTML with React's server renderer.
+> `npm run build` passes. Not yet seen in a browser or with real Gemini.
+
+### D116. A2UI v1.0, a seven-component subset, as strict Pydantic models
+- v1.0 is the current spec ([sources.md](sources.md) §8). `modules/assistant/a2ui/models.py` covers Text, Card, Row,
+  Column, List, Button and Divider, plus the createSurface, updateComponents and deleteSurface messages. JSON keys are
+  camelCase (aliases), as in the spec.
+- **Strict like the spec's schema:** unknown fields are rejected; ids must look like identifiers (no hyphens); `component`
+  picks the model (a discriminated union), so anything outside the catalog fails. `CreateSurface` also checks that there
+  is a `root`, that ids are unique, and that every child reference exists.
+- **Left out for now:** data bindings (`{"@path": ...}`), template child lists, `functionCall` actions, `updateDataModel`,
+  and the components we don't use. `a2ui-core` on PyPI exists; we write our own models because the phase is about
+  learning the format.
+
+### D117. A card is one `createSurface` message in one AG-UI `CUSTOM` event named `a2ui`
+- The v1.0 schema lets `createSurface` carry its components, so one message describes a whole card. AG-UI has no A2UI
+  event of its own, so it travels in `CUSTOM` (`value` = the A2UI message), as the phase asks.
+- Cards are **built by code** (`a2ui/cards.py`) from the tool's actual result, not by the model. They're sent only for
+  successful calls, right after the `TOOL_CALL_RESULT` (and any `STATE_SNAPSHOT`).
+- The phase asked for `add_expense`'s card. On request, all five tools have one: saved, updated, delete preview /
+  deleted, month summary, and found expenses (up to 10 rows).
+- **The delete card never overclaims:** without confirmation it reads "Delete this expense?" and says nothing is deleted
+  until you reply "yes" (D53, D114).
+- **A new surface id per card** (`<kind>_<12 hex>`): the same expense can be updated twice in one chat, and the spec
+  forbids creating a surface twice.
+- Which tool gets which card is a table in `cards.py`, like the chip wording in the browser (D114). If a result can't be
+  read, the card is skipped and logged; the reply still arrives. `/chat` sends no cards.
+
+### D118. The renderer: an allowlist mapped to our components, and nothing else
+- `components/a2ui/a2ui-surface.tsx` maps each allowed component to our shadcn components: Card to `Card`, Divider to
+  `Separator`, Button to `Button`, Row/Column/List to flex `div`s, and Text to a `span` styled as caption or body.
+  Anything else renders a dashed "Can't show …" placeholder.
+- **Never markup from the server:** text goes through React, which escapes it; nothing uses `innerHTML`. Text's "simple
+  Markdown" isn't rendered yet. Server values only pick from fixed tables of class names (`Object.hasOwn`), so they can't
+  inject classes.
+- A List is `role="list"` with a `role="listitem"` around each child, for screen readers.
+- **Defensive structure:** `lib/a2ui.ts` checks every message before using it and ignores other protocol versions.
+  Components are kept in a `Map`, so an id like `__proto__` is just a key. Nesting stops at depth 12, so a component that
+  contains itself can't loop forever.
+- **Button** is drawn but disabled ("Not available yet") until a later phase sends actions back to the agent.
+
+### D119. Correction to D99: `cn` is shadcn's npm package
+- `web/package.json` has had `"cn": "^0.5.2"` since Phase 11 (shadcn init). Its own description: "Fast, small, compiled
+  class-name merging for Tailwind CSS. Drop-in replacement for clsx + tailwind-merge". Its repository is
+  `github.com/shadcn-ui/cn`. 19 of our shadcn components import it.
+- So `resizable.tsx`'s `import { cn } from "cn"` was fine. Changing it to `@/lib/utils` did no harm, since both merge
+  classes the same way. The shadcn components use the package, and our own code uses `@/lib/utils`. The troubleshooting
+  entry now says to run `npm install`.
+
+### D120. Expense ids are shown as `#14` everywhere
+- **Why:** the assistant asked "let me know its ID", but the UI never showed ids. They now appear in the expense cards
+  (top right), in every row of the list card, and as a sortable **ID** column in the Expenses table (read-only in the
+  edit row).
+- The system instruction tells the assistant that the app shows ids as `#14`, to include them when it mentions specific
+  expenses, and that `#14` from the user means id 14.
+- The **full** id is shown, not "the first 6 characters" (as first asked). Ids are whole numbers counting up from 1, so
+  they're short, and cutting a number would point at the wrong expense once ids pass 999,999. **Revisit when:** ids
+  become long random strings (e.g. UUIDs); then show a short prefix and make the server accept it.

@@ -4,7 +4,8 @@ How SpendWise talks to Gemini, which models a free account can use, and what to 
 
 > Facts about Google's models, pricing and limits were checked against Google's docs on 2026-11-13
 > (`aistudio.google.com/docs/...`; the old `ai.google.dev/gemini-api/docs/...` links redirect there).
-> They change often, so re-check before relying on them.
+> They change often, so re-check before relying on them. The streaming and retry facts, with their links and
+> SDK file paths, are in [sources.md](sources.md).
 
 ## Setup
 

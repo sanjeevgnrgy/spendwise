@@ -15,7 +15,7 @@ interface EditRowProps {
 }
 
 // One table row in "edit mode". It must render the same columns, in the same order, as the
-// normal row in expenses-table.tsx: select, date, merchant, category, amount, paid with, note, actions.
+// normal row in expenses-table.tsx: select, id, date, merchant, category, amount, paid with, note, actions.
 export function EditRow({ expense, categories, onSave, onCancel }: EditRowProps) {
   // A private draft of the values while editing. The table's data only changes after Save succeeds,
   // so Cancel can simply throw the draft away.
@@ -59,6 +59,8 @@ export function EditRow({ expense, categories, onSave, onCancel }: EditRowProps)
   return (
     <TableRow className="bg-muted/50" onKeyDown={handleKeyDown}>
       <TableCell />
+      {/* The id can't be edited: it's how the expense is found. */}
+      <TableCell className="text-muted-foreground tabular-nums">#{expense.id}</TableCell>
       <TableCell>
         <Input type="date" className="h-8 w-36" value={draft.spent_on} onChange={(e) => set("spent_on", e.target.value)} />
       </TableCell>

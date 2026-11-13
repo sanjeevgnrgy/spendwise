@@ -1,5 +1,8 @@
 # Phase 11: Frontend setup + Expenses page
 
+> **Later changes:** in Phase 16 the Expenses table gained a sortable **ID** column (`#14`), so ids shown by the
+> assistant can be matched to rows ([decisions.md](../decisions.md) D120).
+
 **Goal:** a React web app in `web/` with a sidebar layout, light/dark theme, and a full Expenses page (sortable
 table, filters, row selection, add dialog, inline edit, delete with confirmation, toasts), talking to the backend,
 which now allows it through CORS.

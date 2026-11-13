@@ -1,9 +1,10 @@
+import { A2uiSurfaceView } from "@/components/a2ui/a2ui-surface"
 import { ToolChip } from "@/components/chat/tool-chip"
 import type { ChatMessage } from "@/hooks/use-chat"
 import { cn } from "@/lib/utils"
 
-// One bubble: yours on the right, the assistant's on the left. The assistant's tool activity is
-// shown above its text, because the tools run before it answers.
+// One bubble: yours on the right, the assistant's on the left. The assistant's tool activity and
+// any cards are shown above its text, because the tools run before it answers.
 export function ChatMessageBubble({ message }: { message: ChatMessage }) {
   const isUser = message.role === "user"
 
@@ -14,6 +15,15 @@ export function ChatMessageBubble({ message }: { message: ChatMessage }) {
         <div className="flex max-w-[85%] flex-wrap gap-1" aria-live="polite">
           {message.tools.map((tool) => (
             <ToolChip key={tool.id} tool={tool} />
+          ))}
+        </div>
+      )}
+
+      {/* Cards come with a tool's result, so they sit between the chips and the reply text. */}
+      {message.surfaces && message.surfaces.length > 0 && (
+        <div className="flex w-full max-w-[85%] flex-col gap-2">
+          {message.surfaces.map((surface) => (
+            <A2uiSurfaceView key={surface.id} surface={surface} />
           ))}
         </div>
       )}

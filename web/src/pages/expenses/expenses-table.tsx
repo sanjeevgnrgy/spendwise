@@ -99,6 +99,14 @@ export function ExpensesTable({ expenses, categories, loading, onSave, onDelete 
           ),
           enableSorting: false,
         }),
+        // The id as "#14": the assistant shows ids the same way, so you can say "delete #14".
+        columnHelper.accessor("id", {
+          header: ({ column }) => (
+            <SortButton title="ID" sorted={column.getIsSorted()} onClick={column.getToggleSortingHandler()} />
+          ),
+          cell: ({ getValue }) => <span className="text-muted-foreground tabular-nums">#{getValue()}</span>,
+          sortFn: sortFn_basic,
+        }),
         columnHelper.accessor("spent_on", {
           header: ({ column }) => (
             <SortButton title="Date" sorted={column.getIsSorted()} onClick={column.getToggleSortingHandler()} />

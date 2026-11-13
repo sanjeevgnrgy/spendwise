@@ -1,6 +1,7 @@
 import { useRef, useState } from "react"
 
 import { newId, runAgent } from "@/api"
+import { applyA2uiMessage, type A2uiSurface } from "@/lib/a2ui"
 import { useDataSync } from "@/lib/data-sync"
 
 // One tool call the assistant made, as the panel shows it: a chip that changes as events arrive.
@@ -17,6 +18,7 @@ export interface ChatMessage {
   role: "user" | "assistant"
   text: string
   tools?: ToolActivity[] // assistant only: the tools used for this reply, in order
+  surfaces?: A2uiSurface[] // assistant only: A2UI cards sent with this reply
   failed?: boolean // the run failed; text is the error
 }
 
@@ -85,6 +87,12 @@ export function useChat() {
           case "STATE_SNAPSHOT":
             // A tool changed expenses. A new dataVersion makes every page that shows them reload.
             setDataVersion(event.snapshot.dataVersion)
+            break
+          case "CUSTOM":
+            // A2UI rides in AG-UI's extension event. Custom events with other names are ignored.
+            if (event.name === "a2ui") {
+              update(reply(), (message) => ({ ...message, surfaces: applyA2uiMessage(message.surfaces ?? [], event.value) }))
+            }
             break
         }
       })

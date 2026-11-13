@@ -1,5 +1,8 @@
 # Phase 15: Tool progress
 
+> **Later changes:** in Phase 16, `ToolFinished` also carries the tool's `name`, and a successful `add_expense` is
+> followed by a `CUSTOM` "a2ui" event with an "Expense saved" card ([phase-16-a2ui-card.md](phase-16-a2ui-card.md)).
+
 **Goal:** while the assistant works, the chat panel shows each tool it uses as a small status chip ("Saving
 expense…" → "Expense saved", or "Couldn't save expense"). The backend streams AG-UI tool events around every MCP call.
 After a tool changes data, it also sends a `STATE_SNAPSHOT` with `{"dataVersion": n}`, and the pages reload when that

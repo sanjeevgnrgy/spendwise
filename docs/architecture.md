@@ -33,6 +33,7 @@ spendwise/
         llm.py          ask_gemini(), ask_gemini_for_json(), stream_gemini_with_tools()
       modules/
         assistant/      POST /ask, /parse, /chat, /agent (AG-UI stream), GET /threads; ChatMessage table (parse, agent, mcp_client)
+          a2ui/         A2UI v1.0 models (the allowed catalog) and ready-made cards, sent as AG-UI CUSTOM events
         mcp/            MCP server "spendwise": 5 tools (with read-only/destructive annotations), 2 resources; mounted at /mcp/ (no tables)
         categories/     Category table, GET /categories, public interface
         expenses/       Expense table, CRUD routes + GET /summary, /summary/trend, public interface
@@ -160,7 +161,8 @@ HTTP request
        text pieces                        -> TEXT_MESSAGE_START (if none open), TEXT_MESSAGE_CONTENT
        ToolStarted (before an MCP call)   -> TEXT_MESSAGE_END (if open), TOOL_CALL_START, TOOL_CALL_ARGS, TOOL_CALL_END
        ToolFinished (after it)            -> TOOL_CALL_RESULT (metadata.ok); if it changed data (MCP annotations,
-                                             mcp_client.changes_data): STATE_SNAPSHOT {"dataVersion": state + 1}
+                                             mcp_client.changes_data): STATE_SNAPSHOT {"dataVersion": state + 1};
+                                             if a2ui.card_for(tool) has a card: CUSTOM {"name": "a2ui", "value": <A2UI message>}
   -> assistant/repository.add_turn()    saves the turn when the loop ends
   <- TEXT_MESSAGE_END, RUN_FINISHED   or RUN_ERROR on any failure (nothing saved)
 ```

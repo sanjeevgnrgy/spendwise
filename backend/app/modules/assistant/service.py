@@ -7,6 +7,7 @@ from uuid import uuid4
 
 from ag_ui.core import (
     BaseEvent,
+    CustomEvent,
     RunAgentInput,
     RunErrorEvent,
     RunFinishedEvent,
@@ -27,7 +28,7 @@ from app.core.errors import BusinessRuleError, ExternalServiceError, NotFoundErr
 
 # Another module's public interface: the only way in to it.
 from app.modules import categories
-from app.modules.assistant import agent, parse, repository
+from app.modules.assistant import a2ui, agent, parse, repository
 from app.modules.assistant.models import ChatMessage
 from app.modules.assistant.schemas import (
     MAX_MESSAGE_LENGTH,
@@ -117,8 +118,8 @@ def agent_run(session: Session, run: RunAgentInput) -> Iterator[BaseEvent]:
     """POST /agent: one AG-UI run, answering the newest user message as a stream of events.
 
     RUN_STARTED; then, as they happen, the reply's text as TEXT_MESSAGE_START / _CONTENT / _END, each
-    tool call as TOOL_CALL_START / _ARGS / _END / _RESULT, and a STATE_SNAPSHOT after a tool changed
-    data; then RUN_FINISHED. Once the stream has started, the HTTP status (200) has already been sent
+    tool call as TOOL_CALL_START / _ARGS / _END / _RESULT, a STATE_SNAPSHOT after a tool changed data,
+    and a CUSTOM "a2ui" event with a card for tools that have one; then RUN_FINISHED. Once the stream has started, the HTTP status (200) has already been sent
     and can't change, so any failure is reported as a RUN_ERROR event instead.
     """
     yield RunStartedEvent(thread_id=run.thread_id, run_id=run.run_id)
@@ -160,6 +161,10 @@ def agent_run(session: Session, run: RunAgentInput) -> Iterator[BaseEvent]:
                 if item.changed_data:
                     data_version += 1
                     yield StateSnapshotEvent(snapshot={"dataVersion": data_version})
+                card = a2ui.card_for(item.name, item.text) if item.ok else None
+                if card is not None:
+                    # A2UI has no event of its own in AG-UI, so it travels in AG-UI's extension event.
+                    yield CustomEvent(name="a2ui", value=card.to_json())
 
             else:
                 # The last item: the whole turn. Saved only when the run succeeds, like POST /chat.

@@ -13,6 +13,10 @@ _connect_args = {"check_same_thread": False} if settings.database_url.startswith
 # One engine for the whole app: it manages the pool of database connections.
 engine = create_engine(settings.database_url, connect_args=_connect_args)
 
+# The largest integer SQLite can store. Ids above it can't exist, so inputs are capped here and get a
+# clean 404/422, instead of crashing the database driver with an OverflowError (a 500).
+MAX_ID = 2**63 - 1
+
 
 def create_db_and_tables() -> None:
     # Creates only tables whose models have been imported by now; existing tables are left alone.

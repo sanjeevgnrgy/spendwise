@@ -1,3 +1,5 @@
+import { useMemo } from "react"
+
 import { A2uiChoicePicker, A2uiDateTimeInput, A2uiTextField } from "@/components/a2ui/a2ui-inputs"
 import { A2uiInsight } from "@/components/a2ui/a2ui-insights"
 import { Unsupported } from "@/components/a2ui/a2ui-unsupported"
@@ -6,6 +8,7 @@ import { Card, CardContent } from "@/components/ui/card"
 import { Separator } from "@/components/ui/separator"
 import {
   BASIC_CATALOG,
+  drawnSize,
   INSIGHTS_CATALOG,
   isObject,
   pick,
@@ -35,8 +38,10 @@ const JUSTIFY = {
 const ALIGN = { start: "items-start", center: "items-center", end: "items-end", stretch: "items-stretch" }
 const BUTTON_VARIANT = { default: "outline", primary: "default", borderless: "ghost" } as const
 
-// A component that lists itself (or an ancestor) as a child would nest forever; stop well before that.
+// Limits that keep a broken or hostile description from freezing the page: how deep components may
+// nest, and how many one card may draw in total (the insight and list cards draw about 60).
 const MAX_DEPTH = 12
+const MAX_DRAWN = 300
 
 interface A2uiSurfaceViewProps {
   surface: A2uiSurface
@@ -46,6 +51,10 @@ interface A2uiSurfaceViewProps {
 }
 
 export function A2uiSurfaceView({ surface, locked = false, onChange, onAction }: A2uiSurfaceViewProps) {
+  // Measured once per change of components, not on every keystroke in a form.
+  const size = useMemo(() => drawnSize(surface.components, MAX_DRAWN), [surface.components])
+  if (size > MAX_DRAWN) return <Unsupported what="a card that's this large, or that contains itself" />
+
   const ctx: A2uiRenderContext = { surface, locked: locked || surface.submitted === true, onChange, onAction }
   // Rendering starts at the component with id "root", as the spec says.
   return <A2uiNode ctx={ctx} id="root" depth={0} />

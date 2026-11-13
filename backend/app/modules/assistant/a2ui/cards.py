@@ -12,6 +12,7 @@ from decimal import Decimal
 from typing import Any, Literal
 from uuid import uuid4
 
+from app.modules.assistant import approvals
 from app.modules.assistant.a2ui.models import (
     Action,
     ActionName,
@@ -115,22 +116,26 @@ def delete_card(result: dict[str, Any]) -> CreateSurfaceMessage:
         return _expense_card("expense_deleted", "Expense deleted", expense)
     # Nothing was deleted yet: show exactly what would go, with the user's two choices. Only the
     # server can turn Approve into a delete (approvals.py); the button just says which card was approved.
+    expense_id = expense["id"]
     buttons = [
         Row(id="decision", children=["approve", "cancel"]),
-        *_button("approve", "Approve", "approve_delete", expense["id"], f"Approve deleting #{expense['id']}", True),
-        *_button("cancel", "Cancel", "cancel_delete", expense["id"], f"Cancel deleting #{expense['id']}"),
+        *_button("approve", "Approve", approvals.APPROVE, expense_id, f"Approve deleting #{expense_id}", True),
+        *_button("cancel", "Cancel", approvals.CANCEL, expense_id, f"Cancel deleting #{expense_id}"),
     ]
     footer = "Nothing is deleted unless you press Approve."
     return _expense_card("expense_delete_check", "Delete this expense?", expense, footer, buttons)
 
 
-def approval_needed(tool_name: str, result_text: str) -> int | None:
-    """The expense id a delete preview is waiting on (its card has Approve/Cancel), or None."""
-    if tool_name != "delete_expense":
+def approval_needed(tool_name: str, result_text: str) -> dict[str, Any] | None:
+    """The expense a delete preview is waiting on, as its card shows it (Approve/Cancel), or None.
+
+    Uses the same test as delete_card, so buttons are shown exactly when an approval is recorded.
+    """
+    if tool_name != approvals.DELETE_TOOL:
         return None
     try:
         result = json.loads(result_text)
-        return int(result["expense"]["id"]) if result["deleted"] is False else None
+        return None if result["deleted"] else result["expense"]
     except (ValueError, KeyError, TypeError):
         return None
 
@@ -140,10 +145,12 @@ def _versus(total: Decimal, previous: Decimal, previous_month: date) -> tuple[st
     name = f"{previous_month:%B}"
     if previous == 0:
         return f"Nothing spent in {name}", "flat"
-    percent = round((total - previous) / previous * 100)
-    if percent == 0:
+    if total == previous:
         return f"Same as {name}", "flat"
-    return f"{percent:+d}% vs {name}", "up" if percent > 0 else "down"
+    change = (total - previous) / previous * 100
+    # Small changes keep a decimal, so ₹10,040 vs ₹10,000 reads "+0.4%", not "Same as".
+    text = f"{change:+.1f}%" if abs(change) < 1 else f"{round(change):+d}%"
+    return f"{text} vs {name}", "up" if change > 0 else "down"
 
 
 def summary_card(summary: dict[str, Any]) -> CreateSurfaceMessage:
@@ -183,7 +190,7 @@ def summary_card(summary: dict[str, Any]) -> CreateSurfaceMessage:
             slices.append(ChartPoint(label="Everything else", value=float(rest)))
         components.append(Chart(id="chart", chart_type="donut", data=slices, unit="₹" if currency == "INR" else None))
 
-    footer = f"{count} expense{'' if count == 1 else 's'}" if count else "No expenses yet this month"
+    footer = f"{count} expense{'' if count == 1 else 's'}" if count else f"No expenses in {month:%B %Y}"
     components.append(Text(id="footer", text=footer, variant="caption"))
     body = ["title", "stats"] + (["chart"] if categories else []) + ["footer"]
     components += [Card(id="root", child="body"), Column(id="body", children=body), Row(id="stats", children=stats)]
@@ -237,7 +244,8 @@ def card_for(tool_name: str, result_text: str) -> CreateSurfaceMessage | None:
         return None
     try:
         return build(json.loads(result_text))
-    except (ValueError, KeyError, TypeError) as exc:  # ValueError includes Pydantic's ValidationError
+    # ValueError includes Pydantic's ValidationError; ArithmeticError covers a total that isn't a valid Decimal.
+    except (ValueError, KeyError, TypeError, ArithmeticError) as exc:
         # The card is a bonus on top of the text reply: if the result isn't what we expect, skip it.
         logger.warning("no A2UI card for %s: %s", tool_name, exc)
         return None

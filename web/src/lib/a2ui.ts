@@ -118,6 +118,38 @@ export function boundPath(value: unknown): string | null {
   return isObject(value) && typeof value["@path"] === "string" && pointer(value["@path"]) ? value["@path"] : null
 }
 
+// ---------- how much a surface would draw ----------
+
+function childIds(node: A2uiComponent): unknown[] {
+  return [...(Array.isArray(node.children) ? node.children : []), ...(node.child !== undefined ? [node.child] : [])]
+}
+
+// How many components drawing a surface would take, counting a shared child every time it appears;
+// Infinity if a component contains itself. The renderer refuses anything over its limit, so neither a
+// loop nor a child listed many times over (3 copies, 12 levels deep = 500,000 nodes) can freeze the page.
+export function drawnSize(components: Map<string, A2uiComponent>, limit: number): number {
+  const sizes = new Map<string, number>()
+  const open = new Set<string>()
+  const size = (id: unknown): number => {
+    if (typeof id !== "string") return 1
+    const node = components.get(id)
+    if (!node) return 0
+    const known = sizes.get(id)
+    if (known !== undefined) return known
+    if (open.has(id)) return Infinity // contains itself
+    open.add(id)
+    let total = 1
+    for (const child of childIds(node)) {
+      total += size(child)
+      if (total > limit) break
+    }
+    open.delete(id)
+    sizes.set(id, total)
+    return total
+  }
+  return size("root")
+}
+
 // ---------- messages from the agent ----------
 
 // Apply one A2UI message to a reply's surfaces and return the new list. Anything malformed, or from

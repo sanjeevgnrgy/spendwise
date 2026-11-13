@@ -4,6 +4,9 @@ from pydantic import BaseModel, ConfigDict, Field
 class CategoryCreate(BaseModel):
     """What it takes to create a category."""
 
+    # " Food" and "Food" would look identical in every list, so spaces around the name are removed.
+    model_config = ConfigDict(str_strip_whitespace=True)
+
     name: str = Field(min_length=1, max_length=50)
     icon: str = Field(min_length=1, max_length=50)
 

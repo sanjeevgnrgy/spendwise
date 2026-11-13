@@ -29,11 +29,13 @@ export function ChatPanel({ chat, onClose }: ChatPanelProps) {
   const [input, setInput] = useState("")
   const endRef = useRef<HTMLDivElement>(null)
 
-  // Keep the newest message in view. Scrolling is a change outside React's own output,
-  // which is exactly what an effect is for.
+  // Keep the newest content in view: a new message, more reply text, a new chip or card. Not on every
+  // keystroke in a form (that changes the messages too), which would yank the field you're typing in
+  // out of view. Scrolling is a change outside React's own output, which is what an effect is for.
+  const last = chat.messages.at(-1)
   useEffect(() => {
     endRef.current?.scrollIntoView({ block: "end" })
-  }, [chat.messages, chat.sending])
+  }, [chat.messages.length, last?.text, last?.tools?.length, last?.surfaces?.length, chat.sending])
 
   function submit() {
     const text = input.trim()
@@ -47,8 +49,10 @@ export function ChatPanel({ chat, onClose }: ChatPanelProps) {
     submit()
   }
 
-  // Enter sends, Shift+Enter adds a new line (as in most chat apps).
+  // Enter sends, Shift+Enter adds a new line (as in most chat apps). While an input method (e.g. for
+  // Hindi or Japanese) is composing, Enter picks the suggested text instead, so it mustn't send.
   function handleKeyDown(event: KeyboardEvent<HTMLTextAreaElement>) {
+    if (event.nativeEvent.isComposing) return
     if (event.key === "Enter" && !event.shiftKey) {
       event.preventDefault()
       submit()

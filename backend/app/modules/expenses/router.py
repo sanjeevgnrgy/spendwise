@@ -6,12 +6,13 @@ No business rules here, and no try/except: service errors become 404/422 in core
 from datetime import date
 from typing import Annotated
 
-from fastapi import APIRouter, Query
+from fastapi import APIRouter, Path, Query
 
-from app.core.db import SessionDep
+from app.core.db import MAX_ID, SessionDep
 from app.core.money import DEFAULT_CURRENCY
 from app.modules.expenses import service
 from app.modules.expenses.schemas import (
+    MONTH_PATTERN,
     ExpenseCreate,
     ExpenseFilters,
     ExpenseRead,
@@ -21,6 +22,9 @@ from app.modules.expenses.schemas import (
 )
 
 router = APIRouter(tags=["expenses"])
+
+# An id the database could hold; anything bigger is a 422, not a driver crash (see core/db.py).
+ExpenseId = Annotated[int, Path(ge=1, le=MAX_ID)]
 
 
 @router.post("/expenses", status_code=201)
@@ -34,25 +38,25 @@ def list_expenses(filters: Annotated[ExpenseFilters, Query()], session: SessionD
 
 
 @router.get("/expenses/{expense_id}")
-def get_expense(expense_id: int, session: SessionDep) -> ExpenseRead:
+def get_expense(expense_id: ExpenseId, session: SessionDep) -> ExpenseRead:
     return service.get_expense(session, expense_id)
 
 
 @router.patch("/expenses/{expense_id}")
-def update_expense(expense_id: int, body: ExpenseUpdate, session: SessionDep) -> ExpenseRead:
+def update_expense(expense_id: ExpenseId, body: ExpenseUpdate, session: SessionDep) -> ExpenseRead:
     return service.update_expense(session, expense_id, body)
 
 
 # 204 No Content: the delete worked and there's nothing left to send back.
 @router.delete("/expenses/{expense_id}", status_code=204)
-def delete_expense(expense_id: int, session: SessionDep) -> None:
+def delete_expense(expense_id: ExpenseId, session: SessionDep) -> None:
     service.delete_expense(session, expense_id)
 
 
 @router.get("/summary")
 def monthly_summary(
     session: SessionDep,
-    month: Annotated[str, Query(pattern=r"^\d{4}-(0[1-9]|1[0-2])$", examples=["2026-11"])],
+    month: Annotated[str, Query(pattern=MONTH_PATTERN, examples=["2026-11"])],
     # Totals only make sense within one currency, so the summary covers one at a time.
     currency: Annotated[str, Query(pattern=r"^[A-Z]{3}$")] = DEFAULT_CURRENCY,
 ) -> MonthlySummary:

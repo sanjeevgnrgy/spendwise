@@ -23,6 +23,7 @@ from app.modules.assistant.a2ui.models import (
     DataBinding,
     DateTimeInput,
     EventAction,
+    Row,
     Text,
     TextField,
     UserAction,
@@ -34,6 +35,8 @@ SHOW_FORM_TOOL_NAME = "show_expense_form"
 SAVE_ACTION = "save_expense"
 FIELDS = ("amount", "category", "merchant", "spent_on", "payment_method", "note")
 PICKER_FIELDS = ("category", "payment_method")  # bound to a ChoicePicker, whose value is a list
+# The components a form the model writes may use (the ones its form rules describe).
+FORM_COMPONENTS = (Card, Column, Row, Text, TextField, ChoicePicker, DateTimeInput, Button)
 PAYMENT_METHODS = {
     "cash": "Cash",
     "upi": "UPI",
@@ -161,6 +164,10 @@ def _model_form(form: Any) -> CreateSurfaceMessage:
         raise ValueError("the form isn't a JSON object")
     # The surface id and catalog are ours to choose; the model only describes components and data.
     surface = CreateSurface(surface_id=_surface_id(), components=data.get("components"), data_model=data.get("dataModel"))
+    # Only the components the form rules describe: no charts, stats or lists inside a form.
+    outside = {c.component for c in surface.components if not isinstance(c, FORM_COMPONENTS)}
+    if outside:
+        raise ValueError(f"a form can't use {', '.join(sorted(outside))}")
     # Valid A2UI isn't enough: the form must also be usable, i.e. it must be possible to submit it.
     buttons = [c for c in surface.components if isinstance(c, Button)]
     if not buttons:

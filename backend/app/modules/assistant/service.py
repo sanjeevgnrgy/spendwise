@@ -153,6 +153,9 @@ def agent_run(session: Session, run: RunAgentInput) -> Iterator[BaseEvent]:
     # AG-UI shared state: the client sends its dataVersion with the run and gets it back, raised,
     # after every tool that changed data. A new number is what makes the pages reload.
     data_version = _data_version(run.state)
+    # A delete card's record, taken for this run. If the run fails before finishing, it's put back
+    # (in `finally`), so the card's Approve still works when the browser unlocks it.
+    decided: tuple[str, dict[str, Any]] | None = None
     try:
         if not 1 <= len(run.thread_id) <= MAX_THREAD_ID_LENGTH:
             raise BusinessRuleError(f"threadId must be 1 to {MAX_THREAD_ID_LENGTH} characters long.")
@@ -163,9 +166,11 @@ def agent_run(session: Session, run: RunAgentInput) -> Iterator[BaseEvent]:
 
         if action is not None and action.name in approvals.DECISIONS:
             # Approve or Cancel on a delete card: the user's decision, carried out without asking the model.
-            # WHICH expense comes from the server's record of that card, not from what the browser sent.
-            expense_id = approvals.take(run.thread_id, action.surface_id)
-            items = agent.approval_turn(expense_id, approved=action.name == approvals.APPROVE)
+            # WHAT gets deleted is the server's snapshot of that card, not anything the browser sent.
+            expense = approvals.take(run.thread_id, action.surface_id)
+            if expense is not None:
+                decided = (action.surface_id, expense)
+            items = agent.approval_turn(expense, approved=action.name == approvals.APPROVE)
         else:
             history = _history(session, run.thread_id, turn)
             items = agent.stream(_agent_input(run, action), date.today(), history)
@@ -201,7 +206,7 @@ def agent_run(session: Session, run: RunAgentInput) -> Iterator[BaseEvent]:
                 if card is not None:
                     waiting_on = a2ui.approval_needed(item.name, item.text)
                     if waiting_on is not None:
-                        # A delete card with Approve/Cancel: remember what its Approve may delete.
+                        # A delete card with Approve/Cancel: remember exactly what its Approve may delete.
                         approvals.request(run.thread_id, card.create_surface.surface_id, waiting_on)
                     # A2UI has no event of its own in AG-UI, so it travels in AG-UI's extension event.
                     yield CustomEvent(name="a2ui", value=card.to_json())
@@ -213,6 +218,7 @@ def agent_run(session: Session, run: RunAgentInput) -> Iterator[BaseEvent]:
             else:
                 # The last item: the whole turn. Saved only when the run succeeds, like POST /chat.
                 repository.add_turn(session, run.thread_id, turn, item.steps)
+                decided = None  # the decision was carried out (or reported): the card is done
     # RUN_ERROR ends the run. The client keeps whatever text already arrived and shows the error.
     except (BusinessRuleError, ExternalServiceError) as exc:
         # Expected problems (e.g. Gemini's "high demand") carry a message meant for the user.
@@ -226,6 +232,11 @@ def agent_run(session: Session, run: RunAgentInput) -> Iterator[BaseEvent]:
             message="Something went wrong on the server. The server log has the details.", code="InternalError"
         )
         return
+    finally:
+        if decided is not None:
+            # The run failed before the decision was done: put the card back, so pressing Approve again
+            # works. (If the expense was deleted after all, Approve's check will find it gone.)
+            approvals.restore(run.thread_id, *decided)
 
     if text_id is not None:
         yield TextMessageEndEvent(message_id=text_id)

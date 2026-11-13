@@ -32,7 +32,9 @@ def search(session: Session, filters: ExpenseFilters) -> list[Expense]:
     if filters.category_id is not None:
         statement = statement.where(Expense.category_id == filters.category_id)
     if filters.merchant:
-        statement = statement.where(func.lower(Expense.merchant) == filters.merchant.lower())
+        # The database lowercases both sides. Python's .lower() handles letters like "É" that SQLite's
+        # lower() leaves alone, so mixing the two would make "CAFÉ" never match itself.
+        statement = statement.where(func.lower(Expense.merchant) == func.lower(filters.merchant))
     if filters.search:
         # autoescape: a % or _ the user types is searched for literally, not used as a wildcard.
         statement = statement.where(

@@ -139,7 +139,8 @@ class EventAction(_A2uiModel):
     # int before float, or Pydantic would turn an id like 14 into 14.0.
     context: dict[str, DataBinding | str | bool | int | float] | None = None
     # How the click reads in the chat, e.g. "Approve deleting #14" (the spec's userMessage).
-    user_message: str | None = None
+    # Capped like UserAction.user_message, so a form can't carry a message its own Save would be refused for.
+    user_message: str | None = Field(None, max_length=200)
 
 
 class Action(_A2uiModel):
@@ -160,7 +161,7 @@ class Button(_A2uiModel):
 
 
 class ChartPoint(_A2uiModel):
-    label: str = Field(max_length=40)
+    label: str = Field(max_length=50)  # a category name can be up to 50 characters
     value: float = Field(allow_inf_nan=False)  # NaN or infinity isn't valid JSON, nor a sensible bar
 
 
@@ -179,9 +180,9 @@ class Stat(_A2uiModel):
     id: ComponentId
     component: Literal["Stat"] = "Stat"
     catalog_id: Literal["urn:spendwise:catalog:insights:v1"] = Field(INSIGHTS_CATALOG_ID, alias="@catalogId")
-    label: str
-    value: str
-    change: str | None = None
+    label: str = Field(max_length=60)
+    value: str = Field(max_length=60)
+    change: str | None = Field(None, max_length=60)
     trend: Literal["up", "down", "flat"] | None = None  # which arrow to show next to `change`
 
 
@@ -218,7 +219,25 @@ class CreateSurface(_A2uiModel):
         missing = {ref for c in self.components for ref in _referenced_ids(c)} - set(ids)
         if missing:
             raise ValueError(f"components refer to ids that don't exist: {sorted(missing)}")
+        _check_no_cycles({c.id: _referenced_ids(c) for c in self.components})
         return self
+
+
+def _check_no_cycles(children: dict[str, list[str]]) -> None:
+    """Refuse a component that contains itself, directly or through its children: it would draw forever."""
+    state: dict[str, str] = {}  # "open" while its children are being checked, "done" afterwards
+
+    def visit(component_id: str) -> None:
+        if state.get(component_id) == "done":
+            return  # shared by two parents: fine, and already checked
+        if state.get(component_id) == "open":
+            raise ValueError(f"component '{component_id}' contains itself")
+        state[component_id] = "open"
+        for child in children.get(component_id, []):
+            visit(child)
+        state[component_id] = "done"
+
+    visit("root")
 
 
 class UpdateComponents(_A2uiModel):

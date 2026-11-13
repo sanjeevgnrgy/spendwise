@@ -35,7 +35,9 @@ export function StatCards({ summary }: { summary: MonthlySummary }) {
           <CardTitle className="text-3xl">{top ? top.category_name : "—"}</CardTitle>
         </CardHeader>
         <CardContent className="text-sm text-muted-foreground">
-          {top ? `${formatMoney(top.total, summary.currency)} across ${top.expense_count} expenses` : "Nothing spent yet"}
+          {top
+            ? `${formatMoney(top.total, summary.currency)} across ${top.expense_count} ${top.expense_count === 1 ? "expense" : "expenses"}`
+            : "Nothing spent yet"}
         </CardContent>
       </Card>
     </div>

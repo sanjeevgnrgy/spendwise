@@ -1,7 +1,7 @@
 import { useRef, useState } from "react"
 
 import { newId, runAgent, type AgentPrompt } from "@/api"
-import { applyA2uiMessage, setAt, type A2uiAction, type A2uiSurface } from "@/lib/a2ui"
+import { applyA2uiMessage, isObject, setAt, type A2uiAction, type A2uiSurface } from "@/lib/a2ui"
 import { useDataSync } from "@/lib/data-sync"
 
 // One tool call the assistant made, as the panel shows it: a chip that changes as events arrive.
@@ -9,7 +9,8 @@ export interface ToolActivity {
   id: string
   name: string
   args: string // the arguments' JSON, built up from TOOL_CALL_ARGS pieces
-  status: "running" | "done" | "failed"
+  // "unknown": the connection broke while it ran, so it may have finished on the server, or not.
+  status: "running" | "done" | "failed" | "unknown"
   result?: string // what the tool returned (for a failed call, why)
 }
 
@@ -67,17 +68,21 @@ export function useChat() {
     const values = Object.values(action.context)
       .map((value) => (Array.isArray(value) ? value.join(", ") : value))
       .filter((value) => value !== "" && value !== null && value !== undefined)
-    const ok = await run(action.userMessage ?? `Sent: ${values.join(" · ")}`, { action })
-    // If the run failed, unlock the form so it can be sent again.
-    if (!ok) updateSurface(action.surfaceId, (surface) => ({ ...surface, submitted: false }))
+    const { ok, changedData } = await run(action.userMessage ?? `Sent: ${values.join(" · ")}`, { action })
+    // Unlock only if the run failed before anything changed. If the expense was already saved (and only
+    // a later step failed), sending the form again would save it twice.
+    if (!ok && !changedData) updateSurface(action.surfaceId, (surface) => ({ ...surface, submitted: false }))
   }
 
   function send(text: string) {
     return run(text, { text })
   }
 
-  // One run of the agent. `shown` is what appears in your bubble. Returns whether the run succeeded.
-  async function run(shown: string, prompt: AgentPrompt): Promise<boolean> {
+  // One run of the agent. `shown` is what appears in your bubble. Returns whether the run succeeded,
+  // and whether the server changed any data on the way (a STATE_SNAPSHOT arrived).
+  async function run(shown: string, prompt: AgentPrompt): Promise<{ ok: boolean; changedData: boolean }> {
+    let changedData = false
+    let latestVersion = dataVersion
     add({ role: "user", text: shown })
     setSending(true)
     // With AG-UI the client names the thread; the server starts it when the first message arrives.
@@ -86,6 +91,7 @@ export function useChat() {
 
     // The reply's bubble, created by whatever arrives first: text, or a tool call.
     let replyId: number | null = null
+    const running = new Set<string>() // tool calls started but not yet answered
     const reply = () => (replyId ??= add({ role: "assistant", text: "", tools: [] }))
     const updateTool = (toolId: string, change: (tool: ToolActivity) => ToolActivity) =>
       update(replyId, (message) => ({
@@ -106,6 +112,7 @@ export function useChat() {
           case "TOOL_CALL_START": {
             const tool: ToolActivity = { id: event.toolCallId, name: event.toolCallName, args: "", status: "running" }
             update(reply(), (message) => ({ ...message, tools: [...(message.tools ?? []), tool] }))
+            running.add(event.toolCallId)
             break
           }
           case "TOOL_CALL_ARGS":
@@ -118,29 +125,43 @@ export function useChat() {
               status: event.metadata?.ok === false ? "failed" : "done",
               result: event.content,
             }))
+            running.delete(event.toolCallId)
             break
           case "STATE_SNAPSHOT":
             // A tool changed expenses. A new dataVersion makes every page that shows them reload.
-            setDataVersion(event.snapshot.dataVersion)
+            changedData = true
+            latestVersion = event.snapshot.dataVersion
+            setDataVersion(latestVersion)
             break
           case "CUSTOM":
             // A2UI rides in AG-UI's extension event. Custom events with other names are ignored.
-            if (event.name === "a2ui") {
+            if (event.name !== "a2ui") break
+            if (isObject(event.value) && "createSurface" in event.value) {
+              // A new card or form belongs to this reply.
               update(reply(), (message) => ({ ...message, surfaces: applyA2uiMessage(message.surfaces ?? [], event.value) }))
+            } else {
+              // An update or delete may be for a card from an earlier reply: offer it to every one.
+              setMessages((current) =>
+                current.map((m) => (m.surfaces ? { ...m, surfaces: applyA2uiMessage(m.surfaces, event.value) } : m)),
+              )
             }
             break
         }
       })
-      return true
+      return { ok: true, changedData }
     } catch (error) {
-      // The run failed: a tool still spinning will never finish, so don't leave it spinning.
-      update(replyId, (message) => ({
-        ...message,
-        tools: message.tools?.map((tool) => (tool.status === "running" ? { ...tool, status: "failed" } : tool)),
-      }))
+      // The connection broke while a tool ran: it may have finished on the server or not, so say exactly
+      // that ("not confirmed", never "failed"), and reload the pages so they show what really happened.
+      if (running.size > 0) {
+        update(replyId, (message) => ({
+          ...message,
+          tools: message.tools?.map((tool) => (running.has(tool.id) ? { ...tool, status: "unknown" } : tool)),
+        }))
+        setDataVersion(latestVersion + 1)
+      }
       // Any text that already arrived stays; the error appears as its own red bubble below it.
       add({ role: "assistant", text: error instanceof Error ? error.message : String(error), failed: true })
-      return false
+      return { ok: false, changedData }
     } finally {
       setSending(false)
     }

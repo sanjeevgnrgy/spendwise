@@ -182,10 +182,21 @@ on your tier, or temporarily overloaded).
   (`modules/assistant/a2ui/cards.py`) has a bug.
 
 ### Assistant panel: Approve says "That card can't be used any more"
-- **Cause:** the server has no record of that delete card. It was already answered (each card decides once), or the
-  backend restarted since it was shown (records live in memory), or it belongs to an earlier conversation. Nothing was
-  deleted.
+- **Cause:** the server has no record of that delete card. It was already answered (each card decides once), it's more
+  than 15 minutes old, the backend restarted since it was shown (records live in memory), or it belongs to an earlier
+  conversation. Nothing was deleted.
 - **Fix:** ask to delete it again, and press Approve on the new card.
+
+### Assistant panel: Approve says "I couldn't confirm that expense #… is still what the card showed"
+- **Cause:** before deleting, the server checks the expense against what the card showed. It was edited since, it's
+  already gone, or the tools couldn't be reached for the check. Deleting anyway could remove something you never saw
+  on the card, so nothing was deleted.
+- **Fix:** ask again; the new card shows the expense as it is now.
+
+### Assistant panel: a chip says "Expense saved?" (with a question mark)
+- **Cause:** the connection broke while that tool was running, so the browser never heard whether it finished. The
+  pages were reloaded to show what really happened.
+- **Fix:** look at the Expenses page before trying again, so nothing is saved twice.
 
 ### Assistant panel: I said "yes, delete it" but nothing was deleted
 - **Cause:** that's the design (D129). In the web panel, only the **Approve** button deletes; the model can't, whatever
@@ -195,7 +206,8 @@ on your tier, or temporarily overloaded).
 ### Assistant panel: the insight card's donut is empty or squashed
 - **Cause:** the chart is drawn by Recharts, which measures the space it has; a very narrow panel leaves little room.
   The legend beside it always lists every category and amount.
-- **Fix:** drag the panel wider. If the card says "Can't show a chart without data", the month has no spending.
+- **Fix:** drag the panel wider. "Can't show a chart without data" means the chart arrived with no usable points
+  (a broken description); a month with no spending simply has no chart, and says "No expenses in <month>".
 
 ### Assistant panel: "add lunch" got questions in text, not a form
 - **Cause:** the model chose to ask instead of calling `show_expense_form`. It's guided by its instructions, not
@@ -258,9 +270,9 @@ on your tier, or temporarily overloaded).
   unknown category, come with a clear message instead.
 
 ### `/chat` replies "Sorry, I can't reach the expense tools right now"
-- **Cause:** the assistant couldn't connect to the MCP server at `MCP_URL` (default `http://localhost:8000/mcp`).
+- **Cause:** the assistant couldn't connect to the MCP server at `MCP_URL` (default `http://127.0.0.1:8000/mcp/`).
   Most often the app is running on a different port, e.g. `.\run.ps1 --port 8001`.
-- **Fix:** set `MCP_URL=http://localhost:<port>/mcp` in `.env` and restart. The terminal logs the URL it tried.
+- **Fix:** set `MCP_URL=http://127.0.0.1:<port>/mcp/` in `.env` and restart. The terminal logs the URL it tried.
 
 ### `/chat` doesn't see a tool I just added to the MCP server
 - **Cause:** the assistant lists the tools once, on the first chat, and caches them.

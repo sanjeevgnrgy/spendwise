@@ -1,5 +1,9 @@
 # Phase 10: Agent uses MCP
 
+> **Later changes:** after Phase 18, the default `MCP_URL` became `http://127.0.0.1:8000/mcp/`. The trailing slash
+> avoids a redirect, and 127.0.0.1 avoids trying IPv6 first ([decisions.md](../decisions.md) D136). Examples below
+> still show the old form; both work.
+
 **Goal:** the assistant's agent stops using its own local tool functions. It becomes an **MCP client**: it asks
 the MCP server which tools exist, shows them to Gemini, and sends every tool call to the MCP server.
 `modules/assistant/tools.py` is deleted.

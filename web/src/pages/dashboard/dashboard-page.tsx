@@ -44,7 +44,10 @@ export function DashboardPage() {
     // only totals and 5 rows, not every expense.
     Promise.all([getMonthlySummary(month), getMonthlyTrend(6), listExpenses({ limit: 5 }), listCategories()])
       .then(([summary, trend, recent, categories]) => {
-        if (!cancelled) setData({ summary, trend, recent, categories })
+        if (cancelled) return
+        setData({ summary, trend, recent, categories })
+        // A reload that works (e.g. after the assistant changed data) replaces an earlier error.
+        setError(null)
       })
       .catch((err) => {
         if (cancelled) return

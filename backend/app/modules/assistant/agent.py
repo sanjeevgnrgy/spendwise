@@ -6,7 +6,7 @@ shows them to Gemini, and sends every tool call back to the MCP server to be run
 
 import json
 import logging
-from collections.abc import Iterator
+from collections.abc import Generator, Iterator
 from dataclasses import dataclass
 from datetime import date
 from typing import Any
@@ -26,8 +26,13 @@ THINKING_LEVEL = "low"
 TOO_MANY_STEPS = "Sorry, that took too many steps, so I stopped. Could you try a simpler or more specific request?"
 FORM_SHOWN = "Please check the details in the form and press Save."
 STALE_APPROVAL = (
-    "That card can't be used any more: it was already answered, or the app restarted since. "
-    "Ask me again if you still want to delete the expense."
+    "That card can't be used any more: it was already answered, it's more than 15 minutes old, or the app "
+    "restarted since. Ask me again if you still want to delete the expense."
+)
+# Added to a delete preview's result for the model, so it doesn't think the delete simply failed and retry it.
+AWAITING_APPROVAL = (
+    "\n(Nothing was deleted. The user now sees this expense with Approve and Cancel buttons; only their "
+    "Approve deletes it.)"
 )
 TOOLS_UNAVAILABLE = (
     "Sorry, I can't reach the expense tools right now, so I can't look up or change anything. "
@@ -144,6 +149,21 @@ def _run_tool(name: str, arguments: dict[str, Any]) -> mcp_client.ToolResult:
     return result
 
 
+def _run_and_report(
+    call_id: str, name: str, arguments: dict[str, Any], can_change_data: bool = True
+) -> Generator[ToolStarted | ToolFinished, None, mcp_client.ToolResult]:
+    """Run one tool, announcing it before (ToolStarted) and after (ToolFinished). Returns its result.
+
+    Used with `result = yield from _run_and_report(...)`, so the events reach the caller's caller.
+    """
+    yield ToolStarted(call_id=call_id, name=name, arguments=arguments)
+    result = _run_tool(name, arguments)
+    # A preview changes nothing, whatever the tool's annotations say, so the pages needn't reload.
+    changed = can_change_data and result.ok and mcp_client.changes_data(name)
+    yield ToolFinished(call_id=call_id, name=name, ok=result.ok, text=result.text, changed_data=changed)
+    return result
+
+
 def _function_result(call: dict[str, Any], text: str, ok: bool) -> dict[str, Any]:
     return {
         "type": "function_result",
@@ -185,8 +205,9 @@ def stream(
         yield AgentResult(reply=TOOLS_UNAVAILABLE, tool_calls=tool_calls, steps=turn)
         return
     if rich_ui:
-        # The assistant's one tool of its own: it shows a form and touches no data (data tools are MCP's).
-        declarations = [*declarations, a2ui.SHOW_FORM_TOOL]
+        # Deleting is offered without `confirmed`: only the user's Approve deletes (approvals.py). And the
+        # assistant's one tool of its own: it shows a form and touches no data (data tools are MCP's).
+        declarations = [*approvals.without_confirmation(declarations), a2ui.SHOW_FORM_TOOL]
     instruction = _system_instruction(today, category_names, rich_ui)
 
     for step in range(1, MAX_STEPS + 1):
@@ -226,18 +247,15 @@ def stream(
                 turn.append(_function_result(call, "The form is on the user's screen; they will submit it.", True))
                 continue
 
-            if rich_ui:
-                # Human in the loop: whatever the model asked, a delete runs only as a preview. The real
-                # one waits for the user's Approve (approval_turn below).
-                arguments = approvals.guard(call["name"], arguments)
-            yield ToolStarted(call_id=call["id"], name=call["name"], arguments=arguments)
-            result = _run_tool(call["name"], arguments)
-            changed = result.ok and mcp_client.changes_data(call["name"])
-            yield ToolFinished(
-                call_id=call["id"], name=call["name"], ok=result.ok, text=result.text, changed_data=changed
-            )
+            # Human in the loop: in the web panel, whatever the model asked, a delete runs only as a preview.
+            # The real one waits for the user's Approve (approval_turn below).
+            preview = rich_ui and call["name"] == approvals.DELETE_TOOL
+            if preview:
+                arguments = approvals.guard(arguments)
+            result = yield from _run_and_report(call["id"], call["name"], arguments, can_change_data=not preview)
             tool_calls.append(ToolCall(name=call["name"], arguments=arguments, ok=result.ok))
-            turn.append(_function_result(call, result.text, result.ok))
+            for_model = result.text + (AWAITING_APPROVAL if preview and result.ok else "")
+            turn.append(_function_result(call, for_model, result.ok))
 
         if form_shown:
             # The user answers with the form now, not in words. End the turn here instead of asking Gemini
@@ -256,30 +274,49 @@ def stream(
     yield AgentResult(reply=reply + apology, tool_calls=tool_calls, steps=turn)
 
 
-def approval_turn(expense_id: int | None, approved: bool) -> Iterator[str | ToolStarted | ToolFinished | AgentResult]:
+def _current(expense_id: int) -> dict[str, Any] | None:
+    """The expense as it is now (a preview: nothing is deleted), or None if it's gone or unreachable."""
+    result = _run_tool(approvals.DELETE_TOOL, {"expense_id": expense_id, "confirmed": False})
+    try:
+        return json.loads(result.text)["expense"] if result.ok else None
+    except (ValueError, KeyError, TypeError):
+        return None
+
+
+def approval_turn(
+    expense: dict[str, Any] | None, approved: bool
+) -> Iterator[str | ToolStarted | ToolFinished | AgentResult]:
     """The user pressed Approve or Cancel on a delete card. No model is asked: the decision is theirs.
 
-    `expense_id` is what the server remembered for that card (approvals.take), or None if the card was
-    already answered or forgotten. Yields the same kinds of items as stream().
+    `expense` is the server's snapshot of what that card showed (approvals.take), or None if the card was
+    already answered, expired or forgotten. Yields the same kinds of items as stream().
     """
     tool_calls: list[ToolCall] = []
-    if expense_id is None:
+    if expense is None:
         said, reply = "I pressed a button on an old delete card.", STALE_APPROVAL
     elif not approved:
         said, reply = (
-            f"I pressed Cancel: don't delete expense #{expense_id}.",
-            f"Okay, I won't delete #{expense_id}. Nothing was changed.",
+            f"I pressed Cancel: don't delete expense #{expense['id']}.",
+            f"Okay, I won't delete #{expense['id']}. Nothing was changed.",
+        )
+    elif _current(expense["id"]) != expense:
+        # Approve means "delete what the card showed". If that expense was edited since (or deleted, and the id
+        # reused), deleting it now would remove something the user never approved.
+        said = f"I pressed Approve: delete expense #{expense['id']}."
+        reply = (
+            f"I couldn't confirm that expense #{expense['id']} is still what the card showed (it changed, it's gone, "
+            "or the tools are unreachable), so I didn't delete it. Ask me again to see it as it is now."
         )
     else:
-        said = f"I pressed Approve: delete expense #{expense_id}."
-        arguments = {"expense_id": expense_id, "confirmed": True}
-        call_id = f"approved_{expense_id}"
-        yield ToolStarted(call_id=call_id, name=approvals.DELETE_TOOL, arguments=arguments)
-        result = _run_tool(approvals.DELETE_TOOL, arguments)
-        changed = result.ok and mcp_client.changes_data(approvals.DELETE_TOOL)
-        yield ToolFinished(call_id=call_id, name=approvals.DELETE_TOOL, ok=result.ok, text=result.text, changed_data=changed)
+        said = f"I pressed Approve: delete expense #{expense['id']}."
+        arguments = {"expense_id": expense["id"], "confirmed": True}
+        result = yield from _run_and_report(f"approved_{expense['id']}", approvals.DELETE_TOOL, arguments)
         tool_calls.append(ToolCall(name=approvals.DELETE_TOOL, arguments=arguments, ok=result.ok))
-        reply = f"Done: expense #{expense_id} is deleted." if result.ok else f"I couldn't delete #{expense_id}: {result.text}"
+        reply = (
+            f"Done: expense #{expense['id']} is deleted."
+            if result.ok
+            else f"I couldn't delete #{expense['id']} just now ({result.text}). Nothing was deleted; ask me again in a moment."
+        )
     logger.info("approval: %s -> %s", said, reply)
     yield reply
     # Stored as plain text, so the conversation remembers what was decided and what happened.

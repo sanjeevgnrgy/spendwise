@@ -113,7 +113,7 @@ trailing slash). To explore it by hand in the MCP Inspector, over stdio (needs N
 ```
 
 The assistant behind `POST /chat` and `POST /agent` uses this same server: it connects to `MCP_URL` (default
-`http://localhost:8000/mcp`) to find and run its tools. If you start the app on another port, set
+`http://127.0.0.1:8000/mcp/`) to find and run its tools. If you start the app on another port, set
 `MCP_URL` in `.env` to match.
 
 Tools: `add_expense`, `list_expenses`, `get_summary`, `update_expense`, `delete_expense`. Resources:

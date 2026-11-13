@@ -160,6 +160,11 @@ What they say (verbatim):
   page also says: "clients **MUST** consider tool annotations to be untrusted unless they come from trusted servers."
 
 **Package** (mcp 2.3.0):
+- **How tool arguments are read** (found by the code review, then confirmed through the protocol):
+  - The SDK reads a tool argument whose type isn't exactly `str` as JSON first (`pre_parse_json`). So the text `"null"`
+    becomes `None`, and `"true"` becomes `True`.
+  - Pydantic's default (lax) `bool` also accepts `"yes"`, `"on"` and `1`. `Field(strict=True)` limits it to real
+    booleans (D133, D134).
 - `MCPServer.tool(annotations=...)` takes `mcp.types.ToolAnnotations`. Its Python fields are `read_only_hint`,
   `destructive_hint`, `idempotent_hint` and `open_world_hint`, sent as the camelCase names above.
 - On the client side, each listed tool has `.annotations`.

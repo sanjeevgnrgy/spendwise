@@ -46,7 +46,10 @@ function A2uiChart({ node }: { node: A2uiComponent }) {
   const points = readPoints(node.data)
   if (points.length === 0) return <Unsupported what="a chart without data" />
   const unit = typeof node.unit === "string" ? node.unit.slice(0, 4) : ""
-  const format = (value: unknown) => `${unit}${Number(value).toLocaleString("en-IN", { maximumFractionDigits: 2 })}`
+  // With a unit (money), two decimals and no grouping, exactly like the amounts the server writes in the
+  // same card ("₹2340.00"), so a number never appears in two styles side by side.
+  const format = (value: unknown) =>
+    unit ? `${unit}${Number(value).toFixed(2)}` : Number(value).toLocaleString("en-IN", { maximumFractionDigits: 2 })
 
   switch (node.chartType) {
     case "bar":

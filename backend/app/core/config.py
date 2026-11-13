@@ -23,7 +23,9 @@ class Settings(BaseSettings):
     gemini_model: str | None = None
     # Where the assistant finds the MCP server with the expense tools. By default that's this
     # app's own MCP module; point it elsewhere if that module ever runs as a separate service.
-    mcp_url: str = "http://localhost:8000/mcp"
+    # "/mcp/" with the slash, because "/mcp" answers with a redirect first; and 127.0.0.1, because
+    # uvicorn listens there and "localhost" can try IPv6 (::1) first on Windows. Both cost a round trip.
+    mcp_url: str = "http://127.0.0.1:8000/mcp/"
     # Web pages allowed to call this API from a browser (CORS). Only the Vite dev server for now;
     # both spellings, because the browser treats localhost and 127.0.0.1 as different origins.
     cors_origins: list[str] = ["http://localhost:5173", "http://127.0.0.1:5173"]

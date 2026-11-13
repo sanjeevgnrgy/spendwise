@@ -16,7 +16,11 @@ interface EditRowProps {
 
 // One table row in "edit mode". It must render the same columns, in the same order, as the
 // normal row in expenses-table.tsx: select, id, date, merchant, category, amount, paid with, note, actions.
-export function EditRow({ expense, categories, onSave, onCancel }: EditRowProps) {
+export function EditRow({ expense: current, categories, onSave, onCancel }: EditRowProps) {
+  // The expense as it was when editing started. If the list reloads meanwhile (say the assistant changed
+  // this expense), Save still compares the draft with what you started from, so it only sends the fields
+  // YOU changed, and never quietly undoes someone else's change.
+  const [expense] = useState(current)
   // A private draft of the values while editing. The table's data only changes after Save succeeds,
   // so Cancel can simply throw the draft away.
   const [draft, setDraft] = useState({
@@ -34,6 +38,8 @@ export function EditRow({ expense, categories, onSave, onCancel }: EditRowProps)
   }
 
   async function save() {
+    // Enter can fire again (or repeat while held) before the first save finishes: send it once.
+    if (saving) return
     // Send only what actually changed: PATCH is a partial update.
     const changes: ExpenseChanges = {}
     if (draft.spent_on !== expense.spent_on) changes.spent_on = draft.spent_on

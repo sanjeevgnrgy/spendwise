@@ -5,6 +5,7 @@ Models, repository, router and service internals stay private to this module.
 """
 
 from app.modules.expenses.schemas import (
+    MONTH_PATTERN,
     CategoryTotal,
     ExpenseCreate,
     ExpenseFilters,
@@ -26,6 +27,7 @@ from app.modules.expenses.service import (
 )
 
 __all__ = [
+    "MONTH_PATTERN",
     "CategoryTotal",
     "ExpenseCreate",
     "ExpenseFilters",

@@ -8,16 +8,18 @@ tool's docstring and parameter descriptions to decide when and how to call it.
 import json
 from collections.abc import Iterator
 from contextlib import contextmanager
+from datetime import date
 from typing import Annotated, Any
 
 # The official MCP SDK. In SDK 2.x the class formerly called FastMCP is named MCPServer.
 from mcp.server.mcpserver import MCPServer
 from mcp.server.mcpserver.exceptions import ToolError
 from mcp.types import ToolAnnotations
-from pydantic import Field
+from pydantic import Field, ValidationError
+from sqlalchemy.exc import OperationalError
 from sqlmodel import Session
 
-from app.core.db import engine
+from app.core.db import MAX_ID, engine
 from app.core.errors import BusinessRuleError, NotFoundError
 
 # Other modules' public interfaces only: never their repositories or models.
@@ -39,6 +41,17 @@ READS_ONLY = ToolAnnotations(read_only_hint=True)
 ADDS_DATA = ToolAnnotations(read_only_hint=False, destructive_hint=False)
 CHANGES_DATA = ToolAnnotations(read_only_hint=False, destructive_hint=True)  # overwrites or removes
 
+CURRENCY = r"^[A-Z]{3}$"  # the same rule as the REST API, so a lowercase "inr" is an error, not a 0 total
+
+# Optional text arguments are plain `str`, with "" meaning "not given". Models often fill unused
+# optional strings with "", and the SDK reads non-`str` arguments as JSON first (so the text "null"
+# would quietly become None, and "[1, 2]" a list).
+
+
+def _given(value: str) -> str | None:
+    """An optional text argument's value, or None if it wasn't given ("" or only spaces)."""
+    return value.strip() or None
+
 
 @contextmanager
 def _tool_session() -> Iterator[Session]:
@@ -52,19 +65,25 @@ def _tool_session() -> Iterator[Session]:
     with Session(engine) as session:
         try:
             yield session
-        except (BusinessRuleError, NotFoundError, ValueError) as exc:  # ValueError covers Pydantic's ValidationError
+        except (BusinessRuleError, NotFoundError, ValidationError) as exc:
             raise ToolError(str(exc)) from exc
+        except OperationalError as exc:
+            # e.g. "database is locked" while another process (the stdio server) is writing: worth a retry.
+            raise ToolError("The database is busy right now; try again in a moment.") from exc
 
 
 def _category_names(session: Session) -> dict[int, str]:
     return {c.id: c.name for c in categories.list_categories(session)}
 
 
-def _category_id(session: Session, name: str) -> int:
-    names = _category_names(session)
+def _category_id(names: dict[int, str], name: str) -> int:
+    """The id of the category called `name` (any letter case), from the names already loaded."""
+    wanted = name.strip().lower()
     for category_id, category_name in names.items():
-        if category_name.lower() == name.lower():
+        if category_name.lower() == wanted:
             return category_id
+    if not names:
+        raise BusinessRuleError("There are no categories yet. Add some (or run backend/seed.py) first.")
     raise BusinessRuleError(f"Unknown category '{name}'. Use one of: {', '.join(names.values())}.")
 
 
@@ -86,52 +105,55 @@ def _describe(expense: expenses.ExpenseRead, names: dict[int, str]) -> dict[str,
 
 @server.tool(annotations=ADDS_DATA)
 def add_expense(
-    amount: Annotated[str, Field(description="Amount as a plain number string, e.g. '450.50'.")],
+    # A number is accepted too: some clients send 450.5 rather than "450.50".
+    amount: Annotated[str | float, Field(description="Amount, e.g. '450.50'.")],
     category: Annotated[str, Field(description="Category name; see the expenses://categories resource.")],
     merchant: Annotated[str, Field(description="The shop, company or person paid.")],
     spent_on: Annotated[str, Field(description="Date of the expense as YYYY-MM-DD.")],
     payment_method: Annotated[str, Field(description="One of: cash, upi, card, netbanking, wallet, other.")],
-    note: Annotated[str | None, Field(description="Optional short note about what was bought.")] = None,
-    currency: Annotated[str, Field(description="ISO currency code. INR unless stated otherwise.")] = "INR",
+    note: Annotated[str, Field(description="Optional short note about what was bought.")] = "",
+    currency: Annotated[str, Field(description="ISO currency code. INR unless stated otherwise.", pattern=CURRENCY)] = "INR",
 ) -> dict[str, Any]:
     """Record a new expense. Needs the amount, category, merchant, date and payment method;
     if any is unknown, ask the user instead of guessing."""
     with _tool_session() as session:
+        names = _category_names(session)
         created = expenses.create_expense(
             session,
             expenses.ExpenseCreate(
-                amount=amount,
+                amount=str(amount),
                 currency=currency,
-                category_id=_category_id(session, category),
+                category_id=_category_id(names, category),
                 merchant=merchant,
-                note=note,
+                note=_given(note),
                 spent_on=spent_on,
                 payment_method=payment_method,
             ),
         )
-        return {"saved": _describe(created, _category_names(session))}
+        return {"saved": _describe(created, names)}
 
 
 @server.tool(annotations=READS_ONLY)
 def list_expenses(
-    start_date: Annotated[str | None, Field(description="Only expenses on or after this date (YYYY-MM-DD).")] = None,
-    end_date: Annotated[str | None, Field(description="Only expenses on or before this date (YYYY-MM-DD).")] = None,
-    category: Annotated[str | None, Field(description="Only this category (by name).")] = None,
-    merchant: Annotated[str | None, Field(description="Only this exact merchant (any letter case).")] = None,
-    search: Annotated[str | None, Field(description="Only expenses whose merchant or note contains this text.")] = None,
+    start_date: Annotated[str, Field(description="Only expenses on or after this date (YYYY-MM-DD).")] = "",
+    end_date: Annotated[str, Field(description="Only expenses on or before this date (YYYY-MM-DD).")] = "",
+    category: Annotated[str, Field(description="Only this category (by name).")] = "",
+    merchant: Annotated[str, Field(description="Only this exact merchant (any letter case).")] = "",
+    search: Annotated[str, Field(description="Only expenses whose merchant or note contains this text.")] = "",
 ) -> dict[str, Any]:
     """List expenses, newest first, optionally filtered. Use it to find expense ids before
     updating or deleting, and to answer questions about specific expenses."""
     with _tool_session() as session:
+        names = _category_names(session)
+        category_name = _given(category)
         filters = expenses.ExpenseFilters(
-            start_date=start_date,
-            end_date=end_date,
-            category_id=_category_id(session, category) if category else None,
-            merchant=merchant,
-            search=search,
+            start_date=_given(start_date),
+            end_date=_given(end_date),
+            category_id=_category_id(names, category_name) if category_name else None,
+            merchant=_given(merchant),
+            search=_given(search),
         )
         rows = expenses.list_expenses(session, filters)
-        names = _category_names(session)
         return {
             "count": len(rows),
             "expenses": [_describe(e, names) for e in rows[:MAX_ROWS]],
@@ -141,21 +163,21 @@ def list_expenses(
 
 @server.tool(annotations=READS_ONLY)
 def get_summary(
-    month: Annotated[str, Field(description="The month as YYYY-MM, e.g. '2026-11'.", pattern=r"^\d{4}-(0[1-9]|1[0-2])$")],
-    currency: Annotated[str, Field(description="ISO currency code. INR unless asked otherwise.")] = "INR",
+    month: Annotated[str, Field(description="The month as YYYY-MM, e.g. '2026-11'.", pattern=expenses.MONTH_PATTERN)],
+    currency: Annotated[str, Field(description="ISO currency code. INR unless asked otherwise.", pattern=CURRENCY)] = "INR",
 ) -> dict[str, Any]:
     """Get one month's total spending and the total for each category, biggest first, plus the
     previous month's total for comparison. Use it for questions like "where did my money go?"."""
     year, month_number = (int(part) for part in month.split("-"))
-    previous_year, previous_number = (year, month_number - 1) if month_number > 1 else (year - 1, 12)
     with _tool_session() as session:
         summary = expenses.monthly_summary(session, year, month_number, currency)
-        previous = expenses.monthly_summary(session, previous_year, previous_number, currency)
+        # The month before, from the same trend query the Dashboard uses: two months ending with this one.
+        previous = expenses.monthly_trend(session, 2, date(year, month_number, 1), currency).months[0]
         # mode="json" turns Decimals into strings like "450.50".
         result = summary.model_dump(mode="json")
         # Added alongside the existing fields, so clients that read the old shape keep working.
         result["previous_month"] = {
-            "month": f"{previous_year}-{previous_number:02d}",
+            "month": previous.month,
             "total": str(previous.total),
             "expense_count": previous.expense_count,
         }
@@ -164,35 +186,46 @@ def get_summary(
 
 @server.tool(annotations=CHANGES_DATA)
 def update_expense(
-    expense_id: Annotated[int, Field(description="The id of the expense to change (find it with list_expenses).")],
-    amount: Annotated[str | None, Field(description="New amount as a plain number string.")] = None,
-    category: Annotated[str | None, Field(description="New category name.")] = None,
-    merchant: Annotated[str | None, Field(description="New merchant.")] = None,
-    spent_on: Annotated[str | None, Field(description="New date as YYYY-MM-DD.")] = None,
-    payment_method: Annotated[str | None, Field(description="New payment method.")] = None,
-    note: Annotated[str | None, Field(description="New note.")] = None,
+    expense_id: Annotated[int, Field(ge=1, le=MAX_ID, description="The id of the expense to change (see list_expenses).")],
+    amount: Annotated[str | float, Field(description="New amount, e.g. '450.50'.")] = "",
+    category: Annotated[str, Field(description="New category name.")] = "",
+    merchant: Annotated[str, Field(description="New merchant.")] = "",
+    spent_on: Annotated[str, Field(description="New date as YYYY-MM-DD.")] = "",
+    payment_method: Annotated[str, Field(description="New payment method.")] = "",
+    currency: Annotated[str, Field(description="New ISO currency code, e.g. INR.")] = "",
+    note: Annotated[str, Field(description="New note.")] = "",
+    clear_note: Annotated[bool, Field(description="true to remove the note.")] = False,
 ) -> dict[str, Any]:
-    """Change some fields of an existing expense. Only pass the fields that should change."""
+    """Change some fields of an existing expense. Only pass the fields that should change.
+    To remove the note, pass clear_note=true."""
     with _tool_session() as session:
-        changes: dict[str, Any] = {
-            "amount": amount,
-            "merchant": merchant,
-            "spent_on": spent_on,
-            "payment_method": payment_method,
-            "note": note,
+        names = _category_names(session)
+        given = {
+            "amount": _given(str(amount)),
+            "merchant": _given(merchant),
+            "spent_on": _given(spent_on),
+            "payment_method": _given(payment_method),
+            "currency": _given(currency),
+            "note": _given(note),
         }
-        if category:
-            changes["category_id"] = _category_id(session, category)
-        # Leave out arguments that weren't passed, so only those fields change.
-        update = expenses.ExpenseUpdate(**{k: v for k, v in changes.items() if v is not None})
-        updated = expenses.update_expense(session, expense_id, update)
-        return {"updated": _describe(updated, _category_names(session))}
+        # Only the fields that were given change; everything else stays as it was.
+        changes: dict[str, Any] = {field: value for field, value in given.items() if value is not None}
+        if _given(category):
+            changes["category_id"] = _category_id(names, category)
+        if clear_note:
+            changes["note"] = None
+        if not changes:
+            # Saying "updated" when nothing changed would mislead the caller (and the user).
+            raise BusinessRuleError("Nothing to change: pass at least one field to update.")
+        updated = expenses.update_expense(session, expense_id, expenses.ExpenseUpdate(**changes))
+        return {"updated": _describe(updated, names)}
 
 
 @server.tool(annotations=CHANGES_DATA)
 def delete_expense(
-    expense_id: Annotated[int, Field(description="The id of the expense to delete (find it with list_expenses).")],
-    confirmed: Annotated[bool, Field(description="true only after the user has explicitly confirmed.")] = False,
+    expense_id: Annotated[int, Field(ge=1, le=MAX_ID, description="The id of the expense to delete (see list_expenses).")],
+    # strict: only a real true deletes. Without it, Pydantic would also read "yes", "on" or 1 as true.
+    confirmed: Annotated[bool, Field(strict=True, description="true only after the user has explicitly confirmed.")] = False,
 ) -> dict[str, Any]:
     """Delete an expense permanently. Call it first with confirmed=false: nothing is deleted, and
     the expense comes back so you can show it to the user. Call again with confirmed=true only
@@ -222,5 +255,6 @@ def recent_expenses_resource() -> str:
     """The most recent expenses, newest first."""
     with Session(engine) as session:
         names = _category_names(session)
-        rows = expenses.list_expenses(session)[:RECENT_ROWS]
+        # The database stops after RECENT_ROWS, instead of loading every expense to keep 20.
+        rows = expenses.list_expenses(session, expenses.ExpenseFilters(limit=RECENT_ROWS))
         return json.dumps([_describe(e, names) for e in rows])

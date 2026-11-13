@@ -5,10 +5,19 @@ from typing import Self
 
 from pydantic import BaseModel, ConfigDict, Field, computed_field, model_validator
 
+from app.core.db import MAX_ID
 from app.core.money import DEFAULT_CURRENCY, paise_to_rupees
 
 # These schemas check the *shape* of data (types, lengths, at most 2 decimal places).
 # Business rules (amount > 0, the category must exist) live in service.py.
+
+# A month as YYYY-MM, for years 1900-2099: wide enough for any real expense, and it keeps
+# date() away from years it can't represent (0000 or 9999-12's "next month" would be a 500).
+MONTH_PATTERN = r"^(19|20)\d{2}-(0[1-9]|1[0-2])$"
+
+# For bodies: strip stray spaces ("Swiggy " would never match a merchant filter), and reject
+# unknown fields, so a typo like "merchnat" is an error instead of a silently ignored change.
+_STRICT_INPUT = ConfigDict(extra="forbid", str_strip_whitespace=True)
 
 
 class PaymentMethod(StrEnum):
@@ -24,10 +33,12 @@ class PaymentMethod(StrEnum):
 class ExpenseCreate(BaseModel):
     """What a caller sends to record an expense. No id or created_at: the server sets those."""
 
+    model_config = _STRICT_INPUT
+
     # Rupees, as people type them (450.50). The service converts to paise for storage.
     amount: Decimal = Field(max_digits=12, decimal_places=2, examples=["450.50"])
     currency: str = Field(default=DEFAULT_CURRENCY, pattern=r"^[A-Z]{3}$")
-    category_id: int
+    category_id: int = Field(ge=1, le=MAX_ID)
     merchant: str = Field(min_length=1, max_length=100)
     note: str | None = Field(default=None, max_length=500)
     spent_on: date
@@ -37,11 +48,13 @@ class ExpenseCreate(BaseModel):
 class ExpenseUpdate(BaseModel):
     """PATCH body: send only the fields you want to change."""
 
+    model_config = _STRICT_INPUT
+
     # These default to None but aren't typed "| None": leaving a field out means
     # "don't change it", while sending null for it fails validation (422).
     amount: Decimal = Field(default=None, max_digits=12, decimal_places=2)
     currency: str = Field(default=None, pattern=r"^[A-Z]{3}$")
-    category_id: int = Field(default=None)
+    category_id: int = Field(default=None, ge=1, le=MAX_ID)
     merchant: str = Field(default=None, min_length=1, max_length=100)
     spent_on: date = Field(default=None)
     payment_method: PaymentMethod = Field(default=None)
@@ -80,8 +93,11 @@ class ExpenseFilters(BaseModel):
 
     start_date: date | None = None
     end_date: date | None = None
-    category_id: int | None = None
-    merchant: str | None = Field(default=None, max_length=100, description="Exact merchant name, any letter case")
+    category_id: int | None = Field(default=None, ge=1, le=MAX_ID)
+    # min_length=1 like `search`: an empty value is an error, not a silent "no filter".
+    merchant: str | None = Field(
+        default=None, min_length=1, max_length=100, description="Exact merchant name, any letter case"
+    )
     search: str | None = Field(
         default=None, min_length=1, max_length=100, description="Text to find in the merchant or note"
     )

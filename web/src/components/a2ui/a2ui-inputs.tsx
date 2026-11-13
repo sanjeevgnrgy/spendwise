@@ -9,6 +9,7 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Textarea } from "@/components/ui/textarea"
 import { boundPath, isObject, resolve, textOf, type A2uiComponent, type A2uiRenderContext } from "@/lib/a2ui"
+import { formatDate, isoDate, parseIsoDate } from "@/lib/format"
 
 // A2UI's input components, with two-way data binding: each one shows the value at its bound path in
 // the surface's data model, and writes what the user does back to that path. That happens in the
@@ -114,25 +115,13 @@ export function A2uiChoicePicker({ node, ctx }: InputProps) {
   )
 }
 
-// "2026-11-13" <-> a Date at local midnight. new Date("2026-11-13") would mean midnight UTC, which is
-// still the previous day in some time zones, so the day is built from its parts instead.
-function parseDay(value: unknown): Date | undefined {
-  const match = typeof value === "string" ? /^(\d{4})-(\d{2})-(\d{2})/.exec(value) : null
-  return match ? new Date(Number(match[1]), Number(match[2]) - 1, Number(match[3])) : undefined
-}
-
-function isoDay(day: Date): string {
-  const pad = (n: number) => String(n).padStart(2, "0")
-  return `${day.getFullYear()}-${pad(day.getMonth() + 1)}-${pad(day.getDate())}`
-}
-
 // A2UI's DateTimeInput, dates only: a button that opens a calendar in a popover (shadcn's date picker).
 export function A2uiDateTimeInput({ node, ctx }: InputProps) {
   const [open, setOpen] = useState(false)
   const id = inputId(ctx, node)
   const path = boundPath(node.value)
   const editable = canEdit(ctx, path)
-  const day = parseDay(resolve(node.value, ctx.surface.data))
+  const day = parseIsoDate(resolve(node.value, ctx.surface.data))
 
   return (
     <Field id={id} label={textOf(node.label, ctx.surface.data)}>
@@ -140,7 +129,7 @@ export function A2uiDateTimeInput({ node, ctx }: InputProps) {
         <PopoverTrigger asChild>
           <Button id={id} variant="outline" size="sm" className="justify-start font-normal" disabled={!editable}>
             <CalendarIcon />
-            {day ? day.toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric" }) : "Pick a date"}
+            {day ? formatDate(day) : "Pick a date"}
           </Button>
         </PopoverTrigger>
         <PopoverContent className="w-auto p-0" align="start">
@@ -150,7 +139,7 @@ export function A2uiDateTimeInput({ node, ctx }: InputProps) {
             defaultMonth={day}
             onSelect={(picked) => {
               // The data model holds ISO 8601 text, as the spec asks, not the browser's Date object.
-              if (picked && editable) ctx.onChange?.(ctx.surface.id, path, isoDay(picked))
+              if (picked && editable) ctx.onChange?.(ctx.surface.id, path, isoDate(picked))
               setOpen(false)
             }}
           />

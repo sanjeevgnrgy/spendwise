@@ -82,7 +82,8 @@ def delete_expense(session: Session, expense_id: int) -> None:
 def monthly_summary(session: Session, year: int, month: int, currency: str = DEFAULT_CURRENCY) -> MonthlySummary:
     start = date(year, month, 1)
     # The first day of the next month. Querying "before that day" avoids working out month lengths.
-    end = date(year + 1, 1, 1) if month == 12 else date(year, month + 1, 1)
+    next_year, next_month = _months_back(year, month, -1)
+    end = date(next_year, next_month, 1)
     rows = repository.totals_by_category(session, start, end, currency)
 
     # Names come from the categories module. With no foreign key, a category could disappear

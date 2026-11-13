@@ -5,10 +5,22 @@ export function formatMoney(amount: string, currency: string): string {
   return new Intl.NumberFormat("en-IN", { style: "currency", currency }).format(Number(amount))
 }
 
-export function formatDate(isoDate: string): string {
-  // "2026-11-13" -> "13 Nov 2026". Parsed as a local date, so it never shifts a day across time zones.
-  const [year, month, day] = isoDate.split("-").map(Number)
-  return new Date(year, month - 1, day).toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric" })
+// "2026-11-13" <-> a Date at local midnight. new Date("2026-11-13") would mean midnight UTC, which is
+// still the previous day in some time zones, so dates are built from their parts instead.
+export function parseIsoDate(value: unknown): Date | undefined {
+  const match = typeof value === "string" ? /^(\d{4})-(\d{2})-(\d{2})/.exec(value) : null
+  return match ? new Date(Number(match[1]), Number(match[2]) - 1, Number(match[3])) : undefined
+}
+
+export function isoDate(day: Date): string {
+  const pad = (n: number) => String(n).padStart(2, "0")
+  return `${day.getFullYear()}-${pad(day.getMonth() + 1)}-${pad(day.getDate())}`
+}
+
+export function formatDate(value: string | Date): string {
+  // "2026-11-13" -> "13 Nov 2026".
+  const day = value instanceof Date ? value : parseIsoDate(value)
+  return day ? day.toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric" }) : ""
 }
 
 export function formatMonth(isoMonth: string, style: "long" | "short" = "long"): string {
@@ -28,9 +40,7 @@ export function currentMonth(): string {
 }
 
 export function todayIso(): string {
-  const now = new Date()
-  const pad = (n: number) => String(n).padStart(2, "0")
-  return `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}`
+  return isoDate(new Date())
 }
 
 const PAYMENT_METHOD_LABELS: Record<string, string> = {

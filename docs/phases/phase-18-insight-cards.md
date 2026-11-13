@@ -1,5 +1,15 @@
 # Phase 18: Insight cards
 
+> **Later changes (code review after Phase 18):**
+> - **A bypass, closed:** the review found the delete guard could be bypassed by sending `confirmed` as the string
+>   `"true"`. Now any delete the model asks for is a preview, the model isn't offered `confirmed` at all, and the MCP
+>   tool's `confirmed` is strict.
+> - **Snapshots and expiry:** Approve checks the expense still matches the card's snapshot. Cards expire after 15
+>   minutes, and a failed run puts the card back.
+> - **No needless reload:** a delete preview no longer reloads the pages.
+>
+> See [decisions.md](../decisions.md) D132–D138.
+
 **Goal:** questions like "where did my money go this month?" get a short answer plus an **insight card**: two Stats
 (this month vs last, the biggest category) and a donut chart. Deleting becomes **human-in-the-loop**: the assistant
 can only *propose* a delete, and the card's **Approve** button is the only thing that actually deletes.

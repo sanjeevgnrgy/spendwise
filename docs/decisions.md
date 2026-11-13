@@ -464,6 +464,7 @@ is natural. It's still a soft, model-judged guard.
 
 ### D77. Running on another port needs `MCP_URL`
 - The default assumes port 8000. With `--port 8001`, set `MCP_URL=http://localhost:8001/mcp`.
+- **Updated by D136:** the default is now `http://127.0.0.1:8000/mcp/` (no redirect, no IPv6 attempt).
 
 ---
 
@@ -709,6 +710,7 @@ is natural. It's still a soft, model-judged guard.
 - **Trade-offs:** annotations are hints, fine to trust from our own server, never from a third-party one. A
   `delete_expense` preview (`confirmed: false`) counts as a change, so the pages reload once for nothing (harmless).
   The tool list is cached (D73), so restart the app after changing annotations.
+- **Updated by D133:** in the web panel, a delete preview no longer counts as a change.
 
 ### D112. `dataVersion` is AG-UI shared state
 - The panel sends `state: {"dataVersion": n}` with every run. After each data-changing tool, the agent sends
@@ -924,6 +926,8 @@ is natural. It's still a soft, model-judged guard.
 - **Closing the gaps:** a model-written form can't contain approval buttons (D125). The records are kept in memory
   only, so a restart forgets them and the user asks again.
 - `POST /chat` (no buttons) keeps D53's text confirmation.
+- **Updated by D133:** the code review found the guard could be bypassed (`confirmed: "true"`); approvals now also keep
+  a snapshot, expire, and survive a failed run.
 - **Revisit when:** there's more than one server process; then store the records in the database.
 
 ### D130. Which actions need approval
@@ -933,10 +937,129 @@ is natural. It's still a soft, model-judged guard.
 - Asking for approval too often trains people to click without reading. **Revisit when:** bulk changes, payments,
   messages to other people, or anything outside the app arrive.
 - The delete *preview* still sends a `STATE_SNAPSHOT` (D111's known trade-off: the pages reload once for nothing).
+  **Updated by D133:** it no longer does.
 
 ### D131. Smaller fixes in Phase 18
 - **Button messages:** a button's `userMessage` ("Approve deleting #14") is what your chat bubble shows for the click.
 - **Whole numbers:** action contexts list `int` before `float`, so an id stays `3` (it came out as `3.0`).
 - **The agent's switch:** `agent.stream`'s `forms` became `rich_ui`, because it now covers forms, cards and approval
   buttons.
+
+---
+
+## Code review of every area (after Phase 18)
+
+> `/code-review` was run on Phase 18, then on today's code area by area: backend foundation (Phases 1–8), MCP (9–10),
+> assistant (6–18) and the web app (11–18). 57 findings, many overlapping. The fixes were checked offline:
+> - **Attacks:** the Phase 18 attack script again, plus the string `"true"` bypass and an edit between card and Approve.
+> - **MCP tools** through the real protocol, and **REST** validation over HTTP.
+> - **Logging** after start-up.
+> - **The renderer** against runaway descriptions, and real cards.
+>
+> `npm run build` passes.
+
+### D132. Every phase ends with a code review
+- After a phase is built and checked, its changes get a code review. What holds up is fixed and re-checked, and the
+  summary says what was fixed and what was deliberately not, before the user is asked to commit.
+- **Why:** the first review after Phase 18 found a real hole in that phase's safety guarantee (D133).
+
+### D133. Approvals, hardened
+- **The bypass:** the guard only caught `confirmed is True`, but the MCP tool also read `"true"`, `"yes"` or `1` as true.
+  Now:
+  - the guard sends `confirmed=False` for **any** delete in the web panel;
+  - the model is offered `delete_expense` **without** `confirmed` at all, with a description saying only Approve
+    deletes;
+  - the MCP tool's `confirmed` is `strict`, so `"yes"` and `1` are errors.
+- **A snapshot, not an id:** a card's record is the expense as the card showed it. Approve first re-reads the expense
+  and refuses if it changed or is gone. An edit, or an id reused after a delete, can't redirect Approve.
+- **Expiry and failures:**
+  - records expire after 15 minutes, and at most 200 are kept;
+  - if a run fails before finishing, the record is put back (`restore()`), so Approve works again when the browser
+    unlocks the card;
+  - a failed delete says nothing was deleted and asks the user to ask again.
+- **Previews and the model:** a guarded preview no longer counts as a data change (no needless reload). The model's
+  copy of the preview result says nothing was deleted and the user now sees Approve/Cancel, so it doesn't retry.
+- Approval stays delete-only, keyed on the tool's name, not on every `destructive_hint` tool: the preview/confirm
+  protocol exists only for delete, and updates are reversible (D130).
+
+### D134. MCP tool inputs
+- **Empty means not given:** optional text arguments are plain `str`, with `""` meaning "not given". Models fill unused
+  strings with `""`, and the SDK pre-parses non-`str` arguments as JSON (`"null"` became `None`). `list_expenses("")`
+  works now; `update_expense(note="null")` keeps the text.
+- **`add_expense` and `update_expense`:**
+  - `amount` also accepts a number;
+  - `update_expense` gains `currency` and `clear_note`, and refuses a call that changes nothing (it used to report
+    "updated");
+  - every currency must match `^[A-Z]{3}$`, as in REST (a lowercase `inr` gave a silent 0 total);
+  - ids are bounded.
+- **Inside the tools:**
+  - categories are loaded once per call, and names are trimmed; an empty table gets a clear message;
+  - `get_summary`'s previous month comes from `monthly_trend` (no second month calculation);
+  - the recent-expenses resource stops after 20 rows in SQL;
+  - tool errors pass on only `ValidationError` and our own errors, and a locked database says "try again".
+
+### D135. REST inputs
+- **Expense bodies:** `ExpenseCreate` and `ExpenseUpdate` reject unknown fields (a typo'd PATCH was a silent 200) and
+  strip spaces (`"Swiggy "` never matched a filter; `"   "` saved a blank merchant).
+- **Filters:** `merchant=` (empty) is a 422, like `search=`.
+- **Ids and months:**
+  - ids are capped at SQLite's largest integer (above it was a 500 from the driver);
+  - months must be 1900–2099 (`0000-01` was a 500).
+- **Categories:** a new one can't duplicate an existing name in another letter case or with spaces. The database's
+  unique constraint is still case-sensitive (no migrations, D18), so the check is in the service.
+- **Merchant filter:** the database lowercases both sides. SQLite only lowercases A–Z, so "CAFÉ" matches "CAFÉ" but
+  not "café". Fine for now. **Revisit when:** non-English merchant names are common; then fold case in Python.
+
+### D136. Smaller backend fixes
+- **Logging:** `setup_logging()` uses `force=True`. Creating the MCP server had already set up root logging at INFO,
+  which made our setup a no-op and let every httpx request print.
+- **`MCP_URL`:** the default is `http://127.0.0.1:8000/mcp/`. `/mcp` answered with a 307 redirect first, and
+  `localhost` tried IPv6 before IPv4, which cost extra round trips on every MCP call.
+- **Model checks:**
+  - chart labels allow 50 characters, like category names;
+  - Stat texts and button messages are capped;
+  - `CreateSurface` rejects a component that contains itself;
+  - a model-written form may only use the form components.
+- **Cards:**
+  - `card_for` also catches `ArithmeticError` (a bad Decimal);
+  - an empty month says "No expenses in <month>";
+  - small changes keep a decimal ("+0.4%", not "Same as");
+  - `approval_needed` uses the same test as the card and the shared constants;
+  - `monthly_summary` reuses `_months_back`.
+
+### D137. Web fixes
+- **Saving forms:** a form unlocks after a failed run only if nothing changed on the server. If the save went through
+  and a later step failed, pressing Save again would save twice.
+- **Runaway cards:** before drawing, a surface is measured, counting shared children each time. Over 300 components,
+  or one that contains itself, becomes one "Can't show" note. A loop, or 3 copies of a child 12 levels deep, could
+  freeze the tab.
+- **Broken connections:** a tool interrupted by a lost connection shows "Expense saved?" (not confirmed) instead of
+  "failed", and the pages reload.
+- **Updates to older cards:** A2UI updates aimed at a card from an earlier reply reach it.
+- **Expenses page edit row:** it compares with a snapshot taken when editing started, so a reload mid-edit can't undo
+  someone else's change, and repeated Enter saves once.
+- **Small fixes:**
+  - the Dashboard clears an old error after a successful reload;
+  - the chat scrolls on new content, not on every keystroke in a form;
+  - Enter while an input method is composing doesn't send;
+  - `useIsMobile` starts with the real answer (no double mount on phones);
+  - "1 expense" is singular;
+  - chart amounts use the server's style;
+  - date helpers are shared (`lib/format.ts`).
+
+### D138. Findings deliberately not fixed
+- **The seed's "already seeded" check after a crash midway:** it's a dev tool, and the fix is to delete the database
+  and seed again (troubleshooting).
+- **The same computed `total` in three schemas:** cosmetic.
+- **`mcp_stdio.py` setting up tables and logging on import:** it's a dev entry point, and creating tables is harmless
+  to repeat.
+- **`list_expenses` loading every matching row to count them:** fine at one person's scale. **Revisit when:** lists
+  are paginated.
+- **Two runs on one thread at once storing the same turn number:** the panel sends one message at a time. **Revisit
+  when:** the same thread can be used from two devices.
+- **No Stop button or client timeout for a run:** every server step is time-limited (Gemini 60 s × 2, MCP 15 s).
+  **Revisit when:** adding a Stop button.
+- **Every bubble re-rendering on each streamed token:** fine at chat sizes. **Revisit when:** long chats feel slow;
+  then memoize the bubbles.
+- **The same one-line error-to-text conversion in three places:** not worth a shared helper yet.
 

@@ -52,7 +52,8 @@
     },
     {
       "files": [
-        "src/features/*/*/**"
+        "src/features/*/*/*.ts",
+        "src/features/*/*/*.tsx"
       ],
       "rules": {
         "no-restricted-imports": [
@@ -75,6 +76,39 @@
               {
                 "group": [
                   "../../**"
+                ],
+                "message": "This relative import leaves the feature. Use \"@/features/<name>\" or \"@/shared/...\" instead."
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "files": [
+        "src/features/*/*/*/**"
+      ],
+      "rules": {
+        "no-restricted-imports": [
+          "error",
+          {
+            "patterns": [
+              {
+                "group": [
+                  "@/features/*/*"
+                ],
+                "message": "Import another feature only through its public API, \"@/features/<name>\". Inside a feature, use relative imports."
+              },
+              {
+                "group": [
+                  "@/app",
+                  "@/app/*"
+                ],
+                "message": "Features don't import the app: the app composes the features."
+              },
+              {
+                "group": [
+                  "../../../**"
                 ],
                 "message": "This relative import leaves the feature. Use \"@/features/<name>\" or \"@/shared/...\" instead."
               }

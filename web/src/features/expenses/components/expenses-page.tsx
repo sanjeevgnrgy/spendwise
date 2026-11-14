@@ -11,10 +11,10 @@ import { messageOf } from "@/shared/lib/errors"
 
 import type { Expense, ExpenseFilters } from "../api"
 import { useExpenses } from "../queries"
-import { AddExpenseDialog } from "./add-expense-dialog"
-import { DeleteExpensesDialog } from "./delete-expenses-dialog"
-import { ExpensesTable } from "./expenses-table"
-import { FiltersBar } from "./filters-bar"
+import { AddExpenseDialog } from "./dialogs/add-expense-dialog"
+import { DeleteExpensesDialog } from "./dialogs/delete-expenses-dialog"
+import { ExpensesTable } from "./table/expenses-table"
+import { FiltersBar } from "./filters/filters-bar"
 
 // Wait this long after the last change before asking the API, so typing in Search doesn't send a
 // request on every key.

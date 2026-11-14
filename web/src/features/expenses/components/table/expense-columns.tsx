@@ -20,8 +20,8 @@ import { Badge } from "@/shared/ui/badge"
 import { Button } from "@/shared/ui/button"
 import { Checkbox } from "@/shared/ui/checkbox"
 
-import type { Expense } from "../api"
-import { paymentMethodLabel } from "../payment-methods"
+import type { Expense } from "../../api"
+import { paymentMethodLabel } from "../../payment-methods"
 import { SortButton } from "./sort-button"
 
 /**

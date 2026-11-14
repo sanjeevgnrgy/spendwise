@@ -7,8 +7,8 @@ import { ANY_CATEGORY, CategorySelect } from "@/features/categories"
 import { Button } from "@/shared/ui/button"
 import { Input } from "@/shared/ui/input"
 
-import type { ExpenseFilters } from "../api"
-import { LabeledField } from "./labeled-field"
+import type { ExpenseFilters } from "../../api"
+import { LabeledField } from "../fields/labeled-field"
 
 interface FiltersBarProps {
   /** The filters as they are now (the page's state). */

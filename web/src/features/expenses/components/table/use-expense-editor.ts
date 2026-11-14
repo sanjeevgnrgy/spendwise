@@ -7,8 +7,8 @@ import { toast } from "sonner"
 
 import { messageOf } from "@/shared/lib/errors"
 
-import type { ExpenseChanges } from "../api"
-import { useSavingExpenseIds, useUpdateExpense } from "../queries"
+import type { ExpenseChanges } from "../../api"
+import { useSavingExpenseIds, useUpdateExpense } from "../../queries"
 
 /** What useExpenseEditor returns: the open row, and what can be done with it. */
 export interface ExpenseEditor {

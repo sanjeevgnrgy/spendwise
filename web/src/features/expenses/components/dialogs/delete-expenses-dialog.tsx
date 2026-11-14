@@ -17,8 +17,8 @@ import {
   AlertDialogTitle,
 } from "@/shared/ui/alert-dialog"
 
-import type { Expense } from "../api"
-import { useDeleteExpenses } from "../queries"
+import type { Expense } from "../../api"
+import { useDeleteExpenses } from "../../queries"
 
 interface DeleteExpensesDialogProps {
   /** The expenses to delete; null while the dialog is closed. */

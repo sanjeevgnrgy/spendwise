@@ -10,10 +10,10 @@ import { Button } from "@/shared/ui/button"
 import { Input } from "@/shared/ui/input"
 import { TableCell, TableRow } from "@/shared/ui/table"
 
-import type { Expense, ExpenseChanges } from "../api"
-import { changesBetween, draftOf } from "../expense-form"
-import { useExpenseDraft, type ExpenseDraftState } from "../use-expense-draft"
-import { PaymentMethodSelect } from "./payment-method-select"
+import type { Expense, ExpenseChanges } from "../../api"
+import { changesBetween, draftOf } from "../../expense-form"
+import { useExpenseDraft, type ExpenseDraftState } from "../../use-expense-draft"
+import { PaymentMethodSelect } from "../fields/payment-method-select"
 
 interface EditRowProps {
   /** The expense to edit, as the table has it now. */

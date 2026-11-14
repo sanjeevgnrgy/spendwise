@@ -22,11 +22,11 @@ import {
 } from "@/shared/ui/dialog"
 import { Input } from "@/shared/ui/input"
 
-import { emptyDraft, isComplete, toNewExpense } from "../expense-form"
-import { useCreateExpense } from "../queries"
-import { useExpenseDraft, type ExpenseDraftState } from "../use-expense-draft"
-import { LabeledField } from "./labeled-field"
-import { PaymentMethodSelect } from "./payment-method-select"
+import { emptyDraft, isComplete, toNewExpense } from "../../expense-form"
+import { useCreateExpense } from "../../queries"
+import { useExpenseDraft, type ExpenseDraftState } from "../../use-expense-draft"
+import { LabeledField } from "../fields/labeled-field"
+import { PaymentMethodSelect } from "../fields/payment-method-select"
 
 // A blank draft dated today. A function, so "today" is worked out each time the form starts again, not once.
 const blankDraft = () => emptyDraft(todayIso())

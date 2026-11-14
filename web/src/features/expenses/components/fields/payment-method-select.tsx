@@ -3,8 +3,8 @@
 
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/shared/ui/select"
 
-import type { PaymentMethod } from "../api"
-import { isPaymentMethod, PAYMENT_METHODS, paymentMethodLabel } from "../payment-methods"
+import type { PaymentMethod } from "../../api"
+import { isPaymentMethod, PAYMENT_METHODS, paymentMethodLabel } from "../../payment-methods"
 
 interface PaymentMethodSelectProps {
   /** The chosen method (there's always one). */

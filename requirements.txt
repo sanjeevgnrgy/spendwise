@@ -14,6 +14,9 @@ mcp[cli]==2.3.0
 ag-ui-protocol==1.0.0
 # Database migrations: numbered steps that create and change the tables (backend/migrations).
 alembic==1.20.1
+# CLDR data for writing money, days and months in each language (core/i18n), the same data the browser's Intl
+# uses, so the server's cards and the web app's pages agree.
+babel==2.18.0
 # Imported directly (queries, migrations, middleware, the MCP client's HTTP), so pinned here even
 # though other packages bring them: their behaviour is part of ours.
 sqlalchemy==2.1.8

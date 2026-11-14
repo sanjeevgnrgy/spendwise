@@ -8,23 +8,36 @@ title it becomes; web/problems.py turns every error into an RFC 9457 "problem de
      "detail": "Expense 14 not found", "instance": "/api/v1/expenses/14"}
 
 Core layer: it imports no framework. Handlers and use cases in every module raise the AppError subclasses (core/llm's
-LlmError is an ExternalServiceError); web/problems.py reports them.
+LlmError is an ExternalServiceError); web/problems.py reports them, in the request's language.
 """
 
 from typing import ClassVar
+
+from app.core.i18n import Language, Translatable
 
 
 class AppError(Exception):
     """An expected problem. Subclasses say which HTTP status and problem type it becomes.
 
-    Raise one with a message written for the user: it becomes the problem's "detail". `slug` is the end of the
-    problem's "type" URI, and `title` a short summary that's the same for every error of the kind. AppError
-    itself stands for an internal error (500): UnexpectedErrorMiddleware reports a bug with its slug and title.
+    Raise one with a message for the user: it becomes the problem's "detail". A Translatable (a catalogued text and
+    its values) is written in the language of whoever reads it (web/problems.py: the request's); a plain string is shown
+    as it is (an outside service's own words). str(error) is the English text, for logs and for MCP clients. `slug`
+    is the end of the problem's "type" URI, and `title` a short summary that's the same for every error of the kind.
+    AppError itself stands for an internal error (500): UnexpectedErrorMiddleware reports a bug with its slug and title.
     """
 
     status: ClassVar[int] = 500
     slug: ClassVar[str] = "internal"
     title: ClassVar[str] = "Internal error"
+
+    def __init__(self, message: str | Translatable = "") -> None:
+        """An error with `message` as its detail (the English text is also the exception's own message)."""
+        super().__init__(str(message))
+        self.text = message
+
+    def message_in(self, language: Language) -> str:
+        """The detail in `language` (a plain-string message is the same in every language)."""
+        return self.text.in_language(language) if isinstance(self.text, Translatable) else self.text
 
 
 class NotFoundError(AppError):

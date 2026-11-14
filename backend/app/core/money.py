@@ -3,7 +3,7 @@
 Amounts are stored and added up as whole paise (integers), and converted through Decimal, never float, so
 no rounding error can creep into a total. Used by the expenses module (contracts, handlers, table), the MCP
 server and the assistant's cards, seed.py, and the export script (which hands the currency values to the
-web app, whose formatMoney matches format_money).
+web app, whose formatMoney writes amounts the same way, from the same CLDR data).
 """
 
 from decimal import Decimal
@@ -11,13 +11,15 @@ from typing import Annotated
 
 from pydantic import Field
 
+from app.core.i18n import DEFAULT_LANGUAGE, Language, format_currency_amount
+
 DEFAULT_CURRENCY = "INR"
 PAISE_PER_RUPEE = 100
 # An ISO 4217 code in capitals ("INR", "USD"). Lowercase "inr" is refused rather than quietly
 # matching nothing, which would show a 0 total.
 CURRENCY_PATTERN = r"^[A-Z]{3}$"
 CurrencyCode = Annotated[str, Field(pattern=CURRENCY_PATTERN, examples=[DEFAULT_CURRENCY])]
-# Currencies shown with a symbol in front ("₹2,340.00"); any other is shown with its code after it.
+# A currency's symbol where the app shows one on its own, as a chart's unit ("₹").
 CURRENCY_SYMBOLS = {"INR": "₹"}
 
 
@@ -37,20 +39,7 @@ def paise_to_rupees(paise: int) -> Decimal:
     return Decimal(paise).scaleb(-2)
 
 
-def _indian_grouping(whole: str) -> str:
-    """Commas in a string of digits, the Indian way: '12345678' -> '1,23,45,678'."""
-    # India groups the last three digits, then pairs: 12345678 -> 1,23,45,678 (the web's Intl "en-IN" does the same).
-    if len(whole) <= 3:
-        return whole
-    head, last_three = whole[:-3], whole[-3:]
-    pairs = [head[max(i - 2, 0) : i] for i in range(len(head), 0, -2)]
-    return ",".join(reversed(pairs)) + "," + last_three
-
-
-def format_money(amount: Decimal, currency: str) -> str:
-    """Decimal('125000.5'), 'INR' -> '₹1,25,000.50'; 'USD' -> '1,25,000.50 USD'. Matches the web app's formatMoney."""
-    sign = "-" if amount < 0 else ""
-    whole, _, fraction = f"{abs(amount):.2f}".partition(".")
-    number = f"{sign}{_indian_grouping(whole)}.{fraction}"
-    symbol = CURRENCY_SYMBOLS.get(currency)
-    return f"{symbol}{number}" if symbol else f"{number} {currency}"
+def format_money(amount: Decimal, currency: str, language: Language = DEFAULT_LANGUAGE) -> str:
+    """Decimal('125000.5'), 'INR' -> '₹1,25,000.50'; 'USD' -> '$1,250.50': the currency's CLDR format in the
+    language's locale (India's digit grouping for English and Hindi). Matches the web app's formatMoney."""
+    return format_currency_amount(amount, currency, language)

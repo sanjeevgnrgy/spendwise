@@ -15,10 +15,14 @@ from typing import Any
 from fastapi import FastAPI, Request
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
+from starlette.datastructures import Headers
 from starlette.exceptions import HTTPException
 from starlette.types import ASGIApp, Message, Receive, Scope, Send
 
 from app.core.errors import AppError
+from app.core.i18n import text
+from app.web.dependencies import get_language, language_of
+from app.web.i18n import WebText
 
 logger = logging.getLogger(__name__)
 
@@ -28,11 +32,10 @@ PROBLEM_JSON = "application/problem+json"
 PROBLEM_TYPE_PREFIX = "urn:spendwise:problem:"
 
 # Problem types for errors that aren't AppErrors: FastAPI's validation errors, its own HTTP errors (404, 405),
-# and the MCP endpoint's 401. UNEXPECTED_DETAIL is all a client is ever told about a bug.
+# and the MCP endpoint's 401. (A bug's detail, all a client is ever told about it, is WebText.UNEXPECTED.)
 VALIDATION_SLUG = "validation"
 HTTP_SLUG = "http"
 UNAUTHORIZED_SLUG = "unauthorized"
-UNEXPECTED_DETAIL = "Something went wrong on the server."
 
 
 def problem_response(
@@ -83,7 +86,9 @@ class UnexpectedErrorMiddleware:
                 raise
             # A bug: the details go to the server log, never to the client (they can leak internals).
             logger.exception("unhandled error on %s %s", scope.get("method"), scope.get("path"))
-            response = problem_response(500, AppError.slug, AppError.title, UNEXPECTED_DETAIL, scope.get("path", ""))
+            # In the request's language, read from the raw headers: a middleware has no Request to depend on.
+            detail = text(language_of(Headers(scope=scope)), WebText.UNEXPECTED)
+            response = problem_response(500, AppError.slug, AppError.title, detail, scope.get("path", ""))
             await response(scope, receive, send)
 
 
@@ -98,10 +103,11 @@ def register_error_handlers(app: FastAPI) -> None:
     """
 
     async def app_error(request: Request, exc: Exception) -> JSONResponse:
-        """An AppError -> its problem response; the error's message is the detail."""
+        """An AppError -> its problem response; the error's message, in the request's language, is the detail."""
         # FastAPI only calls this for an AppError; the fallback just narrows the type for the type checker.
         error = exc if isinstance(exc, AppError) else AppError()
-        return problem_response(error.status, error.slug, error.title, str(error), request.url.path)
+        detail = error.message_in(get_language(request))
+        return problem_response(error.status, error.slug, error.title, detail, request.url.path)
 
     async def invalid_request(request: Request, exc: Exception) -> JSONResponse:
         """A 422 with every invalid value under "errors", and a one-line summary of them as the detail."""

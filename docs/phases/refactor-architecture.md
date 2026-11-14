@@ -15,7 +15,7 @@ changing what the app does for you (two visible additions: a **Stop** button in 
 >   both pages rendered with TanStack Query data.
 > - `npm run build` and `npx oxlint` pass. Not yet tried by hand in a browser.
 
-## Concept: CQRS, and the unit of work
+## Design: CQRS, and the unit of work
 
 **Command Query Responsibility Segregation** splits every operation in two kinds:
 
@@ -37,7 +37,7 @@ things" was 18 transactions. Now the seed runs inside `bus.unit_of_work()`: all 
 waiter, who just looks. Either way you talk to the front desk (the bus), never walk into the kitchen. A large order
 is cooked as one ticket: if one dish fails, the whole ticket is sent back.
 
-## Concept: ports and adapters
+## Design: ports and adapters
 
 A **port** is what the app needs ("talk to an LLM", "use the expense tools"), as an interface. An **adapter** is one
 way of doing it (Gemini; MCP in-process; MCP over HTTP). The composition root picks the adapter.
@@ -49,7 +49,7 @@ way of doing it (Gemini; MCP in-process; MCP over HTTP). The composition root pi
 - The assistant's use cases yield plain events; `agui.py` (an adapter) turns them into AG-UI. The REST routes and the
   MCP server are adapters too, over the same commands and queries.
 
-## Concept: feature slices
+## Design: feature slices
 
 The web app was grouped by kind of file: all components here, all hooks there, one `api.ts` for everything. To change
 "expenses", you touched five folders. Now each **feature** is one folder that owns its components, hooks, API calls and
@@ -124,7 +124,7 @@ cd web; npm run gen:api
 To use `/mcp/` over HTTP (MCP Inspector), set `MCP_TOKEN` in `.env` and send it as `Authorization: Bearer <token>`.
 The assistant and `backend\mcp_stdio.py` don't need it.
 
-## Test it by hand
+## Verify it by hand
 
 1. **Migrations.** Stop the server, run `.\run.ps1`. Expect a "Running upgrade" line for each new migration the first
    time, none after. Your expenses and old conversations are still there.
@@ -140,7 +140,7 @@ The assistant and `backend\mcp_stdio.py` don't need it.
 7. **The lint rules.** In `web/src/features/dashboard/`, import `@/features/expenses/queries` in any file; `npx oxlint`
    fails with "Import another feature only through its public API". Undo it.
 
-## Check your understanding
+## Design questions
 
 **1. `delete_expense` used to take `confirmed=false` to preview. Why is that a CQRS problem, and what replaced it?**
 
@@ -165,7 +165,8 @@ committed by itself, so the first 8 would have stayed.
 
 <details><summary>Answer</summary>
 
-The app: `refreshExpenseData()` in `app/query-client.ts`, wired up in `app/providers.tsx`. The assistant feature only
+The app: `refreshExpenseData()` in `app/query-client.ts` (later a `STALE_AFTER` table applied by `refreshAfter`,
+see [refactor-solid.md](refactor-solid.md)), wired up in `app/providers.tsx`. The assistant feature only
 calls `onDataChanged()` when a `STATE_SNAPSHOT` arrives (and a mutation only declares `meta.changes`); the app decides
 that means invalidating the expenses and Dashboard queries, and TanStack Query reloads whatever is on screen.
 If the assistant knew about those pages, adding a Budgets page would mean changing the assistant: that's the tight

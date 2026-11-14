@@ -1309,6 +1309,7 @@ is natural. It's still a soft, model-judged guard.
 - Approvals store the assistant's own `ExpenseSnapshot`, not the MCP contract's `ExpenseView`, so stored rows don't
   break if that contract changes.
 - Tool descriptions are built from the contract's names, and the server checks its tools' parameters at start-up.
+- **Updated by D172:** the port is split by use (`StructuredOutputModel`, `ToolCallingModel`); `LanguageModel` is both.
 
 ### D167. `/agent` checks its input before streaming
 - A FastAPI dependency (`agui.read_request`) validates the thread id, the message or the button click: problems are a
@@ -1321,6 +1322,7 @@ is natural. It's still a soft, model-judged guard.
   notice, and Retry refetches only what failed.
 - A form stays locked after a broken run if the server **may** have changed data (a tool was still running).
 - Error boundaries at the root and around the chat panel, as well as the page area and each card.
+- **Updated by D172:** the refresh rule is a `STALE_AFTER` table applied by `refreshAfter`.
 
 ### D169. Web: shared values from one place
 - The A2UI component names, chart types, trends and limits come from the generated contract; the basic catalog's own
@@ -1335,3 +1337,90 @@ is natural. It's still a soft, model-judged guard.
 - **`TakeApproval` returns data:** reading and removing a card must be one step, or two clicks could both get it.
 - **A 405's `Allow` lists one method:** Starlette's per-method routes; the header now reaches the client.
 - **The `dark` class in `index.css`:** Tailwind's variant is CSS and can't import the constant.
+
+---
+
+## Inline documentation
+
+### D171. Every file, function and rule explained in the code
+- **What:** every backend and web file starts with a header (a module docstring; a `//` block) saying what it's for,
+  where it sits in the architecture and who uses it. Every function, method, class, component and hook says what it's
+  for, what it returns and raises, and the rule it enforces; business rules are explained where they're applied. Web
+  exports use `/** */` comments, so editors show them on hover.
+- **Except docstrings that are data.** Pydantic copies a model's or enum's docstring into its JSON schema; FastAPI uses
+  a route function's docstring as its OpenAPI description; the MCP SDK reads tool functions. So those get `#` comments
+  above them instead. Changing one would change the OpenAPI document (and the generated web contract), the MCP tools'
+  schemas, or, for `ParsedExpense`, the schema Gemini answers `/parse` in: a behaviour change, not a comment.
+- **Why:** an engineer new to the code (or anyone, months later) shouldn't have to reverse-engineer what a file is
+  for or why a rule exists; and documented exports show up in editors on hover.
+- **How it was checked:** a script compared every file before and after with comments and docstrings removed (Python
+  through its syntax tree, TypeScript with comments and whitespace stripped): no code changed. It also compared what
+  Gemini is shown (system instructions, tool declarations, the `/parse` schema), what MCP clients see, and the OpenAPI
+  document: all unchanged.
+- **Revisit:** if the API documentation should carry descriptions, change model docstrings deliberately, regenerate
+  the web contract, and for anything the model reads, try it against Gemini first.
+
+---
+
+## SOLID, testability and scalability
+
+> Two reviews (backend, web) against single responsibility and the other SOLID principles, clean code, god files,
+> testability and scalability found nine issues each. All were fixed, or documented as known limits (D174). The
+> backend was verified by recording its behaviour through the HTTP API, with a fake model at the model port, before and
+> after: identical. Details: [phases/refactor-solid.md](phases/refactor-solid.md) and
+> [architecture-review.md](architecture-review.md#5-the-solid-review).
+
+### D172. Small units with one job, extended through tables and protocols
+- **What:**
+  - The assistant's loop no longer switches on a `rich_ui` flag. A `Surface` (`WebPanel`, `TextChat`) carries what
+    differs: prompt rules, offered tools, the calls it handles itself.
+  - The prompt, running a tool and Approve/Cancel are separate files, and so are reading and writing AG-UI.
+  - The MCP server registers its tools from `TOOL_REGISTRARS`, so a new tool is a registrar plus one entry.
+  - The Gemini adapter keeps SDK calls apart from pure wire translation.
+  - The model port is split by use: `StructuredOutputModel` and `ToolCallingModel`; `LanguageModel` is both.
+  - Web: the chat hook's logic became pure functions; the A2UI renderer looks components up in `CATALOGS`; the expenses
+    table, its editor and the forms were split; the refresh rule is a `STALE_AFTER` table the compiler checks.
+  - Size targets: backend files under about 180 lines of code and functions under 50. Web files under about 150 and
+    components or hooks under 60.
+- **Why:** each of those files changed for several reasons, so every change risked the others. Switch statements and
+  flags meant editing shared code for every new tool, card or client.
+- **Revisit:** if a table grows entries that need special cases, that's a sign the abstraction is wrong. Split the
+  table rather than adding branches to it.
+
+### D173. Testability through seams, verified by recorded behaviour
+- **What:**
+  - `bootstrap.build(clock, llm, tools, engine)` builds the app around any of them.
+  - `main.create_app(services)` serves the result.
+  - `core.db.create_db_engine(url)` builds an engine without touching the default one.
+  - Use cases take their ports in their constructors.
+  - `GeminiModel(api_key, model, client_factory)` reads no global settings.
+  - Tables no longer stamp their own timestamps: time comes only from the injected clock.
+  - `migrations.upgrade_to_latest(engine)` migrates any engine; an in-memory SQLite engine shares one connection.
+  - Nothing is built at import: uvicorn calls `create_app` (`--factory`), and the id rules moved to `core/ids.py`,
+    so importing a contract doesn't create the database engine.
+- **How refactors are checked until tests exist:** a fake model at the port and fixed scenarios through the real HTTP
+  API, on a copy of the database. Every event, response and model call is recorded, and before and after must be
+  identical.
+- **Why:** a seam that needs monkeypatching is a hidden dependency. With these, a test (when the owner adds them) or a
+  local run with a scripted model needs no special code.
+
+### D174. Scalability: what was done, what is known
+- **Done:**
+  - `conversation_message` is indexed on (thread_id, turn) (migration 0004), and the redundant thread_id index is
+    dropped.
+  - The `/parse` schema is built once and copied per request, not rebuilt each time.
+  - MCP's `get_expense` looks up one category, not all of them.
+  - The web app loads each page, the chat panel and the chart library on demand (`lazyWithRetry`, which also makes a
+    failed load retryable). The JavaScript loaded at start fell from 1,252 kB to 541 kB.
+  - Typing in the chat no longer redraws every card.
+  - Concurrent row saves each get their own state and toast.
+  - A turn whose tool already ran can't fail afterwards because the tool list couldn't be fetched (with a remote
+    MCP server right after a restart): the app assumes the tool may have changed data, as MCP says to.
+- **Known limits, written down instead of fixed now:**
+  - Worker threads (40) and database connections (5 + 10) are separate pools.
+  - SQLite's deferred `BEGIN` can make two read-then-write commands fail together with "database locked". Fix with
+    `BEGIN IMMEDIATE` and WAL, or Postgres.
+  - `GET /threads/{id}` isn't paged.
+  - Remote MCP opens a session per call (D74).
+  - Details: [architecture.md](architecture.md#scalability).
+- **Revisit:** when more than one person or process uses one database, start with the SQLite writer limit.

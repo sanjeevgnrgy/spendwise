@@ -33,7 +33,7 @@ the "how".
 | Pydantic `BaseModel`, `Field`, `Annotated[...]` | contracts, schemas | validation at the edges; `Annotated` types like `RecordId`, `Amount`, `Merchant` carry their rules everywhere they're used |
 | `model_config = ConfigDict(frozen=True, extra="forbid")` | every message | a message can't be changed, and a misspelt field is an error |
 | `StrEnum` | `PaymentMethod`, `ToolName`, `ActionName`, ... | named values that still compare equal to their strings |
-| `Protocol` | `Clock`, `LanguageModel`, `ExpenseTools` | ports: what's needed, not which class provides it |
+| `Protocol` | `Clock`, `ToolCallingModel`, `StructuredOutputModel`, `ExpenseTools`, `Surface` | ports: what's needed, not which class provides it |
 | generators (`yield`, `yield from`) | the agent loop, the AG-UI stream | events as they happen; `result = yield from f()` passes events up and returns a value |
 | `ContextVar` | `core/cqrs.py` | the unit of work in progress, per request thread |
 | `match` statements | the Gemini adapter, conversations | translating message kinds |
@@ -177,9 +177,12 @@ For example, budgets:
 ## Recipe: give the assistant a new tool
 
 1. In `modules/mcp/contracts.py`: the tool's name in `ToolName`, and a result model.
-2. In `modules/mcp/server.py`: the tool, with a description, typed `Annotated` arguments (with descriptions: the model
+2. In `modules/mcp/read_tools.py` or `write_tools.py`: a `register_<tool>(server, bus, views)` function holding the
+   tool, with a description, typed `Annotated` arguments (with descriptions: the model
    reads them), the right annotations (`READS_ONLY`, `ADDS_DATA`, `CHANGES_DATA`), and its body inside
-   `with _tool_errors():`, sending commands and queries through the bus. Optional text arguments are `str = ""`.
+   `with tool_errors():` (`tool_support.py`), sending commands and queries through the bus. Optional text arguments
+   are `str = ""`. Then add the registrar to `TOOL_REGISTRARS` in `mcp/server.py` (the order there is the order the
+   model sees the tools in).
 3. Optional: a card in `assistant/a2ui/cards.py` (`_CARDS`) and chip labels in `assistant/agui.py` (`TOOL_LABELS`).
 4. Restart: the assistant lists tools once.
 
@@ -201,12 +204,43 @@ Never catch exceptions in a route: `core/errors.py` turns them into problem resp
 | today / now | `ctx.clock.today()`, `ctx.clock.now()` in handlers; `ClockDep` in routes. Never `date.today()` |
 | a month like `2026-11` | `YearMonth.parse()`, `.first_day()`, `.shift(n)`, `str()` (`core/months.py`) |
 | money | `rupees_to_paise`, `paise_to_rupees`, `format_money` (`core/money.py`); never `float` |
-| an id from a client | `RecordId` (bodies), `IdPath` (URL paths) |
+| an id from a client | `RecordId` (bodies, `core/ids.py`), `IdPath` (URL paths, `core/dependencies.py`) |
 | currency codes | `CurrencyCode` / `CURRENCY_PATTERN` |
-| the LLM | the injected `LanguageModel` (`core/llm`); never import the Gemini adapter outside `bootstrap.py` |
+| the LLM | the injected model port (`core/llm`: depend on `StructuredOutputModel` or `ToolCallingModel`, whichever you call); never import the Gemini adapter outside `bootstrap.py` |
+
+## Plugging in fakes
+
+Every outside dependency can be replaced through the composition root, without patching modules:
+
+```python
+from app import bootstrap, migrations
+from app.core.db import create_db_engine
+from app.main import create_app
+from fastapi.testclient import TestClient
+
+engine = create_db_engine("sqlite://")         # in memory (or "sqlite:///copy.db" for a file)
+migrations.upgrade_to_latest(engine)           # the real schema, built by the real migrations
+services = bootstrap.build(clock=FixedClock(), llm=ScriptedModel(), engine=engine)
+client = TestClient(create_app(services))      # the real routes, bus and MCP server, with your fakes
+```
+
+`build()` also takes `tools=` (any `ExpenseTools`); pass it if your `.env` sets `MCP_URL`, or the default tools talk to
+that server (and its database). Use cases take their ports directly (`Assistant(bus, tools, llm)`,
+`ExpenseParser(bus, llm)`, `Agent(llm, tools)`), and `GeminiModel(api_key, model, client_factory=...)` takes a fake SDK
+client. A fake model only needs the method its user calls: `ask_for_json` for `/parse`, `stream_with_tools` for the
+agent.
 
 ## Conventions
 
+- **Inline documentation** (D171):
+  - every file starts with a module docstring: what it's for, its layer (contract, handler, adapter, port...), who
+    uses it;
+  - every function, method and class has a docstring: what it's for, what it returns and raises, the rule it enforces;
+  - business rules are explained where they're applied, saying **why** (money in paise, versions, approvals...);
+  - **except docstrings that are data:** Pydantic models (commands, queries, results, tables), enums, FastAPI route
+    functions and MCP tools get `#` comments above them instead. Pydantic, FastAPI and the MCP SDK copy those
+    docstrings into JSON schemas: the OpenAPI document, the MCP tools' schemas, and the schema Gemini answers
+    `/parse` in. Editing one changes what clients and the model see.
 - **Comments say why**, in plain words, next to the code they explain.
 - **No magic strings or numbers:** a name, key, limit or label is an enum or constant, defined once, in the module that
   owns it, and exported if others need it. Values the web app needs go through `export_contracts.py`.
@@ -218,7 +252,7 @@ Never catch exceptions in a route: `core/errors.py` turns them into problem resp
 
 ## Checking your change
 
-There are no automated tests in this project for now (the owner adds them later). Before asking for a review:
+Automated tests aren't part of the repository yet. Until they are, before asking for a review:
 
 1. `.\.venv\Scripts\python.exe -m compileall -q backend\app` compiles.
 2. The server starts (`run.ps1`), and the change works in Swagger UI, on a scratch database if it changes data.
@@ -229,10 +263,12 @@ There are no automated tests in this project for now (the owner adds them later)
 ### Review checklist
 
 - [ ] Commands return at most an id; queries change nothing; no `commit()` outside the bus
+- [ ] Files under ~180 code lines, functions under ~50; extend through tables and protocols, not new branches
 - [ ] No import of another module's files; `core/` untouched by module imports
 - [ ] Inputs validated by contract types; business rules raise `BusinessRuleError`
 - [ ] No literal names, keys or limits that already exist elsewhere
 - [ ] Time from the clock, money in paise
+- [ ] New files, functions and rules documented (a docstring, or a `#` comment on schema classes, routes and tools)
 - [ ] A migration for every table change, with a working downgrade
 - [ ] User data not logged at INFO
 - [ ] Docs and the web contract updated

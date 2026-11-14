@@ -55,7 +55,7 @@ scripts once: `Set-ExecutionPolicy -Scope CurrentUser RemoteSigned`.
 py -3 -m venv .venv                                   # macOS/Linux: python3 -m venv .venv
 .\.venv\Scripts\python.exe -m pip install -r requirements.txt
 .\.venv\Scripts\python.exe -m alembic -c backend\alembic.ini upgrade head
-.\.venv\Scripts\python.exe -m uvicorn app.main:app --app-dir backend --reload --reload-dir backend
+.\.venv\Scripts\python.exe -m uvicorn app.main:create_app --factory --app-dir backend --reload --reload-dir backend
 ```
 
 (On macOS/Linux the venv's Python is `.venv/bin/python`.) `--app-dir backend` is needed because the code imports

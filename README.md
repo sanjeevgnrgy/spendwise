@@ -28,9 +28,9 @@ works through the same rules as the app: it reads and changes data only through 
 its tool activity live (AG-UI), shows cards, charts and forms drawn from data (A2UI), and never deletes anything
 until you press **Approve**.
 
-It's built as a **learning project**, one phase at a time, on a **FastAPI modular monolith with CQRS** and a
-**React app organised as feature slices**. Every phase has its own notes with the concepts, how to test it, and
-questions to check your understanding ([docs/](docs/README.md)).
+It runs on a **FastAPI modular monolith with CQRS** and a **React app organised as feature slices**, with one typed
+contract generated from the backend. Every design decision is recorded with its reasoning, and each delivery phase
+has an engineering note ([docs/](docs/README.md)).
 
 ---
 
@@ -99,7 +99,7 @@ flowchart TD
 - **CQRS-lite with a unit of work:** every operation is a **command** (changes data, returns at most an id) or a
   **query** (reads, changes nothing), sent through `MessageBus`. The bus opens one session per outermost command,
   commits once, rolls back on error, and gives nested commands a SAVEPOINT. Same database for reads and writes.
-- **Ports and adapters:** the LLM (`core/llm`: provider-neutral messages, Gemini behind a `LanguageModel` port) and the
+- **Ports and adapters:** the LLM (`core/llm`: provider-neutral messages, Gemini behind narrow model ports) and the
   assistant's expense tools (an `ExpenseTools` port over MCP) are interfaces; the composition root picks the adapter.
   Chat history is stored in SpendWise's own message format, so another provider is one new adapter.
 - **MCP is the agent's only door to data:** the assistant has no tools of its own. It discovers this app's MCP server
@@ -140,7 +140,7 @@ flowchart TD
 | | [**Database Schema**](./docs/database_schema.md) | Tables, columns, indexes, which module owns what, and the migrations. |
 | | [**Configuration**](./docs/configuration.md) | Every setting (backend `.env`, web `.env`), defaults, and the generated contract. |
 | | [**Security**](./docs/security.md) | What protects what (CORS, MCP token, approvals, prompt injection, the renderer), and known gaps. |
-| **Learning Notes** | [**Phase notes**](./docs/README.md) | Phases 1–18 and the refactor: concepts, what was built, how to test, questions. |
+| **Engineering Record** | [**Phase notes**](./docs/README.md#phase-notes) | Phases 1–18 and the refactors: design, what was built, how to verify it, design questions. |
 | | [**Sources**](./docs/sources.md) | What the official docs, specs and library code say, with links. |
 | | [**Gemini**](./docs/gemini.md) · [**Troubleshooting**](./docs/troubleshooting.md) · [**Git**](./docs/git.md) | Models and the free tier; problems already hit; committing safely. |
 
@@ -219,7 +219,7 @@ spendwise/
     src/app/              providers, routes, layout
     src/features/         expenses, categories, dashboard, assistant
     src/shared/           ui kit, typed API client + generated contract, config, formatting, theme
-  docs/                   learning notes, architecture, onboarding, API, schema, security, decisions
+  docs/                   architecture, onboarding, API, schema, security, decisions, phase notes
   run.ps1                 one-command dev start (Windows)
   requirements.txt        pinned backend dependencies
   .env.example            every setting the app reads, with no secret values

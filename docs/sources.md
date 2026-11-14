@@ -439,6 +439,8 @@ the same failure left the database exactly as it was, and a failing nested comma
 
 **Web:** https://www.rfc-editor.org/rfc/rfc9110#section-11.1: HTTP "uses a case-insensitive token to identify the
 authentication scheme". So `bearer abc` is as valid as `Bearer abc`; the MCP endpoint's check accepts both (D165).
+- §11.6.1 defines `WWW-Authenticate`, the header a 401 carries to name the scheme a client should use; the MCP
+  endpoint's 401 sends `WWW-Authenticate: Bearer`.
 
 ---
 
@@ -455,6 +457,44 @@ So `main.py` adds `UnexpectedErrorMiddleware` first and CORS after: CORS wraps i
 
 **Observed:** a route that raised a plain exception answered 500 with `access-control-allow-origin` set and a problem
 body.
+
+---
+
+## 20. TanStack Query 5.107.1: callbacks passed to mutate() (SOLID refactor)
+
+**Package:** `web/node_modules/@tanstack/query-core/build/modern/mutationObserver.js`: `mutate(variables, options)`
+does `this.#mutateOptions = options` and removes the observer from the previous mutation before starting the new one,
+and the success and error notifications call `this.#mutateOptions.onSuccess` / `onError`. So callbacks passed to
+`mutate()` fire only for the **latest** call: a second save started before the first answered silences the first's
+callbacks. The expenses table's editor uses `mutateAsync()`, whose promise belongs to each call, and reads every
+running update with `useMutationState` (D174).
+
+---
+
+## 21. React 19.3.1: lazy() and Suspense (SOLID refactor)
+
+**Package:**
+- `web/node_modules/react/cjs/react.development.js`: a lazy component's payload is marked rejected
+  (`payload._status = 2`) when its import fails, and every later read does `throw payload._result`. A failed
+  `lazy()` stays failed until the page reloads. React also draws the component again as soon as the load fails, so
+  swapping in a fresh `lazy()` at that moment would start a new load at once, forever, and the error would never be
+  shown. `shared/lib/lazy-with-retry.ts` keeps the failed one (the error boundary shows it) and swaps in a fresh one
+  only when the boundary's **Try again** calls `renewFailedLoads()`. Checked in headless Edge with the chunk blocked:
+  one attempt, the error card, then a successful load after Try again.
+- `web/node_modules/react-dom/cjs/react-dom-client.development.js`: `FALLBACK_THROTTLE_MS = 300`. A Suspense fallback,
+  once shown, stays for at least 300 ms. `lazy-chat-panel.tsx` draws the panel directly when its code has already
+  arrived, and uses `lazy()` only when it hasn't, so opening the panel doesn't lag.
+
+---
+
+## 22. anyio and SQLAlchemy: the default pool sizes (SOLID refactor)
+
+**Package:**
+- `anyio/_backends/_asyncio.py`: the default thread limiter is `CapacityLimiter(40)`: FastAPI runs sync routes and
+  sync generators (the `/agent` stream) on these 40 threads.
+- `sqlalchemy/dialects/sqlite/pysqlite.py`: a file database gets a `QueuePool`; `sqlalchemy/pool/impl.py`: its
+  defaults are `pool_size: int = 5`, `max_overflow: int = 10`.
+Recorded as a known scalability limit (D174, [architecture.md](architecture.md#scalability)).
 
 ---
 

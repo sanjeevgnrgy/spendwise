@@ -109,7 +109,7 @@ flowchart LR
         M1["a mutation on the Expenses page<br/>meta.changes = expenses"]
         M2["the assistant<br/>STATE_SNAPSHOT → onDataChanged()"]
     end
-    RULE["app/query-client.ts<br/>refreshExpenseData()"]
+    RULE["app/query-client.ts<br/>refreshAfter(STALE_AFTER)"]
     K1["invalidate ['expenses', …]"]
     K2["invalidate ['dashboard', …]"]
     UI["whatever is on screen reloads by itself<br/>(the rest reloads when you open it)"]

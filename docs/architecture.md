@@ -43,13 +43,17 @@ event sourcing would be overkill here (D139).
 ```
 backend/
   app/
-    main.py              the web app: FastAPI, error handlers, CORS, routes under /api/v1, /health, /mcp/
-    bootstrap.py         the composition root: the one list of modules; builds the bus, the MCP server, the routers
+    main.py              the web app: create_app(services): error handlers, CORS, routes under /api/v1, /health,
+                         /mcp/ (uvicorn calls it with --factory: nothing is built at import)
+    bootstrap.py         the composition root: the one list of modules; build() makes the Services (clock, engine,
+                         bus, LLM, expense tools, MCP server), each replaceable; api_routers(services)
     migrations.py        run / check the Alembic migrations from code
     core/                shared technical code, no business rules; never imports a module
       config.py          settings from .env; API_PREFIX, API_VERSION, MCP_PATH
       cqrs.py            Command, Query, MessageBus (also the unit of work)
-      db.py              the engine (SQLite made transactional: DDL, savepoints), new_session(), RecordId, MAX_ID
+      db.py              create_db_engine(url) (SQLite made transactional: DDL, savepoints; in-memory databases
+                         share one connection), session_factory(), the default engine
+      ids.py             RecordId, MAX_ID (apart from db.py, so a contract doesn't load the database)
       errors.py          NotFoundError, BusinessRuleError, ExternalServiceError -> RFC 9457 problem details;
                          the unexpected-error middleware
       clock.py           Clock (today, now), instead of date.today()
@@ -57,19 +61,29 @@ backend/
       months.py          YearMonth: "2026-11", its range and arithmetic
       money.py           rupees <-> paise, CURRENCY_PATTERN, format_money
       logging.py         console logging for our own loggers ("app.*")
-      llm/               the LLM port (port.py: LanguageModel, LlmStream, LlmError), neutral messages
-                         (messages.py), the Gemini adapter (gemini.py: GeminiModel)
+      llm/               the LLM port (port.py: StructuredOutputModel, ToolCallingModel, LanguageModel = both,
+                         LlmStream, LlmError), neutral messages (messages.py), the Gemini adapter (gemini.py:
+                         GeminiModel, SDK calls and errors; gemini_wire.py: pure translation to and from Gemini's
+                         wire format, and the stream's step assembly)
     modules/
       categories/        contracts.py, tables.py, commands.py, queries.py, api.py, module.py
       expenses/          the same, plus domain.py (rules) and repository.py (the write side's table access)
       conversations/     stored chat threads (provider-neutral messages); GET /threads/{id}
-      assistant/         the agent: api.py, agui.py (AG-UI adapter), turns.py (use cases), agent.py (the loop),
-                         tools.py (expense-tools port + MCP adapter), approvals.py, parse.py (the /parse use
-                         case), a2ui/ (cards, forms),
-                         events.py, protocol.py, schemas.py, tables.py (pending_approval)
-      mcp/               MCP adapter: contracts.py (tool and argument names, typed results; all __init__ exports),
-                         server.py, http.py (bearer token), module.py (for the composition root)
-  migrations/            Alembic: env.py and versions/0001_baseline, 0002_neutral_conversations, 0003_expense_version
+      assistant/         the agent, by layer:
+                           adapters      api.py (routes), agui_request.py (AG-UI in), agui.py (AG-UI out)
+                           use cases     turns.py (Assistant: run_turn, decide, chat), parse.py (ExpenseParser),
+                                         decisions.py (Approve/Cancel, no model)
+                           the loop      agent.py (Agent.run), surfaces.py (WebPanel, TextChat: what differs by
+                                         surface), prompts.py (system instruction), tool_runs.py (running a tool)
+                           ports         tools.py (ExpenseTools port + McpExpenseTools, in-process or remote)
+                           data          approvals.py + tables.py (pending_approval), events.py, protocol.py,
+                                         schemas.py; a2ui/ (cards, forms)
+      mcp/               MCP adapter: contracts.py (tool and argument names, bearer scheme, typed results; all
+                         __init__ exports), server.py (TOOL_REGISTRARS, create_server), read_tools.py,
+                         write_tools.py, resources.py, views.py (an expense as tools show it), tool_support.py
+                         (argument types, error mapping, checks), http.py (bearer token), module.py
+  migrations/            Alembic: env.py and versions/0001_baseline, 0002_neutral_conversations, 0003_expense_version,
+                         0004_conversation_turn_index
   scripts/               export_contracts.py (the contract for the web app)
   seed.py                sample data, through the bus
   mcp_stdio.py           the MCP server over stdio (Inspector, Claude Desktop)
@@ -98,14 +112,17 @@ backend/
    `mcp_stdio.py` and the migrations all build from it. Nothing registers itself just by being imported.
 9. **Adapters translate, use cases decide.** REST routes, the MCP server and the AG-UI adapter are adapters over the
    same commands and queries. The assistant's use cases yield plain events; `agui.py` turns them into AG-UI.
-10. **Ports for the outside world:** the LLM (`core/llm/port.py`: `LanguageModel`) and the expense tools
-    (`assistant/tools.py`: `ExpenseTools`) are protocols with one adapter each (`GeminiModel`; `McpExpenseTools`,
-    in-process by default). `bootstrap.build()` creates the adapters and injects them; nothing else imports a provider
-    (D166).
+10. **Ports for the outside world:** the LLM (`core/llm/port.py`) and the expense tools (`assistant/tools.py`:
+    `ExpenseTools`) are protocols with one adapter each (`GeminiModel`; `McpExpenseTools`, in-process by default).
+    Each user depends only on what it calls: `/parse` on `StructuredOutputModel`, the agent on `ToolCallingModel`.
+    `bootstrap.build()` creates the adapters and injects them; nothing else imports a provider (D166, D172).
 11. **No magic strings:** protocol names, tool names, keys and limits are enums or constants, defined once and
     exported from the module that owns them.
 12. **No slow work inside a unit of work.** A model call can take two minutes; it never runs while a database session
     is open (D164).
+13. **Small units with one job.** A file stays under about 180 lines of code and a function under about 50; a new tool,
+    card, catalog component or surface is added by writing it and adding one entry to a table, not by editing a
+    switch (D172).
 
 ### Why each module owns its tables
 
@@ -122,9 +139,9 @@ at the database level. Instead, `CreateExpense`'s handler asks `categories.GetCa
 |---|---|---|
 | `categories` | `CategoryRead`, `CreateCategory`, `ListCategories`, `GetCategory`, `FindCategoryByName`, `CategoryId`, `MAX_NAME_LENGTH`, `UNKNOWN_CATEGORY`, `NO_CATEGORIES_YET` | expenses, mcp, assistant, seed |
 | `expenses` | `ExpenseRead`, `ExpenseList`, `CreateExpense`, `UpdateExpense` + `ExpenseChanges`, `DeleteExpense` (with `expected_version`), `GetExpense`, `ListExpenses`, `GetMonthlySummary`, `GetMonthlyTrend` (+ their result types), `ExpenseId`, `MAX_LIST_LIMIT`, `PaymentMethod`, `PAYMENT_METHOD_LABELS` | mcp, assistant (`PaymentMethod`, labels), seed |
-| `conversations` | `AppendTurn`, `GetLastTurn`, `GetHistory`, `GetThread`, `ThreadRead`, `ThreadId`, `THREAD_ID_MAX_LENGTH` | assistant |
-| `mcp` | `ToolName`, `ResourceUri`, `SERVER_NAME`, the argument names (`EXPENSE_ID_ARGUMENT`, `CONFIRM_ARGUMENT`, `EXPECTED_VERSION_ARGUMENT`, `CLEAR_NOTE_ARGUMENT`), the typed results (`ExpenseView`, `ExpenseSaved`, `MonthSpending`, ...). The server itself (`create_server`, `create_http_app`) comes from `mcp/module.py`, for the composition root only | assistant |
-| `assistant` | nothing (the composition root uses its `module.py`) | — |
+| `conversations` | `AppendTurn`, `GetLastTurn`, `GetHistory`, `GetThread`, `ThreadRead`, `ThreadId`, `THREAD_ID_MAX_LENGTH`, `THREAD_NOT_FOUND` | assistant |
+| `mcp` | `ToolName`, `ResourceUri`, `SERVER_NAME`, `AUTHORIZATION_HEADER` and `BEARER_SCHEME` (how `/mcp/` is authenticated), the argument names (`EXPENSE_ID_ARGUMENT`, `CONFIRM_ARGUMENT`, `EXPECTED_VERSION_ARGUMENT`, `CLEAR_NOTE_ARGUMENT`), the typed results (`ExpenseView`, `ExpenseSaved`, `MonthSpending`, ...). The server itself (`create_server`, `create_http_app`) comes from `mcp/module.py`, for the composition root only | assistant |
+| `assistant` | nothing for other modules; its `module.py` gives the composition root `create_router` and the `ExpenseTools` port type | — |
 
 Each module's `module.py` is what `bootstrap.py` plugs in: `register_handlers(bus)`, its router (or a function that
 builds one), its `TABLES`. Only `bootstrap.py` and `main.py` import a `module.py`.
@@ -181,16 +198,18 @@ HTTP request
 ```
 HTTP request (RunAgentInput)
   -> assistant/api.py        a sync generator with EventSourceResponse (a worker thread; a ping every 15 s)
-  -> agui.read_request       a dependency: checks the thread id and reads the run (a button click in
+  -> agui_request.read_request   a dependency: checks the thread id and reads the run (a button click in
                              forwardedProps.a2uiAction, or the newest message); a bad run is a 422 before streaming
   -> assistant/agui.py       RUN_STARTED, then:
-       Approve / Cancel  -> turns.Assistant.decide():  TakeApproval (the snapshot) -> agent.approval_turn(): no model;
-                            the whole decision completes (or the card is put back) before anything streams
-       a message or Save -> turns.Assistant.run_turn(): GetHistory -> agent.run() -> AppendTurn when it finishes
+       Approve / Cancel  -> turns.Assistant.decide():  TakeApproval (the snapshot) -> decisions.approval_turn(): no
+                            model; the whole decision completes (or the card is put back) before anything streams
+       a message or Save -> turns.Assistant.run_turn(): GetHistory -> Agent.run(surface=WebPanel) -> AppendTurn
   -> assistant/agent.py      the loop (at most 5 model calls), yielding events:
-       llm.stream_with_tools()          the model streams text and/or tool calls (neutral messages)
-       tools.call()                     McpExpenseTools -> the MCP server (in-process) -> the bus
-       a delete in the web panel        -> get_expense + RequestApproval -> ApprovalRequested (nothing deleted)
+       llm.stream_with_tools()          the model streams text and/or tool calls (neutral messages); the system
+                                        instruction and the tool list come from the surface (surfaces.py)
+       a call the surface handles       WebPanel: a delete -> get_expense + RequestApproval -> ApprovalRequested
+                                        (nothing deleted); show_expense_form -> the form (both surfaces)
+       any other call                   tool_runs.run_and_report() -> McpExpenseTools -> the MCP server -> the bus
   <- agui.py translates:    TextDelta -> TEXT_MESSAGE_*; ToolStarted -> TOOL_CALL_START (metadata.labels) / ARGS / END;
                              ToolFinished -> TOOL_CALL_RESULT (metadata.ok), STATE_SNAPSHOT if data changed,
                              CUSTOM "a2ui" card; ApprovalRequested -> the Approve/Cancel card; FormRequested -> the form
@@ -205,6 +224,56 @@ HTTP request (RunAgentInput)
 3. If it has tables: write a migration (above).
 4. `.\.venv\Scripts\python.exe backend\scripts\export_contracts.py`, then `npm run gen:api` in `web/`, so the web app
    sees the new API.
+
+### SOLID, in this code
+
+| Principle | Where it shows |
+|---|---|
+| **Single responsibility** | One handler per message. The assistant's loop (`agent.py`), what differs by surface (`surfaces.py`), the prompt (`prompts.py`), running a tool (`tool_runs.py`) and Approve/Cancel (`decisions.py`) are separate. Reading AG-UI input (`agui_request.py`) and writing it (`agui.py`) are separate. The Gemini adapter keeps SDK calls (`gemini.py`) apart from pure format translation (`gemini_wire.py`) |
+| **Open/closed** | New MCP tool: a registrar function plus one entry in `TOOL_REGISTRARS`. New card: one entry in `a2ui/cards.py`'s `_CARDS`. New surface: a class with the `Surface` methods. New module: an entry in `MODULES` |
+| **Liskov substitution** | Every adapter can stand in for its port: `McpExpenseTools` in-process or remote, any `LanguageModel`, any `Clock`, any engine |
+| **Interface segregation** | `StructuredOutputModel` and `ToolCallingModel` instead of one wide model interface; a module's contract exports only what others use |
+| **Dependency inversion** | Use cases depend on protocols (`ExpenseTools`, the model ports, `Clock`); `bootstrap.build()` is the only place that picks implementations |
+
+### Testability
+
+Everything a test would want to replace can be passed in, without patching modules:
+
+- `bootstrap.build(clock=..., llm=..., tools=..., engine=...)` builds the app's services around fakes, and
+  `main.create_app(services)` serves them over HTTP (FastAPI's `TestClient` works directly on it).
+- `migrations.upgrade_to_latest(engine)` migrates any engine, including an in-memory SQLite one (which shares a
+  single connection, so every thread sees the same database).
+- Nothing is built as a side effect of importing: uvicorn calls `create_app` (`--factory`), and contracts get their
+  id rules from `core/ids.py`, not from the database module.
+- Use cases take their ports in their constructors: `Assistant(bus, tools, llm)`, `ExpenseParser(bus, llm)`,
+  `Agent(llm, tools)`; `GeminiModel(api_key, model, client_factory=...)` takes a fake SDK client.
+- Pure functions need no setup at all: the prompt builder, `gemini_wire`'s translation and `StepAssembler`, MCP's
+  `to_view`, A2UI's card builders.
+- Time comes from the injected `Clock`, never `date.today()`; tables have no timestamp defaults of their own.
+
+The repository has no automated tests yet. Behaviour-preserving refactors are verified by recording every AG-UI event,
+REST response and model call for a fixed set of scenarios, with a scripted fake model plugged in through these seams,
+before and after the change (D172).
+
+### Scalability
+
+| Done | Why |
+|---|---|
+| `conversation_message` is indexed on `(thread_id, turn)` (migration 0004) | every read of a thread filters on both; the old one-column index was dropped as redundant |
+| The `/parse` schema's base is built once and copied per request | it was rebuilt from the model on every request |
+| MCP's `get_expense` names the expense's category with one lookup | it used to load every category |
+| The web app loads each page, the chat panel and the chart library on demand | the JavaScript loaded at start fell from 1,252 kB to 541 kB |
+| No in-process state between requests | approval cards live in the database, so several workers or processes can share it |
+
+Known limits, to address when the load calls for it (D174):
+
+- **Threads and connections:** sync routes and open `/agent` streams share anyio's default pool of 40 worker threads,
+  and the SQLite engine's connection pool is 5 + 10 overflow. Size them together if many streams run at once.
+- **SQLite writers:** transactions start with a deferred `BEGIN`, so two commands that read and then write at the
+  same moment can fail with "database is locked". `BEGIN IMMEDIATE` for writing units of work plus WAL mode, or
+  Postgres (already supported through `DATABASE_URL`), removes that.
+- **Long threads:** `GET /threads/{id}` returns a whole thread, unpaged; the model's history is capped by turns, not size.
+- **Remote MCP:** with `MCP_URL` set, every tool call opens a new MCP session (D74).
 
 ## The web app: feature slices
 
@@ -229,9 +298,9 @@ web/src/
 2. **Other code imports a feature only through its `index.ts`** (`@/features/expenses`), never a file inside it.
    Inside a feature, imports are relative. Fewer cross-feature imports is better.
 3. **`shared/` imports no feature and not `app/`. Only `app/` wires features together.** For example, a mutation only
-   declares `meta: { changes: DATA_SCOPES.expenses }` and the assistant only reports "data changed"; one rule in
-   `app/query-client.ts` (`refreshExpenseData`) decides that means reloading the expenses and Dashboard queries
-   (D168).
+   declares `meta: { changes: DATA_SCOPES.expenses }` and the assistant only reports "data changed"; one table in
+   `app/query-client.ts` (`STALE_AFTER`, applied by `refreshAfter`) decides that means reloading the expenses and
+   Dashboard queries (D168, D172).
 4. **Server data goes through TanStack Query** (each feature's `queries.ts`): no fetching in effects, outdated requests
    cancelled, changes invalidate their keys.
 5. **Nothing is copied from the backend by hand:** API types come from `schema.gen.ts`, protocol names and labels from
@@ -239,7 +308,14 @@ web/src/
 6. **Defined once:** the app's name (`APP_NAME`), the pages (`PAGES`, for both router and sidebar), the theme's boot
    script (generated from `theme-constants.ts` into `index.html` by a Vite plugin) (D169).
 7. **A failure stays small:** error boundaries at the root, the page area, the chat panel and every A2UI card; a page
-   keeps its data with a "couldn't refresh" notice when a reload fails.
+   keeps its data with a "couldn't refresh" notice when a reload fails; code that fails to load can be retried
+   (`lazyWithRetry`).
+8. **Logic outside components:** what can be a pure function is one (the chat transcript and run progress, SSE
+   framing, A2UI actions and chart data, query status), and components and hooks stay small: a file under about 150
+   lines of code, a component or hook under about 60. The A2UI renderer draws from catalog tables (`catalogs.ts`), not
+   a switch (D172).
+9. **Load on demand:** each feature's `index.ts` exports its page through `lazyWithRetry`; the chat panel is loaded the
+   same way, in the background, so the first page doesn't wait for code it doesn't need (D174).
 
 `.oxlintrc.json` enforces rules 2 and 3 (`no-restricted-imports`, including relative imports out of `shared/` and deep
 imports from `app/`); `npx oxlint` fails on a violation. It also runs the `jsx-a11y` accessibility rules.

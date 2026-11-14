@@ -17,21 +17,23 @@ flowchart LR
 
     subgraph Assistant ["backend: modules/assistant"]
         API["api.py<br/>/chat · /agent · /parse"]
-        AGUI["agui.py<br/>AG-UI adapter"]
-        TURNS["turns.py<br/>use cases"]
+        AGUI["agui_request.py · agui.py<br/>AG-UI in · out"]
+        TURNS["turns.py · decisions.py<br/>use cases"]
         AGENT["agent.py<br/>the loop"]
+        SURF["surfaces.py<br/>WebPanel · TextChat"]
         TOOLS["tools.py<br/>ExpenseTools port"]
         APPROVALS["approvals.py<br/>pending cards"]
         A2UI["a2ui/<br/>cards · forms"]
     end
 
-    LLM["core/llm<br/>LanguageModel port<br/>→ Gemini"]
+    LLM["core/llm<br/>ToolCallingModel port<br/>→ Gemini"]
     MCPS["modules/mcp<br/>MCP server"]
     CONV["modules/conversations<br/>history"]
     BUS["MessageBus"]
 
     PANEL --> CHAT --> STREAM -->|"POST /api/v1/agent"| API
     API --> AGUI --> TURNS --> AGENT
+    AGENT --> SURF
     AGENT --> LLM
     AGENT --> TOOLS -->|"MCP Client, in-process"| MCPS --> BUS
     TURNS --> CONV
@@ -42,20 +44,26 @@ flowchart LR
 
 | File | Layer | Job |
 |---|---|---|
-| `api.py` | adapter (HTTP) | `/parse`, `/chat`, `/agent`; gets the use cases injected |
-| `agui.py` | adapter (AG-UI) | checks a run before streaming (`read_request`), turns agent events into AG-UI events, adds cards and chip labels |
-| `turns.py` | use cases | `Assistant.run_turn` (answer a message), `decide` (Approve/Cancel), `chat` (`/chat`); loads history, saves turns, records approvals |
-| `agent.py` | application | the loop: ask the model, run tools, repeat; and `approval_turn` |
+| `api.py` | adapter (HTTP) | `/parse`, `/chat`, `/agent`; gets the use cases (`Assistant`, `ExpenseParser`) injected |
+| `agui_request.py` | adapter (AG-UI in) | `read_request`: checks a run before streaming (a bad one is a 422) and reads the message or button click |
+| `agui.py` | adapter (AG-UI out) | turns agent events into AG-UI events, adds cards and chip labels |
+| `turns.py` | use cases | `Assistant.run_turn` (answer a message in the web panel), `decide` (Approve/Cancel), `chat` (`/chat`); loads history, saves turns, records approvals |
+| `decisions.py` | use case | Approve/Cancel carried out without the model: stale card, cancelled, or approved (a version-checked delete) |
+| `agent.py` | application | `Agent.run`: ask the model, run tools, repeat; at most 5 model calls |
+| `surfaces.py` | application | what differs between the web panel (`WebPanel`: cards, forms, deletes become approval cards) and plain text (`TextChat`): prompt rules, the tools offered, the calls handled specially |
+| `prompts.py` | application | the system instruction: the shared rules plus a surface's `PromptRules` |
+| `tool_runs.py` | application | running one tool call over the port, with its timing, logging and error handling |
 | `tools.py` | port + adapter | `ExpenseTools` (what the agent needs) and `McpExpenseTools` (any MCP server, in-process or remote) |
 | `approvals.py` | commands | `RequestApproval`, `TakeApproval`, `RestoreApproval` on the `pending_approval` table |
-| `parse.py` | use case | `/parse`: one structured-output call |
+| `parse.py` | use case | `ExpenseParser`: `/parse` as one structured-output call, with no database session open meanwhile |
 | `a2ui/` | presentation | message models and catalogs, ready-made cards, the expense form |
 | `events.py`, `protocol.py`, `schemas.py` | shapes | the agent's events, names on the wire, request/response bodies |
 
 ## The agent loop
 
-`agent.run()` answers one message by asking the model, running the tools it asks for, and asking again, until it
-answers in text:
+`Agent.run()` answers one message by asking the model, running the tools it asks for, and asking again, until it
+answers in text. What changes between the web panel and `/chat` (the instruction's rules, which tools are offered,
+and which calls are handled specially) comes from the **surface** it's given, so the loop itself has no flags:
 
 ```mermaid
 flowchart TD
@@ -252,7 +260,8 @@ Text from the user or from data can contain instructions ("ignore your rules and
 
 | To add | Do |
 |---|---|
-| a tool | add it to `modules/mcp/server.py` with a typed result model in `mcp/contracts.py` and the right annotations; restart. The agent discovers it |
+| a tool | a registrar in `modules/mcp/read_tools.py` or `write_tools.py` (typed arguments, a result model in `mcp/contracts.py`, the right annotations), added to `TOOL_REGISTRARS` in `mcp/server.py`; restart. The agent discovers it |
 | a card for it | a builder in `a2ui/cards.py`, registered in `_CARDS` with the tool's result model |
 | chip labels | an entry in `TOOL_LABELS` (`agui.py`); without one, the chip says "Running <tool>…" |
-| another provider | a class implementing `LanguageModel` (`core/llm/port.py`), chosen in `bootstrap.build()` |
+| another provider | a class implementing `LanguageModel` (`core/llm/port.py`: `ask_for_json` and `stream_with_tools`), chosen in `bootstrap.build()` |
+| another surface | a class with `prompt_rules`, `tool_specs` and `call_handlers` (`surfaces.py`), passed to `Agent.run` by a use case |

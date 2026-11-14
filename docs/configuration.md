@@ -46,7 +46,7 @@ These are deliberate design values, each defined once, next to the code it gover
 | `MAX_HISTORY_TURNS = 10` | `assistant/turns.py` | earlier turns resent with each message (cost vs memory) |
 | `TTL_MINUTES = 15`, `MAX_PENDING = 200` | `assistant/approvals.py` | how long a delete card works, and how many are kept |
 | `TIMEOUT_SECONDS = 15` | `assistant/tools.py` | how long a tool call may take |
-| `MAX_ROWS = 50`, `RECENT_ROWS = 20` | `mcp/server.py` | rows an MCP list returns (each costs tokens) |
+| `MAX_ROWS = 50`, `RECENT_ROWS = 20` | `mcp/read_tools.py`, `mcp/resources.py` | rows an MCP list returns (each costs tokens) |
 | `DEFAULT_LIST_LIMIT = 100`, `MAX_LIST_LIMIT = 500` | `expenses/contracts.py` | `GET /expenses` page size |
 | `DEFAULT_TREND_MONTHS = 6`, `MAX_TREND_MONTHS = 24` | `expenses/contracts.py` | the trend's length |
 | `MAX_MESSAGE_LENGTH = 2000` | `assistant/schemas.py` | one chat message (also the web text box's limit) |

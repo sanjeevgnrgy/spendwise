@@ -1,8 +1,9 @@
 # Architecture Review
 
 A record of the architecture review of the whole codebase after Phase 18, the code reviews of the refactor that
-followed, what each one found, and how each finding was resolved. Decisions are in [decisions.md](decisions.md)
-(D139–D170); the refactor's learning notes in [phases/refactor-architecture.md](phases/refactor-architecture.md).
+followed, the SOLID review after that, what each one found, and how each finding was resolved. Decisions are in
+[decisions.md](decisions.md) (D139–D174); the phase notes in [phases/refactor-architecture.md](phases/refactor-architecture.md)
+and [phases/refactor-solid.md](phases/refactor-solid.md).
 
 ## The standards
 
@@ -151,3 +152,64 @@ Two independent reviews read the refactored code, one per side, and reproduced w
   pages rendered with TanStack Query data; `tsc -b`, `oxlint` and `npm run build` clean.
 - **Static checks:** no `core/` import of a module, no reach into another module's files, no wiring import outside the
   composition root; no leftover literals outside their definitions.
+
+## 5. The SOLID review
+
+A review against single responsibility and the other SOLID principles, clean code, god files, testability and
+scalability, with no change to what the app does. Decisions D172–D174.
+
+### Backend
+
+| # | Finding | Resolution |
+|---|---|---|
+| B1 | `assistant/agent.py` did four jobs (prompt, web-panel tool filtering, the loop, Approve/Cancel), switched by a `rich_ui` flag; the turn's ending was written twice | `prompts.py`, `surfaces.py` (`WebPanel`, `TextChat`), `tool_runs.py`, `decisions.py`; `Agent.run(surface)` with one `_Turn` |
+| B2 | `mcp/server.py`: one 185-line `create_server`; one expense's category found by loading all of them | registrars in `read_tools.py` / `write_tools.py` / `resources.py`, `TOOL_REGISTRARS`, `views.py`; one lookup |
+| B3 | fakes couldn't reach the HTTP app; the tools adapter and the engine were hidden | `build(clock, llm, tools, engine)`, `create_app(services)`, `create_db_engine` |
+| B4 | the Gemini adapter read global settings, kept a singleton client and mixed SDK calls with pure reassembly | `GeminiModel(api_key, model, client_factory)`; `gemini_wire.py` (pure) |
+| B5 | `agui.py` read input and wrote output | `agui_request.py` |
+| B6 | the model port was wider than its users; `/parse` reached into the assistant | `StructuredOutputModel`, `ToolCallingModel`; `ExpenseParser`; its schema cached |
+| B7 | the tools adapter switched on type in two places; categories read untyped | a connector chosen once; a typed reader |
+| B8 | unused A2UI types; two tables stamped their own time | removed; time only from the clock |
+| B9 | scalability limits (thread and connection pools, SQLite writers, unpaged threads, remote MCP sessions) | documented ([architecture.md](architecture.md#scalability)); a (thread_id, turn) index added (0004) |
+
+### Web
+
+| # | Finding | Resolution |
+|---|---|---|
+| W1 | `use-chat.ts`: a god hook (types, list operations, the run, the event switch, decoding, the unlock rule) | `chat-types.ts`, `transcript.ts`, `run-progress.ts`, `use-agent-run.ts`, `api/agent-events.ts`; the stream function injected |
+| W2 | `expenses-table.tsx`: a god component; a sortable header copied five times | columns, sort button, toolbar, editor hook; one `sortableHeader` |
+| W3 | the A2UI renderer was a set of switches | `CATALOGS` registry; components, actions and chart data in their own files |
+| W4 | every keystroke and streamed token redrew every card | the composer holds its own text; memoised bubbles and surfaces |
+| W5 | one 1.25 MB bundle; a `lazy()` in `app/` would split nothing | pages and the chat panel load on demand from each feature's index: 541 kB at start |
+| W6 | `agent-stream.ts` mixed fetching, SSE framing and validation | `sse.ts` |
+| W7 | form plumbing copied between the dialog and the edit row | `useExpenseDraft`, `LabeledField` |
+| W8 | the Dashboard's retry rule written inline | `shared/lib/query-status.ts` |
+| W9 | the refresh rule was one `if` per data scope | `STALE_AFTER`, checked by the compiler |
+
+### Reviews of the result
+
+Two more independent reviews read the finished code against the old. Neither found a behaviour regression; the
+new abstractions (surfaces, the split port, the registries) were judged justified, not needless indirection.
+
+| Finding | Resolution |
+|---|---|
+| `lazyWithRetry` swapped in a fresh load the moment one failed; React draws again on failure, so it retried forever behind a blank area | the failed load stays (the error boundary shows it) until **Try again** renews it; checked in headless Edge with the chunk blocked |
+| Migrations could only target `DATABASE_URL`; an in-memory engine gave each thread its own database | `upgrade_to_latest(engine)`; `StaticPool` for in-memory SQLite |
+| With a remote MCP server just restarted, Approve could report an error after its delete was saved (it was already so before the refactor) | `changes_data` assumes "may have changed" when the tool list can't be fetched |
+| Importing `app.main` built the whole app; importing a contract created the database engine | uvicorn's factory mode; `core/ids.py` |
+| Comments left behind by moved constants; `new_session` unused; one parse written twice; two misleading comments in the chat | fixed |
+| Found while implementing: concurrent row saves lost toasts; ids needed `crypto.randomUUID`; an unused `API_URL`; a duplicated "thread not found" text; the bearer scheme spelled in two places | fixed |
+| Kept on purpose: two `react/static-components` suppressions (the renderer comes from a fixed table; the alternative calls hooks in a varying order) | recorded in the code |
+
+### How it was verified
+
+- **Backend behaviour:** 22 scenarios through the HTTP API, with a scripted fake model plugged in at the model port,
+  recorded before and after: every AG-UI event, REST response and model call, the MCP tool listing and the OpenAPI
+  document. Identical, after every change, including the review fixes.
+- **Backend edges:** the old and new agent loop side by side on paths the scenarios miss; the old and new Gemini
+  adapter fed the same SDK events (15 cases); migrations up, down, up and check; migrating injected file and
+  in-memory engines and serving them over HTTP; uvicorn's factory mode.
+- **Web:** `tsc -b`, `oxlint`, `npm run build`; then headless Edge against the backend with the fake model: both pages
+  render with data; the chat panel loads on demand, draws the insight card's chart, and an approved delete is carried
+  out; a blocked page and a blocked chat panel each show the error and recover with Try again.
+

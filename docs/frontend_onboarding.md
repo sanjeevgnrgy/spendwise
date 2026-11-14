@@ -56,13 +56,18 @@ Cross-feature imports are allowed through the index, but keep them few (today: t
 
 ```
 features/expenses/
-  index.ts             public API: ExpensesPage, expenseKeys, useExpenses, type Expense
+  index.ts             public API: ExpensesPage (loaded on demand), expenseKeys, useExpenses, type Expense
   api.ts               typed API calls + the types (from the generated schema)
   queries.ts           TanStack Query keys, hooks and mutations
-  expense-form.ts      a draft's rules: empty, from an expense, to a request, what changed
+  expense-form.ts      a draft's rules: empty, from an expense, to a request, what changed (pure)
+  use-expense-draft.ts a draft being typed, for the Add dialog and the edit row
   payment-methods.ts   labels and the list, from the generated contract
-  components/          the page and its parts
+  components/          the page and its parts: the table (columns, sort button, toolbar, editor hook), the edit
+                       row, the dialogs, the filters, a labelled field
 ```
+
+Each component does one job and stays small (a file under about 150 lines of code, a component or hook under about
+60). Logic that doesn't need React is a pure function in its own file, so it can be tested without rendering.
 
 ## Talking to the backend
 
@@ -110,11 +115,13 @@ export function useExpenses(filters: ExpenseFilters) {
 export function useCreateExpense() {
   return useMutation({ mutationFn: createExpense, meta: { changes: DATA_SCOPES.expenses } })
 }
-// app/query-client.ts: a MutationCache onSettled → refreshExpenseData() → invalidate expenses + dashboard
+// app/query-client.ts: a MutationCache onSettled → refreshAfter(client, meta.changes)
+//   → invalidates every key that STALE_AFTER lists for that scope (expenses and the Dashboard)
 ```
 
 The assistant uses the same rule: on a `STATE_SNAPSHOT` it calls `onDataChanged`, which `app/providers.tsx` wires to
-`refreshExpenseData()`. So no feature needs to know which pages show expenses.
+`refreshAfter(queryClient, DATA_SCOPES.expenses)`. So no feature needs to know which pages show expenses, and a new
+data scope without an entry in `STALE_AFTER` is a compile error.
 
 Never fetch in a `useEffect` by hand: use a query.
 
@@ -151,10 +158,13 @@ Never edit them. After a backend change: run `backend\scripts\export_contracts.p
 | File | Job |
 |---|---|
 | `model/assistant-provider.tsx`, `model/assistant-context.ts` | holds the conversation above the pages (it survives closing the panel); `useAssistant()` |
-| `model/use-chat.ts` | the conversation: messages, tool chips, cards, sending, **Stop**, form values and submits |
-| `api/agent-stream.ts` | `runAgent()`: POST the run, read the SSE stream, validate each event with `@ag-ui/core`'s schemas |
-| `components/` | chat panel, message bubble, tool chip |
-| `a2ui/` | the A2UI renderer: `protocol.ts` (messages, data model, size check), `a2ui-surface.tsx` (the component switch), inputs, insights (Chart, Stat), `basic-catalog.ts` (the spec's vocabulary and limits) |
+| `model/use-chat.ts` | the conversation, wiring the pieces below: sending, **Stop**, form values and submits. `useChat(onDataChanged, runAgentFn)` takes the stream function, so a fake can stand in |
+| `model/use-agent-run.ts` | one run's lifecycle: the thread id, the data version, aborting, `sending` |
+| `model/transcript.ts`, `model/run-progress.ts` | pure: how each AG-UI event changes the messages; which tools are still running and whether data may have changed (the form-unlock rule) |
+| `model/chat-types.ts` | the conversation's types (messages, tool activity) |
+| `api/agent-stream.ts`, `api/sse.ts`, `api/agent-events.ts` | `runAgent()`: POST the run, read the SSE stream (`sse.ts` splits it into events), validate each event with `@ag-ui/core`'s schemas; pure readers for event payloads |
+| `components/` | the panel (header), the transcript, the composer (its own state, so typing doesn't redraw the cards), a message bubble, a tool chip; `lazy-chat-panel.tsx` loads the panel's code in the background |
+| `a2ui/` | the A2UI renderer: `protocol.ts` (messages, data model, size check), `a2ui-surface.tsx` (draws a surface by looking each component up in `catalogs.ts`), `basic-components.tsx`, inputs, insights (Chart, Stat), pure `actions.ts` and `insight-data.ts`, `basic-catalog.ts` (the spec's vocabulary and limits) |
 
 How it works end to end: [assistant_architecture.md](assistant_architecture.md).
 
@@ -163,7 +173,14 @@ How it works end to end: [assistant_architecture.md](assistant_architecture.md).
 ### Add a page
 
 1. Build it in its feature (`features/budgets/components/budgets-page.tsx`) and export it from the feature's
-   `index.ts`.
+   `index.ts` through `lazyWithRetry` (`shared/lib/lazy-with-retry.ts`), so its code loads on first use. If that
+   load fails, the page area's error boundary shows it, and its **Try again** loads the code afresh:
+   ```ts
+   export const BudgetsPage = lazyWithRetry(async () => {
+     const { BudgetsPage: page } = await import("./components/budgets-page")
+     return { default: page }
+   })
+   ```
 2. Add its address to `shared/config/routes.ts`.
 3. Add one entry to `PAGES` in `app/pages.tsx` (path, title, icon, element). The router and the sidebar both follow.
 
@@ -171,7 +188,7 @@ How it works end to end: [assistant_architecture.md](assistant_architecture.md).
 
 `features/<name>/` with `index.ts`, `api.ts` (calls through `api` + `unwrap`), `queries.ts` (keys, hooks; mutations
 with `meta.changes`), and `components/`. If its changes should refresh other data, add a scope to
-`shared/config/data-scopes.ts` and a rule to `app/query-client.ts`.
+`shared/config/data-scopes.ts` and its entry to `STALE_AFTER` in `app/query-client.ts` (the compiler insists).
 
 ### Add an API call
 
@@ -183,8 +200,11 @@ with `meta.changes`), and `components/`. If its changes should refresh other dat
 
 1. The backend allows it (a model in `assistant/a2ui/models.py`, added to `Component`), so it's in
    `A2UI.components` after regenerating.
-2. A `case A2UI.components.X:` in `a2ui-surface.tsx` (or `a2ui-insights.tsx` for the insights catalog) that reads
-   each property defensively (`typeof`, `pick()`, `textOf()`), never trusting the shape.
+2. A renderer component (`A2uiRendererProps`: the node, the render context, and functions to draw children) in
+   `basic-components.tsx`, `a2ui-inputs.tsx` or `a2ui-insights.tsx`, reading each property defensively (`typeof`,
+   `pick()`, `textOf()`), never trusting the shape.
+3. One entry in `CATALOGS` (`catalogs.ts`), under its catalog and `A2UI.components.X`. Nothing else changes: the
+   surface looks components up there, and anything not listed is drawn as a "Can't show …" note.
 
 ## Conventions
 
@@ -197,11 +217,15 @@ with `meta.changes`), and `components/`. If its changes should refresh other dat
 - **Accessibility:** every control has a label (a `<Label>`, or an `aria-label` naming its row: "Edit #14"); sortable
   headers set `aria-sort`; the chat transcript is a `role="log"` live region; real list and status elements over ARIA
   roles; `npx oxlint` runs jsx-a11y.
+- **Inline documentation** (D171): every file starts with a `//` header (what it's for, where it sits, who uses it);
+  every exported function, component, hook, constant and type has a `/** */` comment (VS Code shows it on hover);
+  `//` comments explain logic and the rules behind it. No comments inside JSX markup: explain it in the component's
+  comment or above the `return`.
 - **Comments say why**, in plain words.
 
 ## Checking your change
 
-There are no automated tests yet (the owner adds them later). Before asking for a review:
+Automated tests aren't part of the repository yet. Until they are, before asking for a review:
 
 1. `npx tsc -b` and `npx oxlint` are clean (warnings only inside `shared/ui`).
 2. `npm run build` passes.

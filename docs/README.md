@@ -1,6 +1,6 @@
 # SpendWise documentation
 
-Reference, guides and learning notes for SpendWise. The project's top-level [README](../README.md) is the short
+Reference, guides and the engineering record for SpendWise. The project's top-level [README](../README.md) is the short
 version: what SpendWise is, a quick start, and where to go next. This folder explains **how** it works and **why**
 it's built that way.
 
@@ -13,7 +13,7 @@ it's built that way.
 | change the backend | [architecture.md](architecture.md), then [backend_onboarding.md](backend_onboarding.md) |
 | change the web app | [architecture.md](architecture.md), then [frontend_onboarding.md](frontend_onboarding.md) |
 | work on the AI assistant | [assistant_architecture.md](assistant_architecture.md) |
-| learn the concepts, phase by phase | the [phase notes](#learning-notes-phase-by-phase) below |
+| see how a feature was designed and built | the [phase notes](#phase-notes) below |
 
 ## Overview and architecture
 
@@ -24,7 +24,7 @@ it's built that way.
 | [assistant_architecture.md](assistant_architecture.md) | The agent loop, tools over MCP, AG-UI streaming, A2UI cards and forms, approvals, memory, cost |
 | [how_spendwise_works.md](how_spendwise_works.md) | The main flows as diagrams: adding an expense, the Dashboard, asking, deleting with approval, staying in sync |
 | [architecture-review.md](architecture-review.md) | Every finding of the architecture review and the two code reviews, and how each was resolved |
-| [decisions.md](decisions.md) | Every design decision (D1–D170), with why, and when to revisit it |
+| [decisions.md](decisions.md) | Every design decision (D1–D174), with why, and when to revisit it |
 
 ## Developer guides
 
@@ -49,10 +49,10 @@ it's built that way.
 | [sources.md](sources.md) | What the official docs, specs and library code say, with links, for the facts Phase 14 onwards relies on |
 | [images/](images/) | Screenshots used by the READMEs (`hero.png`: the Dashboard with sample data) |
 
-## Learning notes, phase by phase
+## Phase notes
 
-Each phase note has the concepts, what was built, how to run and test it, and "check your understanding" questions.
-Answers are hidden; click to reveal them. Later changes are noted at the end of the phase they affect.
+The engineering record of each delivery phase: the design and its reasoning, what was built, how to run and verify
+it, and design questions with their answers (collapsed). Later changes are noted in the phase they affect.
 
 | File | What's in it |
 |---|---|
@@ -74,6 +74,7 @@ Answers are hidden; click to reveal them. Later changes are noted at the end of 
 | [phases/phase-16-a2ui-card.md](phases/phase-16-a2ui-card.md) | Why agents send UI as data not HTML, A2UI v1.0 messages and catalog, a card for each tool result, a safe renderer |
 | [phases/phase-17-a2ui-forms.md](phases/phase-17-a2ui-forms.md) | Data binding, why model-written UI is validated, a form instead of questions, Save as an A2UI action |
 | [phases/phase-18-insight-cards.md](phases/phase-18-insight-cards.md) | Human in the loop and which actions deserve it, Approve/Cancel enforced by the server, a custom catalog for Chart and Stat |
+| [phases/refactor-solid.md](phases/refactor-solid.md) | SOLID in practice (surfaces instead of flags, tool and component registries, narrow ports), testability seams and how behaviour was recorded, scalability work and limits |
 | [phases/refactor-architecture.md](phases/refactor-architecture.md) | CQRS and the unit of work, ports and adapters, feature slices, migrations, the generated contract; then the code-review fixes (versions, transactional SQLite) |
 
 ## Keeping these docs current

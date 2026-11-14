@@ -93,7 +93,7 @@ the user, and nothing can slip in between the check and the delete.
 | Column | Type | Notes |
 |---|---|---|
 | `id` | INTEGER, primary key | also the order of messages |
-| `thread_id` | VARCHAR(32), not null | index `ix_conversation_message_thread_id` |
+| `thread_id` | VARCHAR(32), not null | first column of the index `ix_conversation_message_thread_id_turn` (thread_id, turn): every read of a thread filters on both |
 | `turn` | INTEGER, not null | 1 for the first user message of a thread, 2 for the next, … Only the last 10 turns are resent to the model |
 | `kind` | VARCHAR(30), not null | `user_text`, `assistant_text`, `tool_call`, `tool_result` or `reasoning` (also inside `content`) |
 | `content` | JSON, not null | the message, in SpendWise's own format, not any provider's |
@@ -145,6 +145,7 @@ The tables are created and changed only by **Alembic migrations** in `backend/mi
 | `0001_baseline` | the schema from Phases 3–18 (`category`, `expense`, `chatmessage`), each table created only if missing, so databases from before migrations keep their data |
 | `0002_neutral_conversations` | renames `chatmessage` → `conversation_message` and converts every stored message from Gemini's format to SpendWise's own (and back, on downgrade); adds `pending_approval` |
 | `0003_expense_version` | adds `expense.version` (existing expenses start at 1) |
+| `0004_conversation_turn_index` | indexes `conversation_message` on (thread_id, turn) and drops the old thread_id index, which the new one makes redundant |
 
 - `.\run.ps1` runs `alembic upgrade head` before starting; `seed.py` and `mcp_stdio.py` do too. The app itself only
   checks, and refuses to start on an out-of-date database with the command to fix it.

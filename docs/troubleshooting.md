@@ -152,7 +152,7 @@ on your tier, or temporarily overloaded).
   data **succeeded** (a ✓ chip such as "Expense saved"). A red ✗ chip means the backend refused it.
 - **Check:** in the raw stream (`curl.exe -N`, see [phases/phase-15-tool-progress.md](phases/phase-15-tool-progress.md)),
   a `STATE_SNAPSHOT` should follow that tool's `TOOL_CALL_RESULT`. If it doesn't, the tool may be marked
-  `read_only_hint=True` in `modules/mcp/server.py`. After changing a tool's annotations, restart the app: the assistant
+  `read_only_hint=True` in `modules/mcp/tool_support.py`. After changing a tool's annotations, restart the app: the assistant
   reads the tool list only once.
 
 ### Assistant panel: a tool chip keeps spinning
@@ -283,6 +283,17 @@ on your tier, or temporarily overloaded).
 ### `No module named 'mcp.server.fastmcp'` / tutorials say `FastMCP`
 - **Cause:** MCP SDK 2.x renamed `FastMCP` to `MCPServer`.
 - **Fix:** `from mcp.server.mcpserver import MCPServer`, as `modules/mcp/server.py` does.
+
+### `Error loading ASGI app. Attribute "app" not found in module "app.main"`
+- **Cause:** an old start command. The app is built by `create_app()` and served in uvicorn's factory mode, so
+  importing `app.main` builds nothing by itself (D173).
+- **Fix:** start it with `.\run.ps1`, or `uvicorn app.main:create_app --factory --app-dir backend`.
+
+### A page or the chat panel says it hit a problem: "Failed to fetch dynamically imported module"
+- **Cause:** pages and the chat panel load their code on first use (D174). That load failed: the network dropped, or
+  the tab was open across a rebuild and the old file is gone.
+- **Fix:** press **Try again**; it loads the code afresh (`lazyWithRetry`). After a rebuild, reloading the page also
+  works.
 
 ### An MCP client can't connect to `http://127.0.0.1:8000/mcp/`: 404, 401, 421 or 403
 - **404:** MCP over HTTP is off until `MCP_TOKEN` is set in `.env` (D150). Set it, restart, and use

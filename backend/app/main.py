@@ -14,11 +14,12 @@ from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy import Engine, text
 from starlette.types import ASGIApp
 
-from app import bootstrap, migrations
+from app import bootstrap
 from app.bootstrap import Services
-from app.core.config import API_PREFIX, API_VERSION, MCP_PATH, settings
 from app.core.errors import UnexpectedErrorMiddleware, register_error_handlers
-from app.core.logging import setup_logging
+from app.infrastructure import migrations
+from app.infrastructure.config import API_PREFIX, API_VERSION, MCP_PATH, settings
+from app.infrastructure.logging import setup_logging
 from app.modules.mcp import module as mcp_module
 
 HEALTHY = {"status": "ok"}

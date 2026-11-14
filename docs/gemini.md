@@ -18,7 +18,7 @@ Never paste the key into chat, code, or any committed file.
 
 ## How the settings are read
 
-- `backend/app/core/config.py` reads `.env` into `settings` (pydantic-settings).
+- `backend/app/infrastructure/config.py` reads `.env` into `settings` (pydantic-settings).
 - A real environment variable with the same name **overrides** `.env`.
 - The key is a `SecretStr`, so it prints as `**********` if settings are ever logged.
 - The key is passed explicitly to `genai.Client(api_key=...)`. Without that, the SDK would silently prefer
@@ -54,8 +54,8 @@ are in AI Studio at https://aistudio.google.com/rate-limit.
 
 The rest of the app talks to an **LLM port**, the `LanguageModel` protocol in `backend/app/core/llm/port.py`, in
 SpendWise's own provider-neutral message types (`core/llm/messages.py`). All Gemini code is in one adapter,
-`GeminiModel` in `backend/app/core/llm/gemini.py` (D142), which `bootstrap.py` creates and injects (D166); the chat
-history is stored in the neutral types, not Gemini's format (D141).
+`GeminiModel` in `backend/app/infrastructure/llm/gemini.py` (D142, D177), which `bootstrap.py` creates and injects
+(D166); the chat history is stored in the neutral types, not Gemini's format (D141).
 At its core:
 
 ```python
@@ -120,7 +120,7 @@ console shows `tokens: N in, M out` for each step.
 
 The client gives up on an attempt after **60 s** and makes **at most 2 attempts**, retrying **only 5xx errors**
 (`HttpOptions(timeout=60_000, retry_options=HttpRetryOptions(attempts=2, http_status_codes=[500, 502, 503, 504]))`
-in `core/llm/gemini.py`):
+in `infrastructure/llm/gemini.py`):
 - The SDK's defaults (5 attempts, up to 60 s apart) made requests hang for many minutes while Gemini was down.
 - The limit was 30 s in Phase 6, but function-calling steps can legitimately take 20–30 s.
 - Google's quick "high demand" errors still fail fast; only a hung connection takes up to about 2 minutes.

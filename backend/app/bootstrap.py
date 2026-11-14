@@ -15,12 +15,12 @@ from mcp.server.mcpserver import MCPServer
 from sqlalchemy import Engine, MetaData
 from sqlmodel import SQLModel
 
-from app.core import db
 from app.core.clock import Clock, SystemClock
-from app.core.config import settings
 from app.core.cqrs import MessageBus
 from app.core.llm import LanguageModel
-from app.core.llm.gemini import GeminiModel
+from app.infrastructure import db
+from app.infrastructure.config import settings
+from app.infrastructure.llm.gemini import GeminiModel
 from app.modules.assistant import module as assistant_module
 from app.modules.categories import module as categories_module
 from app.modules.conversations import module as conversations_module
@@ -70,7 +70,7 @@ def build(
     - llm: Gemini, with GEMINI_API_KEY and GEMINI_MODEL (checked on the first model call, not here);
     - tools: this app's own MCP server, called in-process, or the one at MCP_URL if that's set (so a check that
       injects only an engine still reaches a remote server's database when MCP_URL is in .env: pass tools too);
-    - engine: the database in DATABASE_URL (core/db.engine).
+    - engine: the database in DATABASE_URL (infrastructure/db.engine).
     """
     clock = SystemClock() if clock is None else clock
     engine = db.engine if engine is None else engine

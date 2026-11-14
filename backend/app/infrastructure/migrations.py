@@ -1,4 +1,4 @@
-"""Database migrations (Alembic), run or checked from code (composition layer, beside bootstrap.py).
+"""Database migrations (Alembic), run or checked from code (infrastructure).
 
 Tables are never created or changed by the app as it starts. Migrations in backend/migrations do it,
 one numbered, reviewed step at a time, so an existing database is changed in place instead of being
@@ -12,7 +12,7 @@ from alembic.runtime.migration import MigrationContext
 from alembic.script import ScriptDirectory
 from sqlalchemy import Engine
 
-from app.core.config import BACKEND_DIR
+from app.infrastructure.config import BACKEND_DIR
 
 ALEMBIC_INI = BACKEND_DIR / "alembic.ini"
 # The revision Alembic upgrades to: the newest migration.

@@ -1,4 +1,4 @@
-"""The Gemini adapter: Google's Gemini answering the language-model port (core/llm, adapter).
+"""The Gemini adapter: Google's Gemini answering the core/llm language-model port (infrastructure, adapter).
 
 The only code that calls Google's SDK. It sends each request (with our timeout and retry rules), turns every
 SDK failure into LlmError, and reads streamed answers. The wire format itself (steps, function declarations,
@@ -17,9 +17,9 @@ from google import genai
 from google.genai import types
 from pydantic import SecretStr
 
-from app.core.llm.gemini_wire import EventType, StepAssembler, to_declaration, to_steps
 from app.core.llm.messages import Message, ReasoningEffort, ToolSpec, Usage
 from app.core.llm.port import LlmError
+from app.infrastructure.llm.gemini_wire import EventType, StepAssembler, to_declaration, to_steps
 
 # The SDK's defaults (5 attempts, waits of up to 60 s) can leave a request hanging for many minutes while
 # Gemini is down. Give up on an attempt after 60 s and try at most twice. 60 s, not less: a function-calling

@@ -9,8 +9,9 @@ Never print() here: stdout carries the protocol messages, and stray text would c
 (Logging is fine; it goes to stderr.)
 """
 
-from app import bootstrap, migrations
-from app.core.logging import setup_logging
+from app import bootstrap
+from app.infrastructure import migrations
+from app.infrastructure.logging import setup_logging
 
 # `mcp dev` and `mcp run` import this file (without running __main__) and look for a global named
 # "server", so the setup happens at import: the logging, the tables brought up to date, then the same

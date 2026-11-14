@@ -2,10 +2,10 @@
 
 The port (core layer, no business rules). Two narrow protocols, one per way the app uses a model, so each
 caller depends only on what it calls (interface segregation):
-- StructuredOutputModel: one answer as JSON in a given shape (the assistant's /parse, parse.ExpenseParser);
+- StructuredOutputModel: one answer as JSON in a given shape (the assistant's /parse, ExpenseParser);
 - ToolCallingModel: one streamed step of a tool-using conversation (the assistant's agent loop, agent.Agent).
 LanguageModel is both: what the composition root (bootstrap.py) builds and hands out, today GeminiModel
-(gemini.py), which satisfies all three structurally. Nothing else imports a provider.
+(infrastructure/llm/gemini.py), which satisfies all three structurally. Nothing else imports a provider.
 """
 
 from collections.abc import Iterator

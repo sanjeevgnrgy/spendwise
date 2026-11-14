@@ -12,7 +12,7 @@ a handler (through ctx.bus) join that same session, so a command and the checks 
 transaction; a nested command runs in a SAVEPOINT, so if it fails, only its own changes are undone.
 Repositories never commit; only the bus does.
 
-Core infrastructure. Each module keeps every command and query with its handler in one slice file (commands/,
+Core layer. Each module keeps every command and query with its handler in one slice file (commands/,
 queries/), and its module.py registers them. The composition root (bootstrap.py) builds the one bus that
 routes, the MCP server, the assistant and seed.py all send their messages through.
 """
@@ -32,7 +32,7 @@ from app.core.clock import Clock
 logger = logging.getLogger(__name__)
 
 R = TypeVar("R")
-# What the bus calls to open the session for one unit of work (core/db.session_factory makes one per engine).
+# What the bus calls to open the session for one unit of work (infrastructure/db.session_factory makes one per engine).
 SessionFactory = Callable[[], Session]
 M = TypeVar("M", bound="Message")
 
@@ -79,9 +79,9 @@ class _UnitOfWork:
 class MessageBus:
     """Sends each command or query to its one handler, and owns the transaction around it.
 
-    Built once by the composition root (bootstrap.build_bus), with the session factory (core/db.session_factory)
-    and the clock that handlers receive. One bus serves every request at once: each thread or task sees only
-    its own unit of work.
+    Built once by the composition root (bootstrap.build_bus), with the session factory
+    (infrastructure/db.session_factory) and the clock that handlers receive. One bus serves every request at once:
+    each thread or task sees only its own unit of work.
     """
 
     def __init__(self, session_factory: SessionFactory, clock: Clock) -> None:

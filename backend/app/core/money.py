@@ -1,4 +1,4 @@
-"""Money: rupees <-> paise, currency codes, and writing an amount for people (core infrastructure).
+"""Money: rupees <-> paise, currency codes, and writing an amount for people (core layer).
 
 Amounts are stored and added up as whole paise (integers), and converted through Decimal, never float, so
 no rounding error can creep into a total. Used by the expenses module (contracts, handlers, table), the MCP

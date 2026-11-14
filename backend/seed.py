@@ -9,8 +9,9 @@ Run from the project folder:  .\\.venv\\Scripts\\python.exe backend\\seed.py
 from datetime import timedelta
 from decimal import Decimal
 
-from app import bootstrap, migrations
+from app import bootstrap
 from app.core.money import DEFAULT_CURRENCY, format_money, paise_to_rupees
+from app.infrastructure import migrations
 
 # Only the modules' contracts, sent through the bus, exactly like any other caller.
 from app.modules import categories, expenses

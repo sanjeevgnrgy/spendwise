@@ -1,4 +1,4 @@
-"""Gemini's wire format as plain data: the translating half of the Gemini adapter (core/llm, adapter).
+"""Gemini's wire format as plain data: the translating half of the Gemini adapter (infrastructure).
 
 Gemini's Interactions API speaks in "steps" (user input, model output, function calls and their results,
 thoughts), sent as JSON-like dicts and streamed back in pieces. This file turns SpendWise's provider-neutral

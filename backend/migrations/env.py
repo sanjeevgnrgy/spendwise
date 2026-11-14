@@ -1,8 +1,8 @@
 """How Alembic connects to SpendWise's database (migrations layer).
 
 Alembic runs this for every migration command, from the command line (`alembic -c backend/alembic.ini ...`)
-or from code (app/migrations.upgrade_to_latest, used by seed.py and mcp_stdio.py). It runs on the connection
-upgrade_to_latest hands it, if any, else on the default engine (core/db.engine, the database in DATABASE_URL),
+or from code (infrastructure/migrations.upgrade_to_latest, used by seed.py and mcp_stdio.py). It runs on the connection
+upgrade_to_latest hands it, if any, else on the default engine (infrastructure/db.engine, the database in DATABASE_URL),
 and compares against every module's tables, which the composition root collects (bootstrap.metadata).
 """
 
@@ -13,9 +13,9 @@ from alembic import context
 from sqlalchemy import Connection
 
 from app.bootstrap import metadata
-from app.core.config import settings
-from app.core.db import engine
-from app.migrations import CONNECTION_ATTRIBUTE
+from app.infrastructure.config import settings
+from app.infrastructure.db import engine
+from app.infrastructure.migrations import CONNECTION_ATTRIBUTE
 
 config = context.config
 # Only on the command line: when the app runs migrations (seed.py), its own logging setup stays.
@@ -59,7 +59,7 @@ def _run_on(connection: Connection) -> None:
         connection=connection,
         target_metadata=target_metadata,
         render_as_batch=True,
-        # All migrations of one `upgrade` run in one transaction, schema changes included (core/db.py makes
+        # All migrations of one `upgrade` run in one transaction, schema changes included (infrastructure/db.py makes
         # SQLite honour that: its driver needs an explicit BEGIN for transactional DDL).
         transactional_ddl=True,
     )

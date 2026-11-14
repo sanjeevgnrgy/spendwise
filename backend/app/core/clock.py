@@ -4,8 +4,8 @@ Code that asks `date.today()` directly can only ever see the real day, so "this 
 pinned in a check, and every caller silently uses the server's time zone. Handlers get a Clock
 instead; the app gives them the system clock, and anything else (a script, a check) can pass its own.
 
-Core infrastructure: bootstrap.build() picks the clock, the bus hands it to every handler (ctx.clock), and
-routes get it through core/dependencies.ClockDep.
+Core layer: bootstrap.build() picks the clock, the bus hands it to every handler (ctx.clock), and routes get it
+through core/dependencies.ClockDep.
 """
 
 from datetime import UTC, date, datetime

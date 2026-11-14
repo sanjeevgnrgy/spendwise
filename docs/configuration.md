@@ -5,7 +5,7 @@ Every setting SpendWise reads, where it comes from, and its default. Secrets nev
 
 ## How the backend reads settings
 
-All backend settings are one Pydantic `Settings` class in `backend/app/core/config.py` (pydantic-settings):
+All backend settings are one Pydantic `Settings` class in `backend/app/infrastructure/config.py` (pydantic-settings):
 
 - read from the **environment**, then from **`.env` in the project folder**; a real environment variable wins;
 - names are case-insensitive (`GEMINI_MODEL` → `settings.gemini_model`);
@@ -39,8 +39,8 @@ These are deliberate design values, each defined once, next to the code it gover
 
 | Value | Where | What it controls |
 |---|---|---|
-| `API_PREFIX = "/api/v1"`, `API_VERSION = "1.0.0"`, `MCP_PATH = "/mcp"` | `core/config.py` | URLs and the OpenAPI version |
-| Gemini timeout 60 s, 2 attempts, retry only on 5xx | `core/llm/gemini.py` | how long a model call may hang ([gemini.md](gemini.md#timeouts-and-retries)) |
+| `API_PREFIX = "/api/v1"`, `API_VERSION = "1.0.0"`, `MCP_PATH = "/mcp"` | `infrastructure/config.py` | URLs and the OpenAPI version |
+| Gemini timeout 60 s, 2 attempts, retry only on 5xx | `infrastructure/llm/gemini.py` | how long a model call may hang ([gemini.md](gemini.md#timeouts-and-retries)) |
 | `MAX_STEPS = 5` | `assistant/agent/agent.py` | model round trips per message |
 | `REASONING_EFFORT = low` | `assistant/agent/agent.py` | how hard the model thinks (deeper is slower) |
 | `MAX_HISTORY_TURNS = 10` | `assistant/application/assistant.py` | earlier turns resent with each message (cost vs memory) |
@@ -51,7 +51,7 @@ These are deliberate design values, each defined once, next to the code it gover
 | `DEFAULT_TREND_MONTHS = 6`, `MAX_TREND_MONTHS = 24` | `expenses/values.py` | the trend's length |
 | `MAX_MESSAGE_LENGTH = 2000` | `assistant/api/schemas.py` | one chat message (also the web text box's limit) |
 | `DEFAULT_CURRENCY = "INR"`, `CURRENCY_SYMBOLS` | `core/money.py` | the currency assumed and how money is written |
-| Log level `INFO` for `app.*` | `core/logging.py` | message text and tool arguments appear only at `DEBUG` |
+| Log level `INFO` for `app.*` | `infrastructure/logging.py` | message text and tool arguments appear only at `DEBUG` |
 
 ## Web settings (`web/.env`)
 

@@ -254,8 +254,9 @@ spendwise/
 ### Configuration and secrets
 
 - Secrets and machine-specific settings live in `.env`, never in code. `.env` is git-ignored; `.env.example` is
-  committed and lists every setting with no real values. All settings are read in `backend/app/core/config.py`;
-  real environment variables override `.env`. Details: [docs/configuration.md](docs/configuration.md).
+  committed and lists every setting with no real values. All settings are read in
+  `backend/app/infrastructure/config.py`; real environment variables override `.env`. Details:
+  [docs/configuration.md](docs/configuration.md).
 
 ### Money
 

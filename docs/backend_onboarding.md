@@ -22,7 +22,7 @@ the "how".
 
 - **Swagger UI** at http://127.0.0.1:8000/docs: try every route; it shows each request and response model.
 - **Logs:** our own loggers (`app.*`) print at INFO. To see message text and tool arguments too, set the level to
-  `logging.DEBUG` in `setup_logging()` (`core/logging.py`) while debugging; don't commit that.
+  `logging.DEBUG` in `setup_logging()` (`infrastructure/logging.py`) while debugging; don't commit that.
 - **A scratch database:** point `DATABASE_URL` at a copy to experiment without touching your data:
   `$env:DATABASE_URL = "sqlite:///C:/temp/try.db"` (then run the migrations against it).
 
@@ -286,8 +286,9 @@ Never catch exceptions in a route: `core/errors.py` turns them into problem resp
 Every outside dependency can be replaced through the composition root, without patching modules:
 
 ```python
-from app import bootstrap, migrations
-from app.core.db import create_db_engine
+from app import bootstrap
+from app.infrastructure import migrations
+from app.infrastructure.db import create_db_engine
 from app.main import create_app
 from fastapi.testclient import TestClient
 

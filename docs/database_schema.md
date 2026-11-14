@@ -149,8 +149,8 @@ The tables are created and changed only by **Alembic migrations** in `backend/mi
 
 - `.\run.ps1` runs `alembic upgrade head` before starting; `seed.py` and `mcp_stdio.py` do too. The app itself only
   checks, and refuses to start on an out-of-date database with the command to fix it.
-- An `upgrade` runs in **one transaction**, schema changes included (SQLite is set up for this in `core/db.py`): if any
-  step fails, the database is left exactly as it was.
+- An `upgrade` runs in **one transaction**, schema changes included (SQLite is set up for this in
+  `infrastructure/db.py`): if any step fails, the database is left exactly as it was.
 - Migrations don't import app code: a migration must keep doing exactly what it did after the code changes.
 - SQLite can't alter most of a table in place, so changes run in Alembic's **batch mode** (copy into a new table).
 
@@ -169,5 +169,5 @@ Read every generated migration before running it: autogenerate is a draft, not a
 
 Set `DATABASE_URL=postgresql+psycopg://…` and run the migrations. What already fits: timestamps with time zone,
 `EXTRACT(year/month …)` in the trend query (standard SQL, not SQLite's `strftime`), JSON columns, batch mode (a no-op
-outside SQLite). What to revisit then: the SQLite-specific connection settings in `core/db.py` (they apply only to
-SQLite), and indexes for the JSON columns if they're ever queried.
+outside SQLite). What to revisit then: the SQLite-specific connection settings in `infrastructure/db.py` (they apply
+only to SQLite), and indexes for the JSON columns if they're ever queried.

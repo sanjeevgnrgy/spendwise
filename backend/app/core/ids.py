@@ -1,6 +1,6 @@
-"""The rules for record ids, shared by every module's contracts and routes (core infrastructure).
+"""The rules for record ids, shared by every module's contracts and routes (core layer).
 
-Kept apart from core/db.py, so a module's contract can use them without importing the database layer (which
+Kept apart from infrastructure/db.py, so a module's contract can use them without importing the database layer (which
 creates the default engine from DATABASE_URL as it's imported).
 """
 

@@ -2,7 +2,7 @@
 
 Before this, the chat history was stored exactly as Gemini's API writes it, so changing provider would
 have meant migrating every stored conversation. Now the agent, the history and the database speak
-these types, and each provider's adapter (gemini.py, through gemini_wire.py) translates at the edge.
+these types, and each provider's adapter (infrastructure/llm/gemini.py, through gemini_wire.py) translates at the edge.
 
 Part of the LLM port (core/llm), exported by its __init__.py: the assistant's agent and use cases, the
 conversations module (which stores these messages as JSON) and the adapters use them. The classes below are

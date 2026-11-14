@@ -57,7 +57,8 @@ Gaps and conflicts we found:
 In Phase 18, live streamed function calls (`get_summary`, `delete_expense`) were rebuilt correctly from their
 `arguments_delta` pieces.
 
-**Used in:** `core/llm.py` `GeminiStream` rebuilds the steps from the deltas ([decisions.md](decisions.md) D102).
+**Used in:** `infrastructure/llm/gemini_wire.py`'s `StepAssembler` rebuilds the steps from the deltas
+([decisions.md](decisions.md) D102).
 
 ## 2. Gemini SDK: timeouts and retries (Phase 14 fix)
 
@@ -75,7 +76,7 @@ In Phase 18, live streamed function calls (`get_summary`, `delete_expense`) were
 retry sleep for minutes, which looked like an endless "Thinking…". A mock 429 with `retry-after-ms: 600000` reproduced
 it offline.
 
-**Used in:** `core/llm.py` retries only `[500, 502, 503, 504]` (D108).
+**Used in:** `infrastructure/llm/gemini.py` retries only `[500, 502, 503, 504]` (`RETRY_STATUS_CODES`, D108).
 
 ## 3. AG-UI protocol (Phases 14–15)
 
@@ -425,7 +426,7 @@ pysqlite docs' "Serializable isolation / Savepoints / Transactional DDL" section
 - So: "**Incorrect support for transactional DDL**", and "**Incorrect behavior for SAVEPOINT**".
 - The fix for all Python versions: "Using SQLAlchemy to emit BEGIN in lieu of SQLite's transaction control": set the
   driver connection's `isolation_level = None` in a `connect` event, and emit `BEGIN` in a `begin` event.
-  `core/db.py` does exactly that, so `begin_nested()` (SAVEPOINT) and transactional migrations work (D163).
+  `infrastructure/db.py` does exactly that, so `begin_nested()` (SAVEPOINT) and transactional migrations work (D163).
 
 **Web:** the same recipe in the 2.0 docs:
 https://docs.sqlalchemy.org/en/20/dialects/sqlite.html#serializable-isolation-savepoints-transactional-ddl

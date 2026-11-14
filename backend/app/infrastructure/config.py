@@ -1,4 +1,4 @@
-"""Settings and fixed values the whole backend reads (core infrastructure).
+"""Settings and fixed values the whole backend reads (infrastructure).
 
 Values that differ between machines (the Gemini key and model, the database URL, CORS origins, the MCP token
 and URL) come from the environment or .env, into the one `settings` object, read once at startup. Values that
@@ -13,7 +13,7 @@ from pathlib import Path
 from pydantic import SecretStr
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
-# This file is backend/app/core/config.py, so parents[2] is backend/ and its parent is the project folder.
+# This file is backend/app/infrastructure/config.py, so parents[2] is backend/ and its parent is the project folder.
 # Absolute paths mean it works no matter which folder the app is started from.
 BACKEND_DIR = Path(__file__).resolve().parents[2]
 PROJECT_DIR = BACKEND_DIR.parent

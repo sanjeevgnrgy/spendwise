@@ -1,4 +1,4 @@
-"""YearMonth: a calendar month as a value, like 2026-11 (core infrastructure).
+"""YearMonth: a calendar month as a value, like 2026-11 (core layer).
 
 Before this, "YYYY-MM" was split, joined and shifted by hand in four places. A value object keeps
 the rules (format, valid range, month arithmetic) in one spot. Used by the expenses module (the monthly

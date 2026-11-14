@@ -1,4 +1,4 @@
-"""Database engines and the sessions the bus opens (core infrastructure).
+"""Database engines and the sessions the bus opens (infrastructure).
 
 create_db_engine() builds an engine for any SQLAlchemy URL; on SQLite it also sets the engine up so
 transactions behave as they do on Postgres: schema changes can be rolled back (atomic migrations) and
@@ -14,8 +14,8 @@ from typing import Any
 from sqlalchemy import Engine, StaticPool, event, make_url
 from sqlmodel import Session, create_engine
 
-from app.core.config import settings
 from app.core.cqrs import SessionFactory
+from app.infrastructure.config import settings
 
 # The backend name SQLAlchemy gives every SQLite URL ("sqlite:///...", "sqlite+pysqlite:///...").
 SQLITE_BACKEND = "sqlite"

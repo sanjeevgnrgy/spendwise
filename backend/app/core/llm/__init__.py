@@ -2,7 +2,7 @@
 
 Core layer. Callers use the neutral types from messages.py and the narrowest interface from port.py they
 need (StructuredOutputModel, ToolCallingModel, or LanguageModel for both); the composition root
-(bootstrap.py) decides which provider answers (today: gemini.GeminiModel, imported only there).
+(bootstrap.py) decides which provider answers (today: infrastructure/llm/gemini.GeminiModel, imported only there).
 """
 
 from app.core.llm.messages import (

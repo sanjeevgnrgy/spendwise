@@ -1,4 +1,4 @@
-"""Console logging for SpendWise's own messages, such as the assistant's steps and tool calls (core infrastructure).
+"""Console logging for SpendWise's own messages, such as the assistant's steps and tool calls (infrastructure).
 
 Called once by each entry point before it starts working: main.create_app (the web app) and mcp_stdio.py.
 """

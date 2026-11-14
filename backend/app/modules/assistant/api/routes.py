@@ -16,12 +16,12 @@ from typing import Annotated
 from fastapi import APIRouter, Depends
 from fastapi.sse import EventSourceResponse, ServerSentEvent
 
-from app.core.dependencies import ClockDep
 from app.modules.assistant.api import agui_stream
 from app.modules.assistant.api.agui_request import AgentRequest, read_request
 from app.modules.assistant.api.schemas import ChatRequest, ChatResponse, ParseRequest
 from app.modules.assistant.application.assistant import Assistant
 from app.modules.assistant.application.expense_parser import ExpenseParser, ParseResponse
+from app.web.dependencies import ClockDep
 
 # The tag that groups this module's routes under one heading in /docs.
 TAG = "assistant"

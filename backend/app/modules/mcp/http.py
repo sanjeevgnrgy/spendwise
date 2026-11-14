@@ -8,7 +8,7 @@ Two locks on the door:
   it, any program that can reach the port could change or delete expenses.
 
 Part of the mcp adapter, reached through module.py: main.py mounts create_http_app's result at /mcp/, and
-only when MCP_TOKEN is set. A wrong or missing token gets a 401 problem-details response (core/errors.py).
+only when MCP_TOKEN is set. A wrong or missing token gets a 401 problem-details response (web/problems.py).
 """
 
 import hmac
@@ -16,8 +16,8 @@ import hmac
 from mcp.server.mcpserver import MCPServer
 from starlette.types import ASGIApp, Receive, Scope, Send
 
-from app.core.errors import UNAUTHORIZED_SLUG, problem_response
 from app.modules.mcp.contracts import AUTHORIZATION_HEADER, BEARER_SCHEME
+from app.web.problems import UNAUTHORIZED_SLUG, problem_response
 
 # ASGI gives header names in lower case, as bytes.
 AUTHORIZATION = AUTHORIZATION_HEADER.lower().encode()

@@ -1,4 +1,4 @@
-"""FastAPI dependencies for the shared services the composition root creates (core infrastructure).
+"""FastAPI dependencies for the shared services the composition root creates (web layer).
 
 bootstrap.build() creates one bus and one clock, and main.create_app stores them on `app.state`.
 Routes (every module's api.py) declare `bus: BusDep` or `clock: ClockDep` instead of importing a global, so

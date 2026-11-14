@@ -16,11 +16,11 @@ from starlette.types import ASGIApp
 
 from app import bootstrap
 from app.bootstrap import Services
-from app.core.errors import UnexpectedErrorMiddleware, register_error_handlers
 from app.infrastructure import migrations
 from app.infrastructure.config import API_PREFIX, API_VERSION, MCP_PATH, settings
 from app.infrastructure.logging import setup_logging
 from app.modules.mcp import module as mcp_module
+from app.web.problems import UnexpectedErrorMiddleware, register_error_handlers
 
 HEALTHY = {"status": "ok"}
 
@@ -35,7 +35,7 @@ def create_app(services: Services | None = None) -> FastAPI:
     mcp_http_app = mcp_module.create_http_app(built.mcp_server, built.mcp_token) if built.mcp_token else None
 
     app = FastAPI(title="SpendWise API", version=API_VERSION, lifespan=_lifespan(built, mcp_http_app))
-    # Shared services for routes (core/dependencies.py): one bus and one clock for the whole app.
+    # Shared services for routes (web/dependencies.py): one bus and one clock for the whole app.
     app.state.bus = built.bus
     app.state.clock = built.clock
     _add_error_handling_and_cors(app)

@@ -92,7 +92,7 @@ def api_routers(services: Services) -> list[APIRouter]:
     """Every module's REST routes. Their order is the OpenAPI document's order.
 
     The assistant's router is built from `services` (its tools and model). The others are fixed routers that read
-    the bus and the clock from `app.state` at request time (core/dependencies), which create_app sets from the same
+    the bus and the clock from `app.state` at request time (web/dependencies), which create_app sets from the same
     services.
     """
     return [

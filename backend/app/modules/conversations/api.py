@@ -8,9 +8,9 @@ from typing import Annotated
 
 from fastapi import APIRouter, Path
 
-from app.core.dependencies import BusDep
 from app.modules.conversations.queries.get_thread import GetThread, ThreadRead
 from app.modules.conversations.values import THREAD_ID_MAX_LENGTH
+from app.web.dependencies import BusDep
 
 router = APIRouter(tags=["conversations"])
 

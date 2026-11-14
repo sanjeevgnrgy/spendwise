@@ -263,7 +263,7 @@ For example, budgets:
 | `ExternalServiceError` (e.g. `LlmError`) | a service we depend on failed | 502 problem; an AG-UI `RUN_ERROR` |
 | anything else | a bug | 500 problem with a generic message; details in the log |
 
-Never catch exceptions in a route: `core/errors.py` turns them into problem responses in one place.
+Never catch exceptions in a route: `web/problems.py` turns them into problem responses in one place.
 
 ## Helpers to use, not reinvent
 
@@ -272,7 +272,7 @@ Never catch exceptions in a route: `core/errors.py` turns them into problem resp
 | today / now | `ctx.clock.today()`, `ctx.clock.now()` in handlers; `ClockDep` in routes. Never `date.today()` |
 | a month like `2026-11` | `YearMonth.parse()`, `.first_day()`, `.shift(n)`, `str()` (`core/months.py`) |
 | money | `rupees_to_paise`, `paise_to_rupees`, `format_money` (`core/money.py`); never `float` |
-| an id from a client | `RecordId` (bodies, `core/ids.py`), `IdPath` (URL paths, `core/dependencies.py`) |
+| an id from a client | `RecordId` (bodies, `core/ids.py`), `IdPath` (URL paths, `web/dependencies.py`) |
 | currency codes | `CurrencyCode` / `CURRENCY_PATTERN` |
 | an expense's fields | `ExpenseId`, `Amount`, `Merchant`, `Note`, `Version`, `PaymentMethod` and the limits (`expenses/values.py`) |
 | a total in paise and rupees | subclass `Totalled` (`expenses/models.py`): `total_minor` plus a computed `total` |

@@ -5,7 +5,7 @@ pinned in a check, and every caller silently uses the server's time zone. Handle
 instead; the app gives them the system clock, and anything else (a script, a check) can pass its own.
 
 Core layer: bootstrap.build() picks the clock, the bus hands it to every handler (ctx.clock), and routes get it
-through core/dependencies.ClockDep.
+through web/dependencies.ClockDep.
 """
 
 from datetime import UTC, date, datetime

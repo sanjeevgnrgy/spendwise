@@ -1,6 +1,6 @@
 """HTTP routes for expenses. Each one only translates between HTTP and commands or queries.
 
-No business rules here, and no try/except: errors become problem-details responses in core/errors.py.
+No business rules here, and no try/except: errors become problem-details responses in web/problems.py.
 A command returns at most an id, so a route that must answer with the expense asks for it afterwards.
 
 The expenses module's REST adapter. The composition root mounts `router` under /api/v1; the web app's
@@ -12,7 +12,6 @@ from typing import Annotated
 
 from fastapi import APIRouter, Query, Request, Response
 
-from app.core.dependencies import BusDep, ClockDep, IdPath
 from app.core.money import DEFAULT_CURRENCY, CurrencyCode
 from app.core.months import YearMonth
 from app.modules.expenses.commands.create_expense import CreateExpense
@@ -24,6 +23,7 @@ from app.modules.expenses.queries.get_monthly_summary import GetMonthlySummary, 
 from app.modules.expenses.queries.get_monthly_trend import GetMonthlyTrend, MonthlyTrend
 from app.modules.expenses.queries.list_expenses import ListExpenses
 from app.modules.expenses.values import DEFAULT_TREND_MONTHS, MAX_TREND_MONTHS
+from app.web.dependencies import BusDep, ClockDep, IdPath
 
 router = APIRouter(tags=["expenses"])
 

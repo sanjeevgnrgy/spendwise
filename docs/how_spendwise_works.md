@@ -136,7 +136,7 @@ flowchart TD
     HANDLER --> REPO["persistence/: repository (writes)<br/>SQL on its own tables (reads)"]
     REPO --> DB[("database")]
     BUS -->|"command ok: COMMIT<br/>error: ROLLBACK"| DB
-    HANDLER -->|"NotFound / BusinessRule / ExternalService"| ERR["core/errors.py<br/>→ RFC 9457 problem"]
+    HANDLER -->|"NotFound / BusinessRule / ExternalService"| ERR["web/problems.py<br/>→ RFC 9457 problem"]
 ```
 
 The MCP server is a second adapter over the same bus, so an expense added from Claude Desktop goes through exactly the

@@ -11,5 +11,5 @@ from pydantic import Field
 # The largest integer SQLite can store. Ids above it can't exist, so inputs are capped here and get a
 # clean 404/422, instead of crashing the database driver with an OverflowError (a 500).
 MAX_ID = 2**63 - 1
-# Any table's id, as callers may send it. (For a URL path, see core/dependencies.IdPath.)
+# Any table's id, as callers may send it. (For a URL path, see web/dependencies.IdPath.)
 RecordId = Annotated[int, Field(ge=1, le=MAX_ID)]

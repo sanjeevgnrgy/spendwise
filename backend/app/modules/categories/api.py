@@ -6,9 +6,9 @@ route to create a category yet: seed.py does that through the bus.
 
 from fastapi import APIRouter
 
-from app.core.dependencies import BusDep
 from app.modules.categories.models import CategoryRead
 from app.modules.categories.queries.list_categories import ListCategories
+from app.web.dependencies import BusDep
 
 router = APIRouter(tags=["categories"])
 

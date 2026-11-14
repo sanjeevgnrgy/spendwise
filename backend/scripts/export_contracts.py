@@ -17,7 +17,6 @@ from typing import get_args
 BACKEND_DIR = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(BACKEND_DIR))
 
-from app.core.errors import PROBLEM_JSON  # noqa: E402
 from app.core.money import CURRENCY_SYMBOLS, DEFAULT_CURRENCY  # noqa: E402
 from app.infrastructure.config import API_PREFIX, PROJECT_DIR  # noqa: E402
 from app.main import create_app  # noqa: E402
@@ -47,6 +46,7 @@ from app.modules.expenses.values import (  # noqa: E402
     MAX_LIST_LIMIT,
     MAX_TREND_MONTHS,
 )
+from app.web.problems import PROBLEM_JSON  # noqa: E402
 
 WEB_DIR = PROJECT_DIR / "web"
 HEADER = (

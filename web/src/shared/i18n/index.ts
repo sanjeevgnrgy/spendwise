@@ -5,11 +5,13 @@
 
 export type { CommonTexts } from "./common"
 export {
+  ACCEPT_LANGUAGE,
   currentDatePickerLocale,
   currentLanguage,
   currentLanguageInfo,
   i18n,
   initI18n,
+  languageHeaders,
   loadNamespaces,
   setLanguage,
 } from "./i18n"

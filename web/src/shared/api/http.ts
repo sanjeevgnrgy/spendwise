@@ -8,7 +8,7 @@ import createClient from "openapi-fetch"
 import type { components, paths } from "@/shared/api/schema.gen"
 import { APP_NAME } from "@/shared/config/app"
 import { API_ORIGIN } from "@/shared/config/env"
-import { i18n, type CommonTexts } from "@/shared/i18n"
+import { i18n, languageHeaders, type CommonTexts } from "@/shared/i18n"
 import { isAbort } from "@/shared/lib/errors"
 import { isObject } from "@/shared/lib/guards"
 
@@ -20,6 +20,14 @@ export type Schemas = components["schemas"]
  * body the API doesn't accept is a compile error. Wrap each call in unwrap() or unwrapEmpty().
  */
 export const api = createClient<paths>({ baseUrl: API_ORIGIN })
+
+// Every call asks for the language on now, so the server writes its texts (an error's detail) in it.
+api.use({
+  onRequest({ request }) {
+    for (const [name, value] of Object.entries(languageHeaders())) request.headers.set(name, value)
+    return request
+  },
+})
 
 /** One of the client's own error messages: a key of the common "errors" texts. */
 type ClientMessage = keyof CommonTexts["errors"]

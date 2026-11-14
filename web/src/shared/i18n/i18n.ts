@@ -34,6 +34,9 @@ declare module "i18next" {
 /** The app's i18next instance. Components use their namespace's useTexts(); other code may call i18n.t(...). */
 export const i18n = i18next
 
+/** The request header that asks the server for a language (RFC 9110): it writes its texts (cards, errors) in it. */
+export const ACCEPT_LANGUAGE = "Accept-Language"
+
 // The namespaces in use: shared/'s and the app frame's from the start, then each page's or panel's the first time
 // it's opened. A language switch loads the new language for these; a page opened later loads its own then.
 const inUse = new Set<AnyNamespace>()
@@ -159,6 +162,11 @@ export async function loadNamespaces(...namespaces: AnyNamespace[]): Promise<voi
 /** The language on now (DEFAULT_LANGUAGE before initI18n has run). */
 export function currentLanguage(): Language {
   return isLanguage(i18n.language) ? i18n.language : DEFAULT_LANGUAGE
+}
+
+/** Headers asking the server for the language on now: the API client and the assistant's stream send them. */
+export function languageHeaders(): Record<string, string> {
+  return { [ACCEPT_LANGUAGE]: currentLanguage() }
 }
 
 /** How the language on now writes numbers and dates, and which way it runs. */

@@ -1,0 +1,55 @@
+"""The get_summary MCP tool: one month's totals, plus the previous month's total for comparison.
+
+Part of the mcp adapter. register_get_summary adds the tool to a server; server.py calls it, in
+TOOL_REGISTRARS order. The tool only translates: it asks the expenses module for two GetMonthlySummary, through
+the bus, and answers with a typed result (MonthSpending). It only reads.
+
+What clients see comes from the tool function: the SDK builds the input schema (titled
+"get_summaryArguments") from its name, parameters and annotations, and the description from `description=`.
+So those stay exactly as they are, and notes about the tool are `#` comments, not docstrings.
+"""
+
+from typing import Annotated
+
+from mcp.server.mcpserver import MCPServer
+from pydantic import Field
+
+from app.core.cqrs import MessageBus
+from app.core.money import CURRENCY_PATTERN, DEFAULT_CURRENCY
+from app.core.months import YearMonth
+from app.modules import expenses
+from app.modules.mcp.contracts import MonthSpending, ToolName
+from app.modules.mcp.tools.support import READS_ONLY, tool_errors
+from app.modules.mcp.views import ExpenseViews
+
+
+def register_get_summary(server: MCPServer, bus: MessageBus, _views: ExpenseViews) -> None:
+    """Add the get_summary tool: one month's totals (GetMonthlySummary) plus the previous month's total.
+
+    `_views` is unused: every registrar takes the same three arguments (server.ToolRegistrar).
+    """
+
+    # Two summaries, the month asked about and the one before; the database adds them up (GROUP BY), and
+    # a month with no spending is a total of 0, not an error.
+    @server.tool(
+        name=ToolName.GET_SUMMARY,
+        annotations=READS_ONLY,
+        description="Get one month's total spending and the total for each category, biggest first, plus the "
+        'previous month\'s total for comparison. Use it for questions like "where did my money go?".',
+    )
+    def get_summary(
+        month: Annotated[str, Field(description="The month as YYYY-MM, e.g. '2026-11'.", pattern=YearMonth.PATTERN)],
+        currency: Annotated[
+            str, Field(description="ISO currency code. INR unless asked otherwise.", pattern=CURRENCY_PATTERN)
+        ] = DEFAULT_CURRENCY,
+    ) -> MonthSpending:
+        with tool_errors():
+            this_month = YearMonth.parse(month)
+            summary = bus.ask(expenses.GetMonthlySummary(month=this_month, currency=currency))
+            previous = bus.ask(expenses.GetMonthlySummary(month=this_month.shift(-1), currency=currency))
+            return MonthSpending(
+                **summary.model_dump(exclude={"total"}),
+                previous_month=expenses.MonthTotal(
+                    month=previous.month, expense_count=previous.expense_count, total_minor=previous.total_minor
+                ),
+            )

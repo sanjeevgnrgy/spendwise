@@ -1,7 +1,7 @@
 """What every MCP tool shares: argument types, annotations, the error rules and the contract check.
 
-Part of the mcp adapter. read_tools.py and write_tools.py build their tools from these pieces, so a rule
-(how errors reach the client, what "not given" means) is written once. Nothing outside the mcp module
+Part of the mcp adapter. The tools in this folder (one file each) build themselves from these pieces, so a
+rule (how errors reach the client, what "not given" means) is written once. Nothing outside the mcp module
 uses this file.
 """
 

@@ -92,7 +92,7 @@ class ExpenseDeleted(BaseModel):
     deleted: ExpenseView
 
 
-# list_expenses's result: at most MAX_ROWS (read_tools.py) expenses, newest first.
+# list_expenses's result: at most MAX_ROWS (tools/list_expenses.py) expenses, newest first.
 class ExpenseSearch(BaseModel):
     # How many match in total; `expenses` holds at most the newest few of them.
     count: int

@@ -2,8 +2,8 @@
 
 Part of the mcp adapter. Expenses keep only a category id (no foreign key: the categories table belongs
 to the categories module), so the tools ask the categories module, through its contract and the bus, to
-name it, and to turn a name a model sends into an id. read_tools.py, write_tools.py and resources.py use
-this file; server.py makes one ExpenseViews for them all.
+name it, and to turn a name a model sends into an id. The tools (tools/) and resources.py use this file;
+server.py makes one ExpenseViews for them all.
 """
 
 from app.core.cqrs import MessageBus

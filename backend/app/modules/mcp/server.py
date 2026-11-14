@@ -5,7 +5,7 @@ the expenses and categories modules, sent through the bus, so MCP callers get ex
 REST API. An MCP client reads each tool's description and parameter descriptions to decide when and how to
 call it.
 
-This file only assembles the server: the tools live in read_tools.py and write_tools.py, the resources in
+This file only assembles the server: the tools live in tools/ (one file each), the resources in
 resources.py. The composition root (bootstrap.py) calls create_server once, through module.py.
 """
 
@@ -16,10 +16,14 @@ from mcp.server.mcpserver import MCPServer
 
 from app.core.cqrs import MessageBus
 from app.modules.mcp.contracts import SERVER_NAME
-from app.modules.mcp.read_tools import register_get_expense, register_get_summary, register_list_expenses
 from app.modules.mcp.resources import register_resources
+from app.modules.mcp.tools.add_expense import register_add_expense
+from app.modules.mcp.tools.delete_expense import register_delete_expense
+from app.modules.mcp.tools.get_expense import register_get_expense
+from app.modules.mcp.tools.get_summary import register_get_summary
+from app.modules.mcp.tools.list_expenses import register_list_expenses
+from app.modules.mcp.tools.update_expense import register_update_expense
 from app.modules.mcp.views import ExpenseViews
-from app.modules.mcp.write_tools import register_add_expense, register_delete_expense, register_update_expense
 
 # What the server tells a client about itself when it connects.
 INSTRUCTIONS = "Tools and resources for one person's expense tracker. Amounts are in rupees (INR) by default."

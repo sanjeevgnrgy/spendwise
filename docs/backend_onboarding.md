@@ -53,8 +53,8 @@ modules/expenses/
     get_monthly_summary.py GetMonthlySummary, MonthlySummary, CategoryTotal + get_monthly_summary
     get_monthly_trend.py   GetMonthlyTrend, MonthlyTrend, MonthTotal + get_monthly_trend
     month_range.py         the date-and-currency filter the summary and the trend share
-  values.py                ExpenseId, Annotated field types (Amount, Merchant, Note, Version), PaymentMethod and
-                           its labels, limits
+  values.py                ExpenseId, Annotated field types (Amount, Merchant, Note, Version), PaymentMethod,
+                           limits
   models.py                read models several slices return: ExpenseRead, ExpenseList, Totalled
   domain/rules.py          rules that hold however a change arrives: require_positive_amount,
                            require_category_exists
@@ -63,6 +63,10 @@ modules/expenses/
     repository.py          the write side's table access: get, add, remove (stages only; never commits)
   api.py                   FastAPI router: HTTP -> messages
   module.py                for bootstrap.py: register_handlers(bus), router, TABLES
+  i18n/
+    en.py                  ExpenseText (the keys, a StrEnum) and the English texts; the payment methods' labels
+    hi.py                  the same keys in Hindi
+    __init__.py            define_catalog for each (checked at startup), payment_method_label
 ```
 
 `categories` and `conversations` have the same shape, without what they don't need: neither has `domain/` or a
@@ -250,8 +254,8 @@ For example, budgets:
    Constants only the tool uses stay in its file (`MAX_ROWS` in `tools/list_expenses.py`).
 3. Add the registrar to `TOOL_REGISTRARS` in `mcp/server.py` (the order there is the order the model sees the
    tools in).
-4. Optional: a card in `assistant/a2ui/cards.py` (`_CARDS`) and chip labels in `assistant/api/agui_stream.py`
-   (`TOOL_LABELS`).
+4. Optional: a card in `assistant/a2ui/cards.py` (`_CARDS`) and chip labels in `assistant/api/chip_labels.py`
+   (`TOOL_CHIPS`, keyed texts in the assistant's catalog).
 5. Restart: the assistant lists tools once.
 
 ## Errors: which to raise
@@ -263,7 +267,31 @@ For example, budgets:
 | `ExternalServiceError` (e.g. `LlmError`) | a service we depend on failed | 502 problem; an AG-UI `RUN_ERROR` |
 | anything else | a bug | 500 problem with a generic message; details in the log |
 
+Raise them with a catalogued text, so the detail comes out in the request's language:
+`raise NotFoundError(translatable(ExpenseText.NOT_FOUND, expense_id=expense_id))`. A plain string is shown as it is
+(an outside service's own words). `str(error)` is the English text, for logs and MCP clients.
+
 Never catch exceptions in a route: `web/problems.py` turns them into problem responses in one place.
+
+## Recipe: add or change a text for people
+
+1. Add the key to the module's `i18n/en.py` (`class ExpenseText(StrEnum)`, value a stable dotted name) and its
+   English text, a `str.format` template (`"Expense {expense_id} not found"`); a count is a
+   `Plural(one=..., other=...)`.
+2. Add it to every other language's file (`hi.py`). If you don't, the app refuses to start: `define_catalog` checks
+   every language has every key and no placeholder English lacks.
+3. Use it: `text(language, ExpenseText.X, **values)` where you know the language (a route's `LanguageDep`), or
+   `translatable(ExpenseText.X, **values)` in an error (written later in the reader's language).
+
+A text only the model reads (a prompt, a tool's description or result) stays English and isn't catalogued.
+
+## Recipe: add a language
+
+1. `Language` and `LANGUAGES` in `core/i18n/languages.py`: its code, its English name (the model is told it), its CLDR
+   locale.
+2. One file per catalog next to `hi.py` (every module's `i18n/`, `web/i18n/`), registered in that `__init__.py`.
+3. Regenerate the web contract: the web app's language table is typed against the server's languages, so `tsc`
+   fails until it has the language too (see frontend_onboarding.md, "Add a language").
 
 ## Helpers to use, not reinvent
 
@@ -271,7 +299,8 @@ Never catch exceptions in a route: `web/problems.py` turns them into problem res
 |---|---|
 | today / now | `ctx.clock.today()`, `ctx.clock.now()` in handlers; `ClockDep` in routes. Never `date.today()` |
 | a month like `2026-11` | `YearMonth.parse()`, `.first_day()`, `.shift(n)`, `str()` (`core/months.py`) |
-| money | `rupees_to_paise`, `paise_to_rupees`, `format_money` (`core/money.py`); never `float` |
+| money | `rupees_to_paise`, `paise_to_rupees`, `format_money(amount, currency, language)` (`core/money.py`); never `float` |
+| a day or a month for people | `format_day`, `format_month` (`core/i18n`), in the request's language; never `strftime` |
 | an id from a client | `RecordId` (bodies, `core/ids.py`), `IdPath` (URL paths, `web/dependencies.py`) |
 | currency codes | `CurrencyCode` / `CURRENCY_PATTERN` |
 | an expense's fields | `ExpenseId`, `Amount`, `Merchant`, `Note`, `Version`, `PaymentMethod` and the limits (`expenses/values.py`) |
@@ -347,7 +376,8 @@ Automated tests aren't part of the repository yet. Until they are, before asking
 - [ ] Files under ~180 code lines, functions under ~50; extend through tables and protocols, not new branches
 - [ ] No import of another module's files, or of another slice's handler; no module imports `infrastructure/`, and
       `core/`, `infrastructure/` and `web/` import no module
-- [ ] Inputs validated by contract types; business rules raise `BusinessRuleError`
+- [ ] Inputs validated by contract types; business rules raise `BusinessRuleError` with a catalogued text
+- [ ] Texts for people come from the module's `i18n/` catalog, in every language; texts for the model stay English
 - [ ] No literal names, keys or limits that already exist elsewhere
 - [ ] Time from the clock, money in paise
 - [ ] New files, functions and rules documented (a docstring, or a `#` comment on schema classes, routes and tools)

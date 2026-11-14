@@ -2,7 +2,7 @@
 
 Rules for AI coding agents, and anyone else, changing SpendWise. They describe how this codebase is built: a change
 that doesn't follow them isn't finished. The reasoning behind each rule is in [docs/](docs/README.md). Read the linked
-doc before working in an area, and check [decisions.md](docs/decisions.md) (D1–D178) before changing a settled choice.
+doc before working in an area, and check [decisions.md](docs/decisions.md) (D1–D179) before changing a settled choice.
 
 | Before you change… | Read |
 |---|---|
@@ -57,6 +57,7 @@ shared:
   queries/<name>.py    one query: the message, its handler and its result models
   domain/rules.py      business rules shared by several slices
   persistence/         tables.py (+ repository.py for the write side)
+  i18n/                texts for people: en.py (the keys, a StrEnum, and the English source), hi.py, __init__.py
 ```
 
 File name = the message in snake_case (`GetMonthlySummary` → `queries/get_monthly_summary.py`), and the handler has
@@ -88,7 +89,18 @@ modules need it. Recipes: [backend_onboarding.md](docs/backend_onboarding.md).
 `float`.
 
 **Errors.** Raise `NotFoundError`, `BusinessRuleError` or `ExternalServiceError` (`core/errors.py`, no HTTP in it).
-Never catch them in routes: `web/problems.py` turns every error into an RFC 9457 problem.
+An error a person may read carries a catalogued text: `BusinessRuleError(translatable(ExpenseText.X, **values))`; one
+only MCP clients and the model see (the MCP tools' own) stays an English string. Never catch them in routes:
+`web/problems.py` turns every error into an RFC 9457 problem, its detail in the request's language.
+
+**Texts for people, in the request's language (D179).**
+- What a person reads (error details, the assistant's cards, chips and fixed replies, payment labels) lives in the
+  module's `i18n/` catalog: `define_catalog` refuses, at startup, a language missing a key or using a placeholder
+  English doesn't. Write texts with `text(language, key, **values)`, counts with `Plural`, money and dates with
+  `format_money` / `format_day` / `format_month` (`core/i18n`, CLDR through Babel), never `strftime`.
+- The web app sends `Accept-Language`; a route that writes texts takes `language: LanguageDep` and passes it down.
+- Stay English: everything the model reads (prompts, tool descriptions, tool results), logs, codes and protocol
+  values. User data (category names, merchants, notes) is never translated.
 
 **API.** Routes live under `/api/v1`. Inputs are validated by contract types: `RecordId`, `IdPath`, `Annotated`
 limits, `extra="forbid"`.

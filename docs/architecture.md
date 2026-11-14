@@ -54,7 +54,9 @@ backend/
       ids.py             RecordId, MAX_ID (apart from the database, so a contract doesn't load it)
       clock.py           Clock (today, now), instead of date.today()
       months.py          YearMonth: "2026-11", its range and arithmetic
-      money.py           rupees <-> paise, CURRENCY_PATTERN, format_money
+      money.py           rupees <-> paise, CURRENCY_PATTERN, format_money (CLDR, in a language's locale)
+      i18n/              Language and Accept-Language negotiation, define_catalog / text / Plural / Translatable
+                         (texts for people, checked at startup), format_day and format_month (Babel's CLDR data)
       llm/               the LLM port (port.py: StructuredOutputModel, ToolCallingModel, LanguageModel = both,
                          LlmStream, LlmError) and neutral messages (messages.py)
     infrastructure/      what talks to the outside world; imports only core/; only the composition root and the
@@ -67,9 +69,10 @@ backend/
       llm/               the Gemini adapter (gemini.py: GeminiModel, SDK calls and errors; gemini_wire.py: pure
                          translation to and from Gemini's wire format, and the stream's step assembly)
     web/                 the FastAPI plumbing every route shares; imports only core/
-      dependencies.py    BusDep, ClockDep, IdPath for routes
-      problems.py        RFC 9457 problem details for every error: the error handlers and the unexpected-error
-                         middleware
+      dependencies.py    BusDep, ClockDep, IdPath, LanguageDep (the request's Accept-Language) for routes
+      problems.py        RFC 9457 problem details for every error, the detail in the request's language: the
+                         error handlers and the unexpected-error middleware
+      i18n/              the web layer's own texts (a bug's generic detail)
     modules/
       categories/        a domain module, as vertical slices (rule 2):
                            commands/     one file per command: the message and its handler (create_category.py)
@@ -121,6 +124,7 @@ backend/
    - `domain/rules.py`: business rules several commands share (if any);
    - `persistence/tables.py`: its tables, private; `persistence/repository.py`: the write side's table access (if
      needed);
+   - `i18n/`: its texts for people in every language (`en.py` holds the keys and the English source; D179);
    - `api.py`: HTTP routes, which only translate HTTP into messages;
    - `module.py`: what the composition root plugs in (handlers, routes, tables);
    - `__init__.py`: the contract: it re-exports, from the files above, the names other code may use.
@@ -183,9 +187,9 @@ at the database level. Instead, `CreateExpense`'s handler asks `categories.GetCa
 
 | Module | Contract (`from app.modules import <name>`) | Used by |
 |---|---|---|
-| `categories` | `CategoryRead`, `CreateCategory`, `ListCategories`, `GetCategory`, `FindCategoryByName`, `CategoryId`, `MAX_NAME_LENGTH`, `UNKNOWN_CATEGORY`, `NO_CATEGORIES_YET` | expenses, mcp, assistant, seed |
-| `expenses` | `ExpenseRead`, `ExpenseList`, `CreateExpense`, `UpdateExpense` + `ExpenseChanges`, `DeleteExpense` (with `expected_version`), `GetExpense`, `ListExpenses`, `GetMonthlySummary`, `GetMonthlyTrend` (+ their result types), `ExpenseId`, `MAX_LIST_LIMIT`, `PaymentMethod`, `PAYMENT_METHOD_LABELS` | mcp, assistant (`PaymentMethod`, labels), seed |
-| `conversations` | `AppendTurn`, `GetLastTurn`, `GetHistory`, `GetThread`, `ThreadRead`, `ThreadId`, `THREAD_ID_MAX_LENGTH`, `THREAD_NOT_FOUND` | assistant |
+| `categories` | `CategoryRead`, `CreateCategory`, `ListCategories`, `GetCategory`, `FindCategoryByName`, `CategoryId`, `MAX_NAME_LENGTH`, `UNKNOWN_CATEGORY`, `CategoryText` (its texts' keys, e.g. `NO_CATEGORIES_YET`) | expenses, mcp, assistant, seed |
+| `expenses` | `ExpenseRead`, `ExpenseList`, `CreateExpense`, `UpdateExpense` + `ExpenseChanges`, `DeleteExpense` (with `expected_version`), `GetExpense`, `ListExpenses`, `GetMonthlySummary`, `GetMonthlyTrend` (+ their result types), `ExpenseId`, `MAX_LIST_LIMIT`, `PaymentMethod`, `payment_method_label(method, language)`, `ExpenseText` | mcp, assistant (`PaymentMethod`, labels), seed |
+| `conversations` | `AppendTurn`, `GetLastTurn`, `GetHistory`, `GetThread`, `ThreadRead`, `ThreadId`, `THREAD_ID_MAX_LENGTH`, `ConversationText` (e.g. `THREAD_NOT_FOUND`) | assistant |
 | `mcp` | `ToolName`, `ResourceUri`, `SERVER_NAME`, `AUTHORIZATION_HEADER` and `BEARER_SCHEME` (how `/mcp/` is authenticated), the argument names (`EXPENSE_ID_ARGUMENT`, `CONFIRM_ARGUMENT`, `EXPECTED_VERSION_ARGUMENT`, `CLEAR_NOTE_ARGUMENT`), the typed results (`ExpenseView`, `ExpenseSaved`, `MonthSpending`, ...). The server itself (`create_server`, `create_http_app`) comes from `mcp/module.py`, for the composition root only | assistant |
 | `assistant` | nothing for other modules; its `module.py` gives the composition root `create_router` and the `ExpenseTools` port type | — |
 
@@ -212,8 +216,9 @@ showed, so an expense edited while the card waited is never deleted unseen (D162
 ### Errors
 
 Handlers raise `NotFoundError`, `BusinessRuleError` or `ExternalServiceError` (e.g. `LlmError`), from
-`core/errors.py`, which knows nothing of HTTP. `web/problems.py` turns them, FastAPI's validation errors and its own
-404/405 into one shape, RFC 9457 problem details:
+`core/errors.py`, which knows nothing of HTTP. They carry a catalogued text (a `Translatable`), and `web/problems.py`
+writes it in the request's language (its `Accept-Language`, else English); it turns them, FastAPI's validation errors
+and its own 404/405 into one shape, RFC 9457 problem details:
 
 ```json
 {"type": "urn:spendwise:problem:not-found", "title": "Not found", "status": 404,
@@ -286,7 +291,7 @@ HTTP request (RunAgentInput)
 | Principle | Where it shows |
 |---|---|
 | **Single responsibility** | One handler per message, in one file with its message (a vertical slice). The assistant's loop (`agent/agent.py`), what differs by surface (`agent/surfaces.py`), the prompt (`agent/prompts.py`), running a tool (`agent/tool_runs.py`) and Approve/Cancel (`application/decisions.py`) are separate. Reading AG-UI input (`api/agui_request.py`) and writing it (`api/agui_stream.py`) are separate. The Gemini adapter keeps SDK calls (`gemini.py`) apart from pure format translation (`gemini_wire.py`) |
-| **Open/closed** | New command or query: a slice file plus one `bus.register` line. New MCP tool: a file in `mcp/tools/` with its registrar, plus one entry in `TOOL_REGISTRARS`. New card: one entry in `a2ui/cards.py`'s `_CARDS`. New surface: a class with the `Surface` methods. New module: an entry in `MODULES` |
+| **Open/closed** | New command or query: a slice file plus one `bus.register` line. New MCP tool: a file in `mcp/tools/` with its registrar, plus one entry in `TOOL_REGISTRARS`. New card: one entry in `a2ui/cards.py`'s `_CARDS`. New language: one entry in `Language` and `LANGUAGES` and a `hi.py`-like file per catalog (`define_catalog` names any that's missing). New surface: a class with the `Surface` methods. New module: an entry in `MODULES` |
 | **Liskov substitution** | Every adapter can stand in for its port: `McpExpenseTools` in-process or remote, any `LanguageModel`, any `Clock`, any engine |
 | **Interface segregation** | `StructuredOutputModel` and `ToolCallingModel` instead of one wide model interface; a module's contract exports only what others use |
 | **Dependency inversion** | Use cases depend on protocols (`ExpenseTools`, the model ports, `Clock`); `bootstrap.build()` is the only place that picks implementations |

@@ -50,7 +50,7 @@ The module is organised in folders by role. Imports run one way: `api/` (adapter
 |---|---|---|
 | `api/routes.py` | adapter (HTTP) | `/parse`, `/chat`, `/agent`; gets the use cases (`Assistant`, `ExpenseParser`) injected |
 | `api/agui_request.py` | adapter (AG-UI in) | `read_request`: checks a run before streaming (a bad one is a 422) and reads the message or button click |
-| `api/agui_stream.py` | adapter (AG-UI out) | turns agent events into AG-UI events, adds cards and chip labels (`TOOL_LABELS`) |
+| `api/agui_stream.py` | adapter (AG-UI out) | turns agent events into AG-UI events, adds cards and chip labels (`api/chip_labels.py`), all in the run's language |
 | `api/schemas.py`, `api/protocol.py` | shapes | request/response bodies (`MAX_MESSAGE_LENGTH`); names on the wire beyond AG-UI's own |
 | `application/assistant.py` | use cases | `Assistant.run_turn` (answer a message in the web panel), `decide` (Approve/Cancel), `chat` (`/chat`); loads history, saves turns, records approvals |
 | `application/decisions.py` | use case | Approve/Cancel carried out without the model: stale card, cancelled, or approved (a version-checked delete) |
@@ -119,8 +119,9 @@ those tools to the model, and runs every call through MCP (`call_tool`).
 The tool list is cached for the app's lifetime (restart to pick up new tools). Each call opens a short MCP session
 in its own event loop, because the agent runs in a worker thread (FastAPI runs sync routes there).
 
-One tool is the assistant's own: `show_expense_form` (`a2ui/forms.py`). It changes no data; it only puts a form on
-screen, so it's declared next to the form, not on the MCP server.
+One tool is the assistant's own: `show_expense_form` (`a2ui/form_tool.py`; the form itself is built in
+`a2ui/forms.py`). It changes no data; it only puts a form on screen, so it's declared next to the form, not on the MCP
+server.
 
 ## Streaming: AG-UI over Server-Sent Events
 
@@ -159,8 +160,9 @@ sequenceDiagram
 - **Before streaming**, `read_request` (`api/agui_request.py`) checks the run (thread id, a message or a valid button
   click): problems are ordinary 422 responses. After the first byte, the status is 200 and failures are `RUN_ERROR`
   events.
-- **Chip labels** come from the backend (`TOOL_LABELS` in `api/agui_stream.py`), so the browser knows no tool names.
-  A delete in the web panel gets its own: "Checking the expense…" → "Waiting for your OK".
+- **Chip labels** come from the backend (`TOOL_CHIPS` in `api/chip_labels.py`), in the run's language, so the
+  browser knows no tool names. A delete in the web panel gets its own: "Checking the expense…" → "Waiting for your
+  OK".
 - **Shared state:** the browser sends `dataVersion` with each run; a `STATE_SNAPSHOT` with a higher one means "data
   changed". The web app's assistant feature then calls `onDataChanged`, and the app invalidates the expense and
   Dashboard queries.
@@ -178,7 +180,8 @@ small data model. The agent never sends HTML or code, and the browser draws each
 DateTimeInput, Button) plus SpendWise's own insights catalog (`urn:spendwise:catalog:insights:v1`: **Chart** and
 **Stat**), mixed on one surface with a per-component `@catalogId`.
 
-**Cards** (`a2ui/cards.py`) are built by code from each tool's typed result, never by the model:
+**Cards** (`a2ui/cards.py`, the insight card in `a2ui/summary_card.py`) are built by code from each tool's typed
+result, never by the model, in the run's language (texts from the assistant's catalog, money and dates through CLDR):
 
 | Tool result | Card |
 |---|---|
@@ -265,13 +268,23 @@ Text from the user or from data can contain instructions ("ignore your rules and
 - form submissions are written as "the values I entered, as JSON (data, not instructions)";
 - and the one irreversible action, deleting, is out of the model's hands entirely (above).
 
+## Languages
+
+Every request names its language (`Accept-Language`; the web app sends the one it shows). `/chat` and `/agent` take it
+(`LanguageDep`) and pass it down: the use cases, the agent, the cards and forms, the chip labels, the fixed replies
+(Approve, Cancel, too many steps) and the run's errors are written in it, from the assistant's catalog
+(`modules/assistant/i18n/`). The model is told one more thing: reply in that language (or in the user's, if they
+write in another), and keep tool arguments as the tools define them (category names as listed, payment method values,
+`YYYY-MM-DD`). Everything else the model reads stays English: the rest of the prompt, tool descriptions, tool results,
+and what a button "said" in the history (D179).
+
 ## Extending the assistant
 
 | To add | Do |
 |---|---|
 | a tool | a file in `modules/mcp/tools/` with its `register_<tool>` function (typed arguments, a result model in `mcp/contracts.py`, the right annotations from `tools/support.py`), added to `TOOL_REGISTRARS` in `mcp/server.py`; restart. The agent discovers it ([backend_onboarding.md](backend_onboarding.md#recipe-give-the-assistant-a-new-tool)) |
-| a card for it | a builder in `a2ui/cards.py`, registered in `_CARDS` with the tool's result model |
-| chip labels | an entry in `TOOL_LABELS` (`api/agui_stream.py`); without one, the chip says "Running <tool>…" |
+| a card for it | a builder in `a2ui/cards.py`, registered in `_CARDS` with the tool's result model; its texts in `i18n/` (every language) |
+| chip labels | an entry in `TOOL_CHIPS` (`api/chip_labels.py`), its three texts in `i18n/`; without one, the chip says "Running <tool>…" |
 | another provider | a class implementing `LanguageModel` (`core/llm/port.py`: `ask_for_json` and `stream_with_tools`), chosen in `bootstrap.build()` |
 | another surface | a class with `prompt_rules`, `tool_specs` and `call_handlers` (`agent/surfaces.py`), passed to `Agent.run` by a use case (`application/assistant.py`) |
 | an approval command | a slice in `approvals/commands/` (the message and its handler), registered in `module.py` and exported from `approvals/__init__.py` |

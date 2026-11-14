@@ -1253,6 +1253,7 @@ is natural. It's still a soft, model-judged guard.
 ### D157. Chip labels come from the backend
 - `TOOL_CALL_START` carries `metadata.labels` (running/done/failed). An approval check has its own labels.
 - **Why:** the browser knew MCP tool names and the delete tool's arguments.
+- **Updated by D179:** the labels are written in the run's language (`api/chip_labels.py`, the assistant's catalog).
 
 ### D158. Error boundaries, Stop, and abortable requests
 - An error boundary around each A2UI card and around the page area: a crash shows a note, not a blank app.
@@ -1263,6 +1264,8 @@ is natural. It's still a soft, model-judged guard.
   `formatMoney` in the browser, same rule.
 - **Updated by D178:** the browser writes money and dates in the chosen language's locale (`LANGUAGES`). English and
   Hindi both use Indian grouping, so the server's `format_money` still matches.
+- **Updated by D179:** both sides write money in its currency's CLDR format (Babel on the server, Intl in the browser),
+  in the language's locale: "₹1,25,000.50" as before; "$1,250.50" for USD.
 
 ### D160. Web dependencies pinned exactly; openapi-typescript runs through `npx`
 - `package.json` lists exact versions, like `requirements.txt` (D2).
@@ -1641,6 +1644,59 @@ is natural. It's still a soft, model-judged guard.
   opening the Assistant draws it in Hindi with nothing left to fetch (preloaded); choosing English switches back.
   Two code reviews' findings were fixed:
   [phases/phase-19-languages.md](phases/phase-19-languages.md#after-the-code-reviews).
+- **Updated by D179:** the server's texts (cards, chips, replies, errors, payment labels) and the assistant's replies
+  now follow the language too.
 - **Revisit:** a language with more plural forms (the type already accepts `count_few` and the rest); right-to-left
   languages (mirrored layout, logical CSS); a region setting apart from the language, if English speakers outside
   India want `125,000.50` rather than `1,25,000.50`.
+
+### D179. The server writes its texts in the request's language
+- **What:**
+  - **The language travels in `Accept-Language`** (RFC 9110). The web app's API client and the assistant's stream
+    send the language it shows; `core/i18n.parse_accept_language` picks the best one the server speaks (by weight, an
+    exact tag before its base language), else English. Routes that write texts take `LanguageDep`; it's read from the
+    request, so the OpenAPI document doesn't change. It's a CORS-safelisted header: no preflight, no CORS change.
+  - **Typed catalogs, like the web's:** each module's `i18n/` holds `en.py` (a `StrEnum` of keys with stable dotted
+    values, and the English `str.format` templates: the source), `hi.py`, and `__init__.py`, which calls
+    `define_catalog`. It refuses, as the app starts, a language missing a key or with an extra one, or a translation
+    using a placeholder English doesn't fill. Counts are `Plural`s, picked by CLDR's rule for the language. Catalogs:
+    `expenses` (its errors, and the payment methods' labels keyed by `PaymentMethod` itself), `categories`,
+    `conversations`, `assistant` (`ChatText`, 74 keys: cards, form, chips, fixed replies, errors; not `AssistantText`,
+    which is core.llm's model message) and `web` (a bug's detail).
+  - **Errors carry a `Translatable`** (a key and its values), not a string: `web/problems.py` writes the detail in the
+    request's language, so business code stays language-free. `str(error)` is English, for logs and MCP clients.
+  - **The assistant** passes the language from `/chat` and `/agent` down to the use cases, the agent, the cards,
+    forms, chip labels, fixed replies and the run's errors. The model is told one thing more: reply in that language
+    (or the user's, if they write in another), and keep tool arguments as the tools define them. The prompt otherwise
+    stays English; the server relabels a model-written form's payment options in that language.
+  - **Money and dates through CLDR** (Babel 2.18.0, `core/i18n/formatting.py`), the same data as the browser's
+    Intl: `format_money(amount, currency, language)` is the currency's CLDR format, and `format_day` / `format_month`
+    replace `strftime`. The web app's `formatMoney` uses Intl's currency format the same way.
+  - **The contract:** the web gets `LANGUAGES` (its language table is typed against it, so the two can't drift) and
+    `PAYMENT_METHOD_LABELS` by language; `CURRENCY_SYMBOLS` and `UNKNOWN_CATEGORY` left the contract (unused there).
+- **Why:** the web app was translated (D178), but half of what a Hindi user read still came from the server: cards,
+  chips, replies, errors and labels. Writing them where the language is known, from catalogs checked at startup,
+  keeps one source per text and makes a forgotten translation stop the app instead of reaching a user.
+- **Stays English, on purpose:** everything the model reads (the rest of the prompt, tool descriptions, tool results
+  such as a failed tool's error text, which the web also shows as that chip's tooltip), what a button "said" in the
+  stored history, logs, codes, problem `title`s, an outside service's own words (Gemini's errors, Pydantic's
+  explanation inside "the model's answer didn't match"), and user data (category names, merchants, notes).
+- **Visible changes in English:** card dates are CLDR's, like the pages': "5 Sept 2026", not "05 Sep 2026". An amount
+  in a currency without a symbol is "$1,250.50", not "1,250.50 USD". The model's prompt has the reply-language line.
+- **Chosen with the owner:** typed catalogs mirroring the web's; every user-facing error translated; a few live
+  Gemini turns, on a copy of the database, to check the replies.
+- **How it was verified:**
+  - recorded behaviour in English (no `Accept-Language`), before and after: every response, event, card, chip, the MCP
+    tool listing and the OpenAPI document identical; the model calls differ only by the reply-language line;
+  - recorded behaviour in Hindi (17 scenarios): every error detail, the cards, the form, the chip labels and the
+    fixed replies in Hindi; the model told "Reply in Hindi", the form's payment options in Hindi;
+  - live, through the browser in Hindi with real Gemini on a copy of the database (3 turns): Hindi replies, chips and
+    cards, and tool arguments kept canonical (`Food`, `upi`);
+  - the architecture scans are clean, the web contract regenerated, `tsc`, `oxlint` and the build pass.
+- **Trade-off:** catalogs register themselves as their package is imported (like the web's i18next instance), so
+  `text()` reads a registry rather than an injected catalog. They're constant data checked once; injecting them
+  everywhere would cost more than it buys.
+- **Revisit:** a failed chip's tooltip (the tool's own English error) needs a text for people on the finished event;
+  `UNKNOWN_CATEGORY` ("Unknown", a category that's gone) is data in summaries and MCP views, so a card would show it in
+  English (categories can't be deleted today); if REST ever exposes `expected_version` on DELETE, its conflict is
+  already catalogued.

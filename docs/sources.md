@@ -1,6 +1,6 @@
 # Sources: what the official docs and libraries say
 
-The facts that Phases 14 to 19 and the refactors are built on: where each came from, what it says, and what SpendWise does with it.
+The facts that Phases 14 to 20 and the refactors are built on: where each came from, what it says, and what SpendWise does with it.
 Earlier phases' doc facts are in [gemini.md](gemini.md) and the phase notes.
 
 All checked on **2026-11-13**. Each fact is marked with where it came from:
@@ -532,6 +532,37 @@ offline is fetched again by the next `import()` once online; the failure isn't r
 
 **Used in:** `web/src/shared/i18n/` (`initI18n`, `loadNamespaces`, `setLanguage`, `defineNamespace`) and
 `web/src/shared/lib/format.ts` (D178).
+
+---
+
+## 24. Babel 2.18.0, Accept-Language and CORS (Phase 20)
+
+Checked on 2026-11-14.
+
+**Web:**
+- RFC 9110 §12.5.4, Accept-Language (https://www.rfc-editor.org/rfc/rfc9110#section-12.5.4): a list of language
+  ranges, each with an optional weight `q` (0 to 1; 0 means "not acceptable"); `*` matches any language.
+- WHATWG Fetch, CORS-safelisted request-header (https://fetch.spec.whatwg.org/#cors-safelisted-request-header):
+  `Accept-Language` is safelisted when its value is at most 128 bytes and uses only `0-9 A-Z a-z`, space and
+  `*,-.;=`, so sending it needs no preflight and no `Access-Control-Allow-Headers` entry. (The web app sends one
+  code.) **Observed:** the web app's calls with `Accept-Language: hi` pass the backend's CORS, which allows only
+  `Content-Type`.
+
+**Package:** `.venv\Lib\site-packages\babel\` (2.18.0)
+- `babel.dates.format_skeleton("yMMMd", ...)` gives `5 Sept 2026` (`en_IN`) and `13 नव॰ 2026` (`hi_IN`), and
+  `"yMMMM"` gives `November 2026` / `नवंबर 2026`: the same as the browser's Intl with `{day, month: "short", year}`
+  and `{month: "long", year}`. (`strftime`'s `%d %b %Y` gave `05 Sep 2026`.)
+- CLDR has no `MMMM` skeleton: `format_skeleton("MMMM", ...)` falls back to `MMM` (`Sept`). A month's full name alone
+  is the pattern `LLLL` (`format_date(day, "LLLL", ...)`: `September`, `सितंबर`), as Intl's `{month: "long"}`.
+- `babel.numbers.format_currency(amount, "INR", locale="en_IN")` is `₹1,25,000.50` (also `hi_IN`); `"USD"` gives
+  `$1,250.50`, as Intl's `{style: "currency"}` does.
+- `babel.Locale.parse("hi_IN").plural_form(n)` is `one` for 0 and 1, `other` from 2, matching `Intl.PluralRules("hi")`.
+
+**Observed** (live, real Gemini, through the web app in Hindi): told "Reply in Hindi, the language the app is shown
+in", the model replied in Hindi in every turn and still sent tool arguments as the tools define them (`Food`, `upi`).
+
+**Used in:** `backend/app/core/i18n/` (languages, catalogs, formatting), `web/dependencies.py` (`LanguageDep`),
+`web/src/shared/api/http.ts` (the header) and `web/src/shared/lib/format.ts` (D179).
 
 ---
 

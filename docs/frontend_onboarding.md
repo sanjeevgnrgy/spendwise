@@ -153,7 +153,7 @@ Never fetch in a `useEffect` by hand: use a query.
 | File | Holds | Use it for |
 |---|---|---|
 | `shared/api/schema.gen.ts` | every route's types, plus enum value lists (`paymentMethodValues`) | `Schemas["ExpenseRead"]`, `paths`, enums |
-| `shared/api/contracts.gen.ts` | `API_PREFIX`, `LIMITS`, `PAYMENT_METHOD_LABELS`, `UNKNOWN_CATEGORY`, `CURRENCY_SYMBOLS`, `A2UI` (catalogs, components, chart types, actions), `AGUI` (event names, metadata keys) | any value the backend also uses |
+| `shared/api/contracts.gen.ts` | `API_PREFIX`, `LANGUAGES` (the server's), `LIMITS`, `PAYMENT_METHOD_LABELS` (by language), `A2UI` (catalogs, components, chart types, actions), `AGUI` (event names, metadata keys) | any value the backend also uses |
 
 Never edit them. After a backend change: run `backend\scripts\export_contracts.py`, then `npm run gen:api`.
 
@@ -163,8 +163,10 @@ Never edit them. After a backend change: run `backend\scripts\export_contracts.p
   `npx shadcn@latest add <name>`). They're the only files the lint rules don't hold to app standards.
 - **Tailwind 4** with CSS variables (`app/index.css`); dark mode is a `dark` class on `<html>`, set before the first
   paint by a script generated from `shared/theme/theme-constants.ts`.
-- **Formatting** goes through `shared/lib/format.ts`: `formatMoney("1250.5", "INR")` → `₹1,250.50` (the same rule as
-  the backend's cards), `formatDate`, `formatMonth`, `plural`.
+- **Formatting** goes through `shared/lib/format.ts`, in the language's locale: `formatMoney("1250.5", "INR")` →
+  `₹1,250.50` (the currency's CLDR format, the same data as the backend's cards), `formatDate`, `formatMonth`.
+- **The server's language:** the API client and the assistant's stream send `Accept-Language` (the language on now),
+  so error details, cards, chip labels and the assistant's replies come back in it.
 - **Charts:** shadcn charts (Recharts 3). A chart config's keys become CSS variables; keep configs fixed.
 
 ## The assistant feature
@@ -227,12 +229,14 @@ insists).
 
 ### Add a language
 
-1. One entry in `LANGUAGES` (`shared/i18n/languages.ts`): its code (a BCP 47 tag, like `pt-BR`), its name in itself,
-   its Intl locale, its writing direction, and a loader for its react-day-picker locale.
-2. One file per namespace, next to `hi.ts` (`common`, `app`, every feature), typed `Translation<typeof en>`, and its
+1. The server first (backend_onboarding.md, "Recipe: add a language"), then regenerate the contract.
+2. One entry in `LANGUAGES` (`shared/i18n/languages.ts`): its code (a BCP 47 tag, like `pt-BR`), its name in itself,
+   its Intl locale, its writing direction, and a loader for its react-day-picker locale. The table is typed against
+   the server's `LANGUAGES`, so a language one side lacks fails `tsc`.
+3. One file per namespace, next to `hi.ts` (`common`, `app`, every feature), typed `Translation<typeof en>`, and its
    loader in that namespace's `defineNamespace` call. The compiler lists every namespace that lacks either.
-3. A language with more plural forms than English adds them as extra keys (`count_few`, `count_many`).
-4. Right-to-left languages also need the layout mirrored; that isn't supported yet.
+4. A language with more plural forms than English adds them as extra keys (`count_few`, `count_many`).
+5. Right-to-left languages also need the layout mirrored; that isn't supported yet.
 
 ### Draw a new A2UI component
 

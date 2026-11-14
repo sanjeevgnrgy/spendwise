@@ -3,6 +3,14 @@
 A2UI describes UI as data: a flat list of components that point at each other by id, starting from
 the one with id "root". The browser draws each one with its own trusted components, so the agent
 never sends HTML or code. Spec facts and links: docs/sources.md, section 8.
+
+Presentation layer, a declarative copy of the spec's schema: cards.py and forms.py build messages from these
+models, forms.py checks the model's own forms against them, and agui_request.py reads button clicks
+(ActionMessage). Only the messages SpendWise sends are modelled: createSurface (agent to renderer) and
+action (renderer to agent). backend/scripts/export_contracts.py shares the names and limits with the web app.
+
+The classes below are Pydantic models, so they're described in `#` comments: a docstring would become part of
+their JSON schema.
 """
 
 from enum import StrEnum
@@ -37,6 +45,7 @@ class ActionName(StrEnum):
     CANCEL_DELETE = "cancel_delete"
 
 
+# The kinds of chart a Chart component may draw.
 class ChartType(StrEnum):
     BAR = "bar"
     LINE = "line"
@@ -66,6 +75,7 @@ Align = Literal["start", "center", "end", "stretch"]
 MAX_USER_MESSAGE_LENGTH = 200
 
 
+# The base of every A2UI model: the spec's JSON names, and no unknown fields.
 class _A2uiModel(BaseModel):
     # Python names in snake_case, JSON in camelCase as the spec writes it (surfaceId, createSurface).
     # Unknown fields are an error, as in the spec's schema, so a typo can't slip through to the browser.
@@ -91,6 +101,7 @@ DynamicString = str | DataBinding
 # Action: Button.
 
 
+# A line of text: a label, a value, a caption.
 class Text(_A2uiModel):
     id: ComponentId
     component: Literal["Text"] = "Text"
@@ -98,12 +109,14 @@ class Text(_A2uiModel):
     variant: Literal["caption", "body"] = "body"  # the spec's only two text styles
 
 
+# A framed box around one child: every card's and form's root.
 class Card(_A2uiModel):
     id: ComponentId
     component: Literal["Card"] = "Card"
     child: ComponentId  # exactly one child: put several inside a Column or Row
 
 
+# Children side by side.
 class Row(_A2uiModel):
     id: ComponentId
     component: Literal["Row"] = "Row"
@@ -112,6 +125,7 @@ class Row(_A2uiModel):
     align: Align | None = None
 
 
+# Children one below the other.
 class Column(_A2uiModel):
     id: ComponentId
     component: Literal["Column"] = "Column"
@@ -120,6 +134,7 @@ class Column(_A2uiModel):
     align: Align | None = None
 
 
+# A list of similar rows (a search's expenses).
 class List(_A2uiModel):
     id: ComponentId
     component: Literal["List"] = "List"
@@ -128,12 +143,14 @@ class List(_A2uiModel):
     align: Align | None = None
 
 
+# A thin line between parts of a card.
 class Divider(_A2uiModel):
     id: ComponentId
     component: Literal["Divider"] = "Divider"
     axis: Literal["horizontal", "vertical"] | None = None
 
 
+# A text input (amount, merchant, note), bound to a field of the data model.
 class TextField(_A2uiModel):
     id: ComponentId
     component: Literal["TextField"] = "TextField"
@@ -143,6 +160,7 @@ class TextField(_A2uiModel):
     variant: Literal["shortText", "longText", "number", "obscured"] | None = None
 
 
+# One choice in a ChoicePicker: what it shows, and the value it stands for.
 class ChoiceOption(_A2uiModel):
     label: str
     value: str
@@ -162,6 +180,7 @@ class ChoicePicker(_A2uiModel):
     variant: Literal["mutuallyExclusive"] | None = None  # one choice only; multi-select isn't supported
 
 
+# A date picker, bound to a field of the data model.
 class DateTimeInput(_A2uiModel):
     id: ComponentId
     component: Literal["DateTimeInput"] = "DateTimeInput"
@@ -171,6 +190,7 @@ class DateTimeInput(_A2uiModel):
     enable_time: Literal[False] | None = None  # dates only: there's no time on an expense
 
 
+# What a button sends back when clicked: the action's name and the values it carries.
 class EventAction(_A2uiModel):
     name: ActionName
     # What to send with the action: bindings are read from the data model at the moment of the click.
@@ -181,11 +201,13 @@ class EventAction(_A2uiModel):
     user_message: str | None = Field(None, max_length=MAX_USER_MESSAGE_LENGTH)
 
 
+# A button's action. The spec wraps the event in an object of its own.
 class Action(_A2uiModel):
     # When clicked, the renderer sends this event back to the agent as an `action` message.
     event: EventAction
 
 
+# A button: its label is a child component, and its action names one of ActionName's.
 class Button(_A2uiModel):
     id: ComponentId
     component: Literal["Button"] = "Button"
@@ -198,11 +220,13 @@ class Button(_A2uiModel):
 # Data and labels only: no colours, sizes or code. How a chart looks is the renderer's decision.
 
 
+# One bar, point or slice of a Chart.
 class ChartPoint(_A2uiModel):
     label: str = Field(max_length=categories.MAX_NAME_LENGTH)  # points are categories, so: as long as their names
     value: float = Field(allow_inf_nan=False)  # NaN or infinity isn't valid JSON, nor a sensible bar
 
 
+# A chart from the insights catalog: data and a unit only; the renderer decides how it looks.
 class Chart(_A2uiModel):
     id: ComponentId
     component: Literal["Chart"] = "Chart"
@@ -232,6 +256,7 @@ Component = Annotated[
 
 
 def _referenced_ids(component: BaseModel) -> list[str]:
+    """The ids a component points at: its `children`, or its one `child`, or none."""
     child = getattr(component, "child", None)
     return getattr(component, "children", None) or ([child] if child else [])
 
@@ -239,6 +264,7 @@ def _referenced_ids(component: BaseModel) -> list[str]:
 # ---------- messages (agent to renderer) ----------
 
 
+# A new surface: its id, catalog, every component, and optionally its starting data.
 class CreateSurface(_A2uiModel):
     surface_id: SurfaceId
     catalog_id: str = Catalog.BASIC
@@ -248,6 +274,10 @@ class CreateSurface(_A2uiModel):
 
     @model_validator(mode="after")
     def _complete(self) -> "CreateSurface":
+        """Check the surface can be drawn: unique ids, a root, no dangling references, no loops.
+
+        Returns the surface unchanged; raises ValueError (a validation error) saying what's wrong.
+        """
         # Catch mistakes here rather than as a half-drawn card in the browser.
         ids = [c.id for c in self.components]
         if len(ids) != len(set(ids)):
@@ -267,6 +297,7 @@ def _check_no_cycles(children: dict[str, list[str]]) -> None:
     done: set[str] = set()  # checked already (a child shared by two parents is fine)
 
     def visit(component_id: str) -> None:
+        """Walk down from `component_id` (depth first), raising ValueError if it leads back to itself."""
         if component_id in done:
             return
         if component_id in open_ids:
@@ -280,15 +311,7 @@ def _check_no_cycles(children: dict[str, list[str]]) -> None:
     visit(ROOT_ID)
 
 
-class UpdateComponents(_A2uiModel):
-    surface_id: str
-    components: list[Component] = Field(min_length=1)
-
-
-class DeleteSurface(_A2uiModel):
-    surface_id: str
-
-
+# The base of a message to the renderer: every one names the A2UI version it follows.
 class _Message(_A2uiModel):
     version: Literal["1.0"] = A2UI_VERSION
 
@@ -301,17 +324,6 @@ class CreateSurfaceMessage(_Message):
     """Creates a surface (one self-contained piece of UI), here together with all its components."""
 
     create_surface: CreateSurface
-
-
-class UpdateComponentsMessage(_Message):
-    update_components: UpdateComponents
-
-
-class DeleteSurfaceMessage(_Message):
-    delete_surface: DeleteSurface
-
-
-A2uiMessage = CreateSurfaceMessage | UpdateComponentsMessage | DeleteSurfaceMessage
 
 
 # ---------- messages (renderer to agent) ----------
@@ -329,6 +341,7 @@ class UserAction(_A2uiModel):
     user_message: str | None = Field(None, max_length=MAX_USER_MESSAGE_LENGTH)
 
 
+# The message a click arrives in (forwardedProps.a2uiAction): the version, and the action itself.
 class ActionMessage(_A2uiModel):
     version: Literal["1.0"]
     action: UserAction

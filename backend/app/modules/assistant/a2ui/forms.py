@@ -1,5 +1,9 @@
 """The expense form: shown when the user wants to add an expense but details are missing.
 
+Presentation layer. The web panel offers the show-form tool and its rules (surfaces.py, from SHOW_FORM_TOOL
+and form_instructions); the agent (agent.py) turns the model's call into a form with
+expense_form_from_call; agui_request.py writes a submitted form as the next message with describe_action.
+
 The model writes the form itself (as A2UI JSON, from the catalog described in its instructions).
 Anything it writes is checked against our Pydantic models before it's sent; if it doesn't pass,
 the form built by expense_form() below is sent instead, so the user always gets a working form.
@@ -81,7 +85,10 @@ SHOW_FORM_TOOL = ToolSpec(
                 "description": 'The form as A2UI JSON: {"components": [...], "dataModel": {...}}, '
                 "following the form rules in your instructions.",
             },
-            **{field: {"type": "string", "description": description} for field, description in FIELD_DESCRIPTIONS.items()},
+            **{
+                field: {"type": "string", "description": description}
+                for field, description in FIELD_DESCRIPTIONS.items()
+            },
         },
         "required": [FORM_ARGUMENT],
     },
@@ -89,6 +96,7 @@ SHOW_FORM_TOOL = ToolSpec(
 
 
 def _path(field: str) -> str:
+    """Where a field lives in the form's data model, e.g. "/expense/amount"."""
     return f"/{DATA_ROOT}/{field}"
 
 
@@ -104,7 +112,8 @@ def form_instructions(category_names: list[str]) -> str:
             f"the one with id '{ROOT_ID}' is drawn first. Use only these types and properties:",
             "- Card {child: id}; Column {children: [ids]}; Row {children: [ids]}",
             '- Text {text: string, variant?: "caption" or "body"}',
-            f'- TextField {{label, value: {{"@path": "{_path("<field>")}"}}, variant?: "shortText", "number" or "longText"}}',
+            f'- TextField {{label, value: {{"@path": "{_path("<field>")}"}}, '
+            'variant?: "shortText", "number" or "longText"}',
             f'- ChoicePicker {{label, options: [{{label, value}}], value: {{"@path": "{_path("<field>")}"}}}}',
             f'- DateTimeInput {{label, value: {{"@path": "{_path("spent_on")}"}}, enableDate: true}}',
             f'- Button {{child: id of a Text, variant?: "primary", action: {{"event": {{"name": "{save}", '
@@ -122,10 +131,12 @@ def form_instructions(category_names: list[str]) -> str:
 
 
 def _bind(field: str) -> DataBinding:
+    """A binding to a field, so an input shows and writes that field's value."""
     return DataBinding(path=_path(field))
 
 
 def _form_surface_id() -> str:
+    """A fresh surface id for a form, ours or the model's (the model never picks one)."""
     return new_surface_id("expense_form")
 
 
@@ -134,10 +145,12 @@ def expense_form(values: dict[str, Any], category_names: list[str], today: date)
     values = {"spent_on": today.isoformat(), **{key: value for key, value in values.items() if value}}
 
     def text(field: str) -> str:
+        """A text input's starting value: what was understood, or ""."""
         value = values.get(field)
         return str(value) if value else ""
 
     def choice(field: str) -> list[str]:
+        """A ChoicePicker's starting value: a list, as the spec wants, holding what was understood or nothing."""
         return [str(values[field])] if values.get(field) else []
 
     components = [
@@ -220,6 +233,7 @@ def describe_action(action: UserAction) -> str:
     """
 
     def single(value: Any) -> Any:
+        """A submitted value as one value: a picker's list becomes its choice (or "")."""
         # A ChoicePicker sends a list; our pickers allow one choice.
         return (value[0] if value else "") if isinstance(value, list) else value
 

@@ -1,5 +1,9 @@
 """Ready-made A2UI cards, built by code from the tools' typed results (not by the model).
 
+Presentation layer. The AG-UI adapter (agui.py) asks card_for() for a card after each successful tool
+call, and approval_card() for a delete waiting for Approve; expense_ref() is also how the agent's
+instructions (prompts.py) and replies (decisions.py) write an expense's id.
+
 Every value shown comes from the tool's actual result and is placed in a Text: data to show,
 never instructions or markup.
 """
@@ -59,24 +63,29 @@ SURFACE_ID_LENGTH = 12
 
 
 def _plural(count: int, word: str) -> str:
+    """'1 expense', '3 expenses'."""
     return f"{count} {word}{'' if count == 1 else 's'}"
 
 
 def _day(day: date) -> str:
+    """A date as the cards show it."""
     return f"{day:%d %b %Y}"  # e.g. "13 Nov 2026", like the web app's formatDate
 
 
 def new_surface_id(prefix: str) -> str:
+    """A fresh surface id, e.g. "summary_3f2a9c01b7de": the prefix says what the card is."""
     # The spec forbids creating the same surface twice, and the same expense can be updated (or a month
     # summed up) more than once in a chat, so every card gets a new surface id.
     return f"{prefix}_{uuid4().hex[:SURFACE_ID_LENGTH]}"
 
 
 def _surface(surface_id: str, components: list[Component]) -> CreateSurfaceMessage:
+    """The message that creates a card from its components (checked as it's built)."""
     return CreateSurfaceMessage(create_surface=CreateSurface(surface_id=surface_id, components=components))
 
 
 def expense_ref(expense_id: int) -> str:
+    """How an expense's id is written everywhere the user sees it: "#14"."""
     # Shown as "#14" so the user can refer to an expense exactly ("delete #14"); the assistant knows this form.
     return f"#{expense_id}"
 
@@ -222,6 +231,7 @@ def expense_list_card(search: ExpenseSearch) -> CreateSurfaceMessage:
 
 
 def _single(prefix: str, title: str, pick: Callable[[Any], ExpenseView]) -> Callable[[Any], CreateSurfaceMessage]:
+    """A card builder for a result holding one expense: `pick` finds it, the card shows it under `title`."""
     return lambda result: _expense_card(new_surface_id(prefix), title, pick(result))
 
 

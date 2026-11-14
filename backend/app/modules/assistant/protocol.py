@@ -1,5 +1,9 @@
 """Names on the wire between this module and the web app, beyond what AG-UI itself defines.
 
+The AG-UI adapter uses them: agui_request.py to read a run (a button click, the data version), agui.py to
+write events (the custom event's name, metadata keys, chip labels). Each name is defined once, here, instead
+of typed as a string wherever it's needed.
+
 The web app gets these same values from generated code (backend/scripts/export_contracts.py writes
 web/src/shared/api/contracts.gen.ts), so the two sides can't drift apart.
 """
@@ -9,6 +13,7 @@ from enum import StrEnum
 from pydantic import BaseModel
 
 
+# The names this app gives AG-UI's CUSTOM events (a CUSTOM event is a name plus any JSON value).
 class CustomEventName(StrEnum):
     # A2UI has no event of its own in AG-UI, so cards and forms travel in AG-UI's CUSTOM event.
     A2UI = "a2ui"
@@ -30,6 +35,8 @@ FORWARDED_A2UI_ACTION = "a2uiAction"
 STATE_DATA_VERSION = "dataVersion"
 
 
+# Sent in TOOL_CALL_START's metadata (MetadataKey.LABELS), so the browser can show all three texts
+# without knowing any tool names. agui.TOOL_LABELS holds one per tool.
 class ToolLabels(BaseModel):
     """What a tool's status chip says while it runs, and after it worked or failed."""
 

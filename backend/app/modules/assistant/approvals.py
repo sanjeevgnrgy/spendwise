@@ -1,9 +1,17 @@
 """Human in the loop: deletes the assistant may only carry out after the user approves them.
 
 In the web panel the model can't delete at all: whatever it asks, the expense is only looked up and
-shown with Approve and Cancel (agent.py). The real delete happens when the user presses Approve,
+shown with Approve and Cancel (surfaces.WebPanel). The real delete happens when the user presses Approve,
 and the server decides WHAT gets deleted from its own record of that card (a snapshot of the
 expense), never from what the browser sends.
+
+The record lives in the pending_approval table (tables.py), managed by three commands:
+- RequestApproval, when a card is shown: remember it;
+- TakeApproval, when Approve or Cancel arrives: read and forget it in one step, so each card decides once;
+- RestoreApproval, if the decision then fails midway: put it back exactly as it was.
+
+The rules: a card works only in its own conversation, only once, and only for TTL_MINUTES; at most
+MAX_PENDING are kept. turns.py sends the commands; module.py registers the handlers below.
 """
 
 from datetime import datetime, timedelta
@@ -18,7 +26,9 @@ from app.modules.assistant.tables import APPROVAL_ID_LENGTH, PendingApproval
 from app.modules.conversations import ThreadId
 from app.modules.mcp import ExpenseView
 
-# An unanswered card stops working after this long, and at most this many are remembered.
+# An unanswered card stops working after this long, and at most this many are remembered. A short life
+# means an old card, scrolled out of sight, can't delete anything; the cap keeps the table small even if
+# cards are never answered. (decisions.STALE_APPROVAL quotes TTL_MINUTES to the user.)
 TTL_MINUTES = 15
 MAX_PENDING = 200
 
@@ -47,9 +57,16 @@ class ExpenseSnapshot(BaseModel):
 
     @classmethod
     def of(cls, expense: ExpenseView) -> "ExpenseSnapshot":
+        """The snapshot of an expense the tools returned.
+
+        Made from its JSON form (amount, date and payment method as text), the same form the table
+        stores, so a fresh snapshot and a stored one compare equal when nothing has changed.
+        """
         return cls.model_validate(expense.model_dump(mode="json"))
 
 
+# What TakeApproval returns: the card's snapshot, plus when it was shown, so RestoreApproval can put
+# it back with its original age.
 class PendingCard(BaseModel):
     model_config = ConfigDict(frozen=True)
 
@@ -57,6 +74,7 @@ class PendingCard(BaseModel):
     created_at: datetime
 
 
+# Sent by turns.Assistant while the agent shows a delete card; `approval_id` becomes the card's surface id.
 class RequestApproval(Command[None]):
     """Remember that this card's Approve may delete this expense, as shown (in this conversation only)."""
 
@@ -65,6 +83,7 @@ class RequestApproval(Command[None]):
     expense: ExpenseSnapshot
 
 
+# Sent by turns.Assistant.decide when Approve or Cancel arrives, with the thread and the card's surface id.
 class TakeApproval(Command[PendingCard | None]):
     """The card's record, forgotten as it's returned: each card decides once.
 
@@ -78,6 +97,7 @@ class TakeApproval(Command[PendingCard | None]):
     approval_id: ApprovalId
 
 
+# Sent by turns.Assistant.decide when something fails after the card was taken.
 class RestoreApproval(Command[None]):
     """Put a taken card back, unchanged (same snapshot, same age), after the decision failed midway."""
 
@@ -87,11 +107,13 @@ class RestoreApproval(Command[None]):
 
 
 def _forget_expired(ctx: Context) -> None:
+    """Delete every card shown more than TTL_MINUTES ago, in any thread. Run before each read or write."""
     cutoff = ctx.clock.now() - timedelta(minutes=TTL_MINUTES)
     ctx.session.execute(delete(PendingApproval).where(col(PendingApproval.created_at) < cutoff))
 
 
 def _store(ctx: Context, thread_id: str, approval_id: str, expense: ExpenseSnapshot, created_at: datetime) -> None:
+    """Save one card's record, dated `created_at`, then trim the table to the newest MAX_PENDING cards."""
     _forget_expired(ctx)
     # merge: insert, or replace the same card's record.
     ctx.session.merge(
@@ -99,6 +121,7 @@ def _store(ctx: Context, thread_id: str, approval_id: str, expense: ExpenseSnaps
             approval_id=approval_id, thread_id=thread_id, expense=expense.model_dump(mode="json"), created_at=created_at
         )
     )
+    # Write the new row now, so the trim below counts it.
     ctx.session.flush()
     # Keep at most MAX_PENDING: forget the oldest beyond that.
     keep = select(PendingApproval.approval_id).order_by(col(PendingApproval.created_at).desc()).limit(MAX_PENDING)
@@ -106,15 +129,23 @@ def _store(ctx: Context, thread_id: str, approval_id: str, expense: ExpenseSnaps
 
 
 def request_approval(ctx: Context, command: RequestApproval) -> None:
+    """Handler for RequestApproval: remember a card that's being shown now."""
     _store(ctx, command.thread_id, command.approval_id, command.expense, ctx.clock.now())
 
 
 def restore_approval(ctx: Context, command: RestoreApproval) -> None:
+    """Handler for RestoreApproval: put a taken card back, with its original snapshot and time."""
     # The original time, so a card that keeps failing still expires TTL_MINUTES after it was shown.
     _store(ctx, command.thread_id, command.approval_id, command.card.expense, command.card.created_at)
 
 
 def take_approval(ctx: Context, command: TakeApproval) -> PendingCard | None:
+    """Handler for TakeApproval: return the card's record and delete it, in the same transaction.
+
+    None if there's no live card by that id in this thread: already answered, expired, never shown,
+    or another conversation's. The bus commits the delete as this returns, so the card can't decide twice.
+    """
+    # Expired cards go first, so a card past its TTL_MINUTES is simply not found.
     _forget_expired(ctx)
     pending = ctx.session.get(PendingApproval, command.approval_id)
     # Another conversation's card is treated as unknown, and left alone.

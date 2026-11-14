@@ -11,6 +11,8 @@ from sqlalchemy import delete
 from sqlmodel import Session, col
 
 from app.core.errors import BusinessRuleError, NotFoundError
+from app.core.i18n import translatable
+from app.modules.expenses.i18n import ExpenseText
 from app.modules.expenses.persistence.tables import Expense
 
 
@@ -31,7 +33,7 @@ def get(session: Session, expense_id: int) -> Expense:
     """
     expense = session.get(Expense, expense_id)
     if expense is None:
-        raise NotFoundError(f"Expense {expense_id} not found")
+        raise NotFoundError(translatable(ExpenseText.NOT_FOUND, expense_id=expense_id))
     return expense
 
 
@@ -52,6 +54,10 @@ def remove(session: Session, expense_id: int, expected_version: int | None) -> N
     if session.execute(statement).rowcount == 0:
         current = get(session, expense_id)  # raises NotFoundError if it's gone
         raise BusinessRuleError(
-            f"Expense {expense_id} has changed since it was shown (version {current.version}, not "
-            f"{expected_version}); nothing was deleted."
+            translatable(
+                ExpenseText.CHANGED_SINCE_SHOWN,
+                expense_id=expense_id,
+                current=current.version,
+                expected=expected_version,
+            )
         )

@@ -7,19 +7,28 @@ export const PROBLEM_JSON = "application/problem+json" as const
 
 export const DEFAULT_CURRENCY = "INR" as const
 
-export const CURRENCY_SYMBOLS = {
-  "INR": "₹"
-} as const
-
-export const UNKNOWN_CATEGORY = "Unknown" as const
+export const LANGUAGES = [
+  "en",
+  "hi"
+] as const
 
 export const PAYMENT_METHOD_LABELS = {
-  "cash": "Cash",
-  "upi": "UPI",
-  "card": "Card",
-  "netbanking": "Net banking",
-  "wallet": "Wallet",
-  "other": "Other"
+  "en": {
+    "cash": "Cash",
+    "upi": "UPI",
+    "card": "Card",
+    "netbanking": "Net banking",
+    "wallet": "Wallet",
+    "other": "Other"
+  },
+  "hi": {
+    "cash": "नकद",
+    "upi": "UPI",
+    "card": "कार्ड",
+    "netbanking": "नेट बैंकिंग",
+    "wallet": "वॉलेट",
+    "other": "अन्य"
+  }
 } as const
 
 export const LIMITS = {

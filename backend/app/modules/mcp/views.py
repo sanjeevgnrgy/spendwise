@@ -8,6 +8,7 @@ server.py makes one ExpenseViews for them all.
 
 from app.core.cqrs import MessageBus
 from app.core.errors import BusinessRuleError
+from app.core.i18n import translatable
 from app.modules import categories, expenses
 from app.modules.mcp.contracts import ExpenseView
 
@@ -56,7 +57,7 @@ class ExpenseViews:
             return found.id
         names = self.category_names().values()
         if not names:
-            raise BusinessRuleError(categories.NO_CATEGORIES_YET)
+            raise BusinessRuleError(translatable(categories.CategoryText.NO_CATEGORIES_YET))
         raise BusinessRuleError(f"Unknown category '{name.strip()}'. Use one of: {', '.join(names)}.")
 
     def find(self, expense_id: int) -> ExpenseView:

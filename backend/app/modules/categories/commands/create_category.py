@@ -9,6 +9,8 @@ from pydantic import ConfigDict
 
 from app.core.cqrs import Command, Context
 from app.core.errors import BusinessRuleError
+from app.core.i18n import translatable
+from app.modules.categories.i18n import CategoryText
 from app.modules.categories.persistence.tables import Category
 from app.modules.categories.queries.find_category_by_name import FindCategoryByName
 from app.modules.categories.values import CategoryName, IconName
@@ -37,7 +39,7 @@ def create_category(ctx: Context, command: CreateCategory) -> int:
     # Any letter case: "food" and "Food" are the same category to a person (and to the assistant).
     # The check is a query through the bus, so it runs in this command's own transaction.
     if ctx.bus.ask(FindCategoryByName(name=command.name)) is not None:
-        raise BusinessRuleError(f"Category '{command.name}' already exists")
+        raise BusinessRuleError(translatable(CategoryText.ALREADY_EXISTS, name=command.name))
     category = Category(name=command.name, icon=command.icon)
     ctx.session.add(category)
     # flush sends the INSERT inside the transaction, so the database assigns the id now.

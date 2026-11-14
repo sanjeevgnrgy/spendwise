@@ -5,6 +5,11 @@
 
 import type { DayPickerLocale } from "react-day-picker"
 
+import type { LANGUAGES as SERVER_LANGUAGES } from "@/shared/api/contracts.gen"
+
+// The languages the server writes its texts in (its cards, errors, payment labels), from the generated contract.
+type ServerLanguage = (typeof SERVER_LANGUAGES)[number]
+
 /** What the app needs to know about one language. */
 export interface LanguageInfo {
   /** The language's name in itself ("हिन्दी"), so people can find their own language in the menu. */
@@ -21,9 +26,10 @@ export interface LanguageInfo {
 }
 
 /**
- * Every language, by its code (a BCP 47 tag: "en", or "pt-BR" for a regional variant). English is the language the
- * texts are written in. Both languages use India's conventions for numbers and dates (₹1,25,000.50), which suit the
- * app's rupee amounts.
+ * Every language, by its code (a BCP 47 tag: "en", or "pt-BR" for a regional variant): exactly the server's, so a
+ * language the web offers is one the server can write in (a missing or extra one fails the build). English is the
+ * language the texts are written in. Both languages use India's conventions for numbers and dates (₹1,25,000.50),
+ * which suit the app's rupee amounts.
  */
 export const LANGUAGES = {
   en: {
@@ -38,7 +44,7 @@ export const LANGUAGES = {
     dir: "ltr",
     loadDatePickerLocale: () => import("react-day-picker/locale/hi").then((module) => module.hi),
   },
-} as const satisfies Record<string, LanguageInfo>
+} as const satisfies Record<ServerLanguage, LanguageInfo>
 
 /** A language's code: "en" or "hi". */
 export type Language = keyof typeof LANGUAGES

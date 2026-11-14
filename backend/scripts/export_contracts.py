@@ -17,7 +17,8 @@ from typing import get_args
 BACKEND_DIR = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(BACKEND_DIR))
 
-from app.core.money import CURRENCY_SYMBOLS, DEFAULT_CURRENCY  # noqa: E402
+from app.core.i18n import Language  # noqa: E402
+from app.core.money import DEFAULT_CURRENCY  # noqa: E402
 from app.infrastructure.config import API_PREFIX, PROJECT_DIR  # noqa: E402
 from app.main import create_app  # noqa: E402
 from app.modules.assistant.a2ui import MAX_USER_MESSAGE_LENGTH, ActionName, Catalog  # noqa: E402
@@ -37,9 +38,8 @@ from app.modules.assistant.api.protocol import (  # noqa: E402
     MetadataKey,
 )
 from app.modules.assistant.api.schemas import MAX_MESSAGE_LENGTH  # noqa: E402
-from app.modules.categories import UNKNOWN_CATEGORY  # noqa: E402
 from app.modules.conversations import THREAD_ID_MAX_LENGTH  # noqa: E402
-from app.modules.expenses import PAYMENT_METHOD_LABELS  # noqa: E402
+from app.modules.expenses import PaymentMethod, payment_method_label  # noqa: E402
 from app.modules.expenses.values import (  # noqa: E402
     DEFAULT_LIST_LIMIT,
     DEFAULT_TREND_MONTHS,
@@ -79,9 +79,13 @@ def main() -> None:
         "API_PREFIX": API_PREFIX,
         "PROBLEM_JSON": PROBLEM_JSON,
         "DEFAULT_CURRENCY": DEFAULT_CURRENCY,
-        "CURRENCY_SYMBOLS": CURRENCY_SYMBOLS,
-        "UNKNOWN_CATEGORY": UNKNOWN_CATEGORY,
-        "PAYMENT_METHOD_LABELS": {method.value: label for method, label in PAYMENT_METHOD_LABELS.items()},
+        # The languages the server writes its texts in; the web app's language table is typed against them.
+        "LANGUAGES": [language.value for language in Language],
+        # Each payment method's label, by language.
+        "PAYMENT_METHOD_LABELS": {
+            language.value: {method.value: payment_method_label(method, language) for method in PaymentMethod}
+            for language in Language
+        },
         "LIMITS": {
             "messageLength": MAX_MESSAGE_LENGTH,
             "threadIdLength": THREAD_ID_MAX_LENGTH,

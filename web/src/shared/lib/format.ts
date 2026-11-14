@@ -3,9 +3,7 @@
 // Part of shared/lib. Used by every page and dialog that shows an amount or a date, and by the assistant's cards and
 // date inputs. A component re-renders when the language changes, so its next call uses the new locale.
 
-import { CURRENCY_SYMBOLS } from "@/shared/api/contracts.gen"
 import { currentLanguageInfo } from "@/shared/i18n"
-import { pick } from "@/shared/lib/guards"
 
 // The Intl locale of the language on now ("en-IN", "hi-IN").
 function locale(): string {
@@ -27,13 +25,22 @@ export function formatAmount(value: number | string): string {
   return format.format(Number(value))
 }
 
+// Currency formatters, one per locale and currency, made on first use.
+const moneyFormats = new Map<string, Intl.NumberFormat>()
+
 /**
- * "125000.5", "INR" -> "₹1,25,000.50"; a currency with no known symbol -> "1,25,000.50 USD". The backend's
- * format_money writes amounts the same way, so the chat's cards and the pages always agree.
+ * "125000.5", "INR" -> "₹1,25,000.50"; "USD" -> "$1,250.50": the currency's CLDR format in the language's locale.
+ * The backend's format_money writes amounts from the same CLDR data, so the chat's cards and the pages agree.
  */
 export function formatMoney(amount: number | string, currency: string): string {
-  const symbol = pick<string>(CURRENCY_SYMBOLS, currency)
-  return symbol ? `${symbol}${formatAmount(amount)}` : `${formatAmount(amount)} ${currency}`
+  const current = locale()
+  const cacheKey = `${current}|${currency}`
+  let format = moneyFormats.get(cacheKey)
+  if (!format) {
+    format = new Intl.NumberFormat(current, { style: "currency", currency })
+    moneyFormats.set(cacheKey, format)
+  }
+  return format.format(Number(amount))
 }
 
 // Compact currency formatters, one per locale and currency, made on first use (an axis formats every tick).

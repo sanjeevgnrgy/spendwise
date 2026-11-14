@@ -23,6 +23,7 @@ from pydantic import BaseModel, Field, ValidationError, WithJsonSchema
 
 from app.core.cqrs import MessageBus
 from app.core.errors import BusinessRuleError
+from app.core.i18n import translatable
 from app.core.llm import LlmError, StructuredOutputModel
 from app.modules import categories
 from app.modules.expenses import PaymentMethod
@@ -127,7 +128,7 @@ class ExpenseParser:
         # The real category names, so the model can only pick one that exists.
         names = [c.name for c in self.bus.ask(categories.ListCategories())]
         if not names:
-            raise BusinessRuleError(categories.NO_CATEGORIES_YET)
+            raise BusinessRuleError(translatable(categories.CategoryText.NO_CATEGORIES_YET))
         raw = self.llm.ask_for_json(text, _response_schema(names), _system_instruction(today))
         try:
             parsed = ParsedExpense.model_validate_json(raw)

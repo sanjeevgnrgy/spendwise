@@ -10,14 +10,16 @@ from decimal import Decimal
 
 from app.core.cqrs import Context
 from app.core.errors import BusinessRuleError
+from app.core.i18n import translatable
 from app.modules import categories
+from app.modules.expenses.i18n import ExpenseText
 
 
 def require_positive_amount(amount: Decimal) -> None:
     """Raise BusinessRuleError unless the amount (in rupees) is above zero."""
     # A business rule, not a format rule: zero or negative amounts aren't expenses.
     if amount <= 0:
-        raise BusinessRuleError("Amount must be greater than 0")
+        raise BusinessRuleError(translatable(ExpenseText.AMOUNT_NOT_POSITIVE))
 
 
 def require_category_exists(ctx: Context, category_id: int) -> None:
@@ -28,4 +30,4 @@ def require_category_exists(ctx: Context, category_id: int) -> None:
     """
     # Ask the categories module, through its contract, instead of reading its table.
     if ctx.bus.ask(categories.GetCategory(category_id=category_id)) is None:
-        raise BusinessRuleError(f"Category {category_id} does not exist")
+        raise BusinessRuleError(translatable(ExpenseText.CATEGORY_MISSING, category_id=category_id))

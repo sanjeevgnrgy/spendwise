@@ -2,7 +2,7 @@
 
 Part of the module's contract layer. The command and query slices (commands/, queries/) build their messages
 from these types, and the table (persistence/tables.py) sizes its columns with the limits. __init__.py exports
-the ones other modules use (MAX_NAME_LENGTH, UNKNOWN_CATEGORY, NO_CATEGORIES_YET, CategoryId). This file imports
+the ones other modules use (MAX_NAME_LENGTH, UNKNOWN_CATEGORY, CategoryId). This file imports
 no other file of the module, so every file in it can use it.
 """
 
@@ -19,8 +19,6 @@ MAX_ICON_LENGTH = 50
 # What a list shows for an expense whose category no longer exists (expenses keep only the id, with
 # no foreign key, so a category could disappear).
 UNKNOWN_CATEGORY = "Unknown"
-# Said by anything that needs a category before any exist (the assistant, the MCP tools).
-NO_CATEGORIES_YET = "There are no categories yet. Add some (or run backend/seed.py) first."
 
 CategoryId = RecordId
 # Spaces around a name are removed: " Food" and "Food" would look identical in every list. The type only

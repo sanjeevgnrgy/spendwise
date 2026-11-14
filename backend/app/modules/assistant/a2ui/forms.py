@@ -16,6 +16,7 @@ from datetime import date
 from enum import StrEnum
 from typing import Any
 
+from app.core.i18n import DEFAULT_LANGUAGE
 from app.core.llm import ToolSpec
 from app.modules.assistant.a2ui.cards import new_surface_id
 from app.modules.assistant.a2ui.models import (
@@ -37,7 +38,7 @@ from app.modules.assistant.a2ui.models import (
     TextField,
     UserAction,
 )
-from app.modules.expenses import PAYMENT_METHOD_LABELS
+from app.modules.expenses import PaymentMethod, payment_method_label
 from app.modules.mcp import ToolName
 
 logger = logging.getLogger(__name__)
@@ -53,7 +54,7 @@ FIELD_DESCRIPTIONS = {
     "category": "Category name.",
     "merchant": "The shop, company or person paid.",
     "spent_on": "Date as YYYY-MM-DD.",
-    "payment_method": "One of: " + ", ".join(PAYMENT_METHOD_LABELS) + ".",
+    "payment_method": "One of: " + ", ".join(PaymentMethod) + ".",
     "note": "A short note.",
 }
 FIELDS = tuple(FIELD_DESCRIPTIONS)
@@ -123,7 +124,7 @@ def form_instructions(category_names: list[str]) -> str:
             f'In dataModel.{DATA_ROOT}, pre-fill what the user said and use "" for anything unknown. A ChoicePicker\'s '
             'value is a list: ["Food"] or [].',
             f"Category options (value = label): {', '.join(category_names)}. Payment options: "
-            + ", ".join(f"{label} = {value}" for value, label in PAYMENT_METHOD_LABELS.items())
+            + ", ".join(f"{payment_method_label(method, DEFAULT_LANGUAGE)} = {method}" for method in PaymentMethod)
             + ".",
             f"When the user submits the form ({save}), call {ToolName.ADD_EXPENSE} with the submitted values. If one "
             f"is still missing or invalid, call {SHOW_FORM_TOOL_NAME} again with what you have.",
@@ -170,7 +171,10 @@ def expense_form(values: dict[str, Any], category_names: list[str], today: date)
         ChoicePicker(
             id="payment_method",
             label="Paid with",
-            options=[ChoiceOption(label=label, value=value) for value, label in PAYMENT_METHOD_LABELS.items()],
+            options=[
+                ChoiceOption(label=payment_method_label(method, DEFAULT_LANGUAGE), value=method)
+                for method in PaymentMethod
+            ],
             value=_bind("payment_method"),
         ),
         TextField(id="note", label="Note (optional)", value=_bind("note")),

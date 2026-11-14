@@ -4,20 +4,22 @@
 
 import { PAYMENT_METHOD_LABELS } from "@/shared/api/contracts.gen"
 import { paymentMethodValues } from "@/shared/api/schema.gen"
+import { currentLanguage } from "@/shared/i18n"
 
 import type { PaymentMethod } from "./api"
 
 /**
  * Every payment method, in the backend's order (the dropdown lists them so). Both lists (these values and
- * their labels) come from the backend (generated), so the web and the assistant's forms always agree.
+ * their labels, in every language) come from the backend (generated), so the web and the assistant's forms always
+ * agree.
  */
 export const PAYMENT_METHODS: readonly PaymentMethod[] = paymentMethodValues
 /** What a new expense starts with in the Add dialog. */
 export const DEFAULT_PAYMENT_METHOD: PaymentMethod = "upi"
 
-/** The method's label for people: "upi" -> "UPI", "netbanking" -> "Net banking". */
+/** The method's label for people, in the language on now: "upi" -> "UPI", "netbanking" -> "Net banking". */
 export function paymentMethodLabel(method: PaymentMethod): string {
-  return PAYMENT_METHOD_LABELS[method]
+  return PAYMENT_METHOD_LABELS[currentLanguage()][method]
 }
 
 /** Whether a string (like a dropdown's value) is one of the methods; if so, TypeScript treats it as one. */

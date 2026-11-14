@@ -17,6 +17,7 @@ from uuid import uuid4
 
 from app.core.cqrs import MessageBus
 from app.core.errors import NotFoundError
+from app.core.i18n import translatable
 from app.core.llm import ToolCallingModel
 from app.modules import conversations
 from app.modules.assistant.agent.agent import Agent
@@ -130,7 +131,7 @@ class Assistant:
             thread_id = new_thread_id()
         elif self.bus.ask(conversations.GetLastTurn(thread_id=thread_id)) is None:
             # A typo'd id should be an error, not a silent new conversation.
-            raise NotFoundError(conversations.THREAD_NOT_FOUND.format(thread_id=thread_id))
+            raise NotFoundError(translatable(conversations.ConversationText.THREAD_NOT_FOUND, thread_id=thread_id))
         finished = None
         for event in self._answer(thread_id, message, today, TextChat()):
             if isinstance(event, TurnFinished):

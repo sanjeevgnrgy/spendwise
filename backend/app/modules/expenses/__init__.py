@@ -10,28 +10,29 @@ Inside, each command and each query is one file holding the message, its handler
 the write side's repository). This file only re-exports the contract names from those files.
 
 Who uses it: the MCP server (every command and query, behind its tools), the assistant (PaymentMethod
-and PAYMENT_METHOD_LABELS for its forms) and seed.py (CreateExpense, ListExpenses).
+and payment_method_label for its forms) and seed.py (CreateExpense, ListExpenses).
 """
 
 from app.modules.expenses.commands.create_expense import CreateExpense
 from app.modules.expenses.commands.delete_expense import DeleteExpense
 from app.modules.expenses.commands.update_expense import ExpenseChanges, UpdateExpense
+from app.modules.expenses.i18n import ExpenseText, payment_method_label
 from app.modules.expenses.models import ExpenseList, ExpenseRead
 from app.modules.expenses.queries.get_expense import GetExpense
 from app.modules.expenses.queries.get_monthly_summary import CategoryTotal, GetMonthlySummary, MonthlySummary
 from app.modules.expenses.queries.get_monthly_trend import GetMonthlyTrend, MonthlyTrend, MonthTotal
 from app.modules.expenses.queries.list_expenses import ListExpenses
-from app.modules.expenses.values import MAX_LIST_LIMIT, PAYMENT_METHOD_LABELS, ExpenseId, PaymentMethod
+from app.modules.expenses.values import MAX_LIST_LIMIT, ExpenseId, PaymentMethod
 
 __all__ = [
     "MAX_LIST_LIMIT",
-    "PAYMENT_METHOD_LABELS",
     "CategoryTotal",
     "CreateExpense",
     "DeleteExpense",
     "ExpenseChanges",
     "ExpenseId",
     "ExpenseList",
+    "ExpenseText",
     "ExpenseRead",
     "GetExpense",
     "GetMonthlySummary",
@@ -42,4 +43,5 @@ __all__ = [
     "MonthlyTrend",
     "PaymentMethod",
     "UpdateExpense",
+    "payment_method_label",
 ]

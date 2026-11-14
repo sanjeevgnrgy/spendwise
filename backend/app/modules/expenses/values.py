@@ -1,4 +1,4 @@
-"""The expenses module's shared values: limits, PaymentMethod and its labels, the id and field types.
+"""The expenses module's shared values: limits, PaymentMethod, the id and field types.
 
 Schemas check the *shape* of data (types, lengths, at most 2 decimal places). Business rules
 (amount > 0, the category must exist) live in domain/rules.py and the command handlers.
@@ -8,8 +8,8 @@ Money: callers send and get rupees as a Decimal (`amount`, `total`); the table k
 
 Part of the module's contract layer, used by its slices (commands/, queries/), models.py, api.py and its table
 (persistence/tables.py); this file imports no other file of the module. __init__.py exports MAX_LIST_LIMIT,
-PaymentMethod, PAYMENT_METHOD_LABELS and ExpenseId. The assistant uses PaymentMethod and its labels, and
-scripts/export_contracts.py reads the labels and limits for the web app.
+PaymentMethod and ExpenseId. Each method's label, in every language, is in i18n/ (payment_method_label); the assistant
+uses both, and scripts/export_contracts.py reads the labels and limits for the web app.
 """
 
 from decimal import Decimal
@@ -42,17 +42,6 @@ class PaymentMethod(StrEnum):
     WALLET = "wallet"
     OTHER = "other"
 
-
-# How each method is written for people. The one place these labels live: the assistant's forms use
-# them, and the web app gets them through the generated contracts (backend/scripts/export_contracts.py).
-PAYMENT_METHOD_LABELS: dict[PaymentMethod, str] = {
-    PaymentMethod.CASH: "Cash",
-    PaymentMethod.UPI: "UPI",
-    PaymentMethod.CARD: "Card",
-    PaymentMethod.NETBANKING: "Net banking",
-    PaymentMethod.WALLET: "Wallet",
-    PaymentMethod.OTHER: "Other",
-}
 
 ExpenseId = RecordId
 # Every change raises it by one, so "the expense as I saw it" can be checked (optimistic concurrency).

@@ -5,8 +5,9 @@ This file is the module's public interface. Other modules import ONLY the contra
 this module; the composition root (bootstrap.py) plugs those in through module.py.
 
 Inside, each command and each query is one file holding the message and its handler (commands/, queries/).
-What several of them share is in values.py (limits, texts, field types) and models.py (CategoryRead), and the
-table is in persistence/. This file only re-exports the contract names from those files.
+What several of them share is in values.py (limits, field types) and models.py (CategoryRead), its texts for
+people in every language in i18n/ (CategoryText), and the table is in persistence/. This file only re-exports the
+contract names from those files.
 
 Who uses it: expenses (GetCategory checks that an expense's category exists, since there is no foreign
 key; ListCategories names the categories in a summary), the MCP server (FindCategoryByName turns the
@@ -16,17 +17,18 @@ list's), the assistant (category names for /parse, MAX_NAME_LENGTH for chart lab
 """
 
 from app.modules.categories.commands.create_category import CreateCategory
+from app.modules.categories.i18n import CategoryText
 from app.modules.categories.models import CategoryRead
 from app.modules.categories.queries.find_category_by_name import FindCategoryByName
 from app.modules.categories.queries.get_category import GetCategory
 from app.modules.categories.queries.list_categories import ListCategories
-from app.modules.categories.values import MAX_NAME_LENGTH, NO_CATEGORIES_YET, UNKNOWN_CATEGORY, CategoryId
+from app.modules.categories.values import MAX_NAME_LENGTH, UNKNOWN_CATEGORY, CategoryId
 
 __all__ = [
     "MAX_NAME_LENGTH",
-    "NO_CATEGORIES_YET",
     "UNKNOWN_CATEGORY",
     "CategoryId",
+    "CategoryText",
     "CategoryRead",
     "CreateCategory",
     "FindCategoryByName",

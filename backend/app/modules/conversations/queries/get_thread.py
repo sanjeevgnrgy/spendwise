@@ -12,6 +12,7 @@ from pydantic import BaseModel
 
 from app.core.cqrs import Context, Query
 from app.core.errors import NotFoundError
+from app.core.i18n import translatable
 from app.core.llm import (
     AssistantText,
     Message,
@@ -23,7 +24,8 @@ from app.core.llm import (
     messages_adapter,
 )
 from app.modules.conversations.queries.thread_rows import thread_rows
-from app.modules.conversations.values import THREAD_NOT_FOUND, ThreadId
+from app.modules.conversations.i18n import ConversationText
+from app.modules.conversations.values import ThreadId
 
 
 # One readable line of GET /threads/{id}: the message's text, or a tool call written as name(arguments).
@@ -70,7 +72,7 @@ def get_thread(ctx: Context, query: GetThread) -> ThreadRead:
     """
     rows = thread_rows(ctx, query.thread_id)
     if not rows:
-        raise NotFoundError(THREAD_NOT_FOUND.format(thread_id=query.thread_id))
+        raise NotFoundError(translatable(ConversationText.THREAD_NOT_FOUND, thread_id=query.thread_id))
     shown = []
     for row, message in zip(rows, messages_adapter.validate_python([row.content for row in rows]), strict=True):
         text = _readable(message)

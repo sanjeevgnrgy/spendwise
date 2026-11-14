@@ -12,6 +12,7 @@ it's built that way.
 | get it running on your machine | [getting_started.md](getting_started.md) |
 | change the backend | [architecture.md](architecture.md), then [backend_onboarding.md](backend_onboarding.md) |
 | change the web app | [architecture.md](architecture.md), then [frontend_onboarding.md](frontend_onboarding.md) |
+| work on the code with an AI agent | [AGENTS.md](../AGENTS.md): the rules every change follows, and the definition of done |
 | work on the AI assistant | [assistant_architecture.md](assistant_architecture.md) |
 | see how a feature was designed and built | the [phase notes](#phase-notes) below |
 
@@ -24,7 +25,7 @@ it's built that way.
 | [assistant_architecture.md](assistant_architecture.md) | The agent loop, tools over MCP, AG-UI streaming, A2UI cards and forms, approvals, memory, cost |
 | [how_spendwise_works.md](how_spendwise_works.md) | The main flows as diagrams: adding an expense, the Dashboard, asking, deleting with approval, staying in sync |
 | [architecture-review.md](architecture-review.md) | Every finding of the architecture review and the two code reviews, and how each was resolved |
-| [decisions.md](decisions.md) | Every design decision (D1–D175), with why, and when to revisit it |
+| [decisions.md](decisions.md) | Every design decision (D1–D176), with why, and when to revisit it |
 
 ## Developer guides
 
@@ -90,3 +91,4 @@ it, and design questions with their answers (collapsed). Later changes are noted
 - A problem that took real effort to solve gets an entry in [troubleshooting.md](troubleshooting.md).
 - A fact taken from official docs, a spec or a library's code goes in [sources.md](sources.md), with its link or file.
 - If a doc and the code disagree, the code is right and the doc is a bug. Fix the doc.
+- A new rule for how the code is built goes in [AGENTS.md](../AGENTS.md) too, so AI agents follow it.

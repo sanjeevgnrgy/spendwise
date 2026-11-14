@@ -1500,3 +1500,23 @@ is natural. It's still a soft, model-judged guard.
 - **Revisit:** if a slice starts needing another slice's internals, move them to the shared place for their role
   (`values.py`, `models.py`, `domain/`, a helper beside the slices) instead of importing one slice from another. A
   slice may import another slice's message only to send it through the bus.
+
+---
+
+## Rules for AI agents
+
+### D176. AGENTS.md states the rules every change must follow
+- **What:**
+  - `AGENTS.md` at the repository root holds the rules this codebase is built by. It covers the working agreement
+    (commit and push only when asked, no automated tests, secrets, no live model calls without permission, review
+    before handing over), the backend and web architecture, the module and feature layouts, the code and
+    inline-documentation rules, testability, and a definition of done with the exact commands.
+  - It is the convention several AI coding tools read. `CLAUDE.md` imports it (`@AGENTS.md`), so Claude Code reads
+    the same rules, from one source.
+  - `docs/architecture.md`'s checks gain scan 6: each module package imports on its own. Since D175 a package also
+    loads its slices, so this catches an import cycle between modules the moment one appears.
+- **Why:** later features should follow what the codebase already does without anyone repeating it in every request.
+  Rules written down once, next to the code, apply to every agent and every session.
+- **Keeping it current:** a new rule for how the code is built is added to `AGENTS.md` in the same change as its
+  decision and docs. `AGENTS.md` summarises; `docs/` keeps the reasoning.
+

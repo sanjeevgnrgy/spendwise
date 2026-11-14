@@ -138,6 +138,7 @@ flowchart TD
 | | [**Backend Onboarding**](./docs/backend_onboarding.md) | Working in the backend: adding a command, query, route, migration or MCP tool, step by step. |
 | | [**Frontend Onboarding**](./docs/frontend_onboarding.md) | Working in the web app: feature slices, TanStack Query, the generated client, the A2UI renderer. |
 | | [**Web README**](./web/README.md) | The web app's scripts and folders. |
+| | [**Rules for AI agents**](./AGENTS.md) | The rules every change must follow, for AI coding agents and people alike: architecture, layout, documentation, verification, the working agreement. |
 | **Contracts, Schema & Security** | [**API Endpoints**](./docs/api_endpoints.md) | Every REST route, the AG-UI stream, MCP tools and resources, the error format, with examples. |
 | | [**Database Schema**](./docs/database_schema.md) | Tables, columns, indexes, which module owns what, and the migrations. |
 | | [**Configuration**](./docs/configuration.md) | Every setting (backend `.env`, web `.env`), defaults, and the generated contract. |

@@ -416,4 +416,9 @@ $assistant | Where-Object FullName -NotMatch '\\assistant\\api\\' | Select-Strin
 $assistant | Where-Object FullName -NotMatch '\\assistant\\(api|application)\\' |
   Select-String -Pattern 'assistant\.application\b'
 
+# 6. Each module package imports on its own, in a fresh interpreter. Expect no output. An error here usually means
+#    an import cycle between modules (importing a package also loads its slices, D175).
+foreach ($m in "categories", "conversations", "expenses", "mcp", "assistant") {
+  .\.venv\Scripts\python.exe -c "import sys; sys.path.insert(0, 'backend'); import app.modules.$m"
+}
 ```

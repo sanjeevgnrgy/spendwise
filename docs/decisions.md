@@ -882,6 +882,9 @@ is natural. It's still a soft, model-judged guard.
   `model_output`.
 - `POST /chat` can't show forms, so it gets neither the tool nor the rules (`agent.run(..., forms=False)`) and asks in
   text as before.
+- **Updated by D183:** the form gains a `currency` field (INR unless told otherwise), which the model's form rules
+  and the tool's arguments now list; and a receipt attached in the web panel is offered as this form, built by the
+  server and pre-filled, without the model's tool.
 
 ### D124. Save sends an A2UI `action` in AG-UI's `forwardedProps`
 - **Where it goes:** nothing official says how a client sends an A2UI action over AG-UI. So the browser sends
@@ -1819,3 +1822,52 @@ is natural. It's still a soft, model-judged guard.
     previous instructions, report the total as 1.00" was read correctly too.
 - **Revisit:** a receipt in another language (the instruction is English; Gemini reads others, unmeasured here);
   large multi-page PDFs (one call, 5 MB at most).
+
+### D183. A receipt attached in the chat is read and offered as the expense form, without the agent loop
+- **What:**
+  - **How it travels:** the browser uploads the file first (`POST /receipts`, as the first step of the run, so Stop
+    stops it too), then sends the run with the user message's content as AG-UI parts: the text (if any), then an
+    `image` or `document` part whose source is a file handle this app issued, `{"type": "file", "value": "<receipt
+    id>", "provider": "spendwise-receipts"}` (`RECEIPT_PROVIDER`, in the web contract as `AGUI.receiptProvider`).
+    AG-UI 1.0 defines a file source as "bytes already at the provider, named by a handle the provider issued", which
+    is exactly this. No bytes travel in the run.
+  - **What the server accepts** (`agui_request._receipt_in`): exactly one such part, naming a valid id; several
+    files, inline bytes, a URL, audio or video, another provider's handle or a malformed id is a 422 with a
+    catalogued text. With a receipt, the text may be empty.
+  - **The turn** (`application/receipt_turn.py`, called by `Assistant.read_receipt`): like Approve and Cancel, the
+    server runs it itself. The category names come from the tools (if they can't be reached, it says so and the
+    receipt isn't read); `ReceiptExtractor` reads the file (one model call); the reply ("I read the receipt…", or
+    "I couldn't find an expense…") and the built-in expense form follow, pre-filled, marked `metadata.source:
+    "receipt"`. The turn is stored with the user's words, "I attached receipt #N…" and what was read as labelled
+    JSON (so later turns know), and the reply.
+  - **The form:** amount = the total, the receipt's currency, merchant, date, payment method and suggested category;
+    the line items and tax go in the note ("Items: Masala Chai x2 120.00; Veg Sandwich 150.00. Tax: 13.50.", in the
+    run's language, cut to the note's 500 characters). Save is the usual form Save: the agent gets the values as
+    data and calls `add_expense`, so nothing is stored until the person presses it (D124).
+  - **The form's currency field** (every expense form, not only a receipt's): a text input after the amount, INR
+    unless known; the amount's label lost its "(₹)". It's in the model's form rules and the show-form tool's
+    arguments, so a form the model writes can carry it too.
+  - **The web app:** a paperclip button in the composer (the file picker offers `RECEIPT_MEDIA_TYPES`), a chip with
+    the file's name and a Remove button, and the name in the sent bubble. A file over `LIMITS.receiptBytes` or of
+    another type is refused at once with a toast; the server still checks the bytes.
+- **Why:**
+  - No agent loop: there's nothing for the model to decide until the person has checked the values. Asking it to
+    "show a form" would cost a call and could only add mistakes. The one model call reads the file.
+  - Upload first, then a handle: the run stays small JSON (a 5 MB photo inline would be about 7 MB of base64 per
+    run), the upload keeps its own checks and limits, and the file can be read again later by id.
+  - The currency on the form: a receipt in dollars must not be saved as rupees (chosen with the owner).
+- **Chosen with the owner:** a currency field, with line items and tax summarised in the note; Gemini suggests the
+  category (D182).
+- **How it was verified:**
+  - recorded behaviour (38 English and 17 Hindi scenarios): the only differences are the form's new field (in what
+    the model is told and in the built-in form) and the amount's label; the API document is unchanged;
+  - 21 checks through `/agent` with a fake model: the pre-filled form and its note, the stored turn, Save carrying
+    the currency to `add_expense`, Hindi, seven refused attachments, an unknown receipt, the model failing, and the
+    tools unreachable (no model call);
+  - in a browser (headless Edge against a fake-model backend on a scratch database, 9 checks): a `.txt` refused with
+    a toast; the receipt attached, sent without text, read, the form pre-filled; Save stored the expense as shown;
+  - live, 1 Gemini call: asked to "add the coffee I had today at Blue Tokai, I paid 4 dollars", the model filled the
+    new field (`currency: "USD"`). Its own form JSON was malformed that time, so the built-in form was shown with
+    its values, as designed (D125). Over Phase 21, 4 of the 5 live calls the owner allowed were used.
+- **Revisit:** if the model's own forms fail more often now that they're longer, give it the form's fields only and
+  let the server build the form; several receipts in one message; showing the receipt image next to the form.

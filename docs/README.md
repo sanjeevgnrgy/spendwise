@@ -25,7 +25,7 @@ it's built that way.
 | [assistant_architecture.md](assistant_architecture.md) | The agent loop, tools over MCP, AG-UI streaming, A2UI cards and forms, approvals, memory, cost |
 | [how_spendwise_works.md](how_spendwise_works.md) | The main flows as diagrams: adding an expense, the Dashboard, asking, deleting with approval, staying in sync |
 | [architecture-review.md](architecture-review.md) | Every finding of the architecture review and the two code reviews, and how each was resolved |
-| [decisions.md](decisions.md) | Every design decision (D1–D182), with why, and when to revisit it |
+| [decisions.md](decisions.md) | Every design decision (D1–D183), with why, and when to revisit it |
 
 ## Developer guides
 
@@ -77,7 +77,7 @@ it, and design questions with their answers (collapsed). Later changes are noted
 | [phases/phase-18-insight-cards.md](phases/phase-18-insight-cards.md) | Human in the loop and which actions deserve it, Approve/Cancel enforced by the server, a custom catalog for Chart and Stat |
 | [phases/phase-19-languages.md](phases/phase-19-languages.md) | Translating a web app: namespaces and keys, plurals and placeholders, loading a language on demand, numbers and dates per locale, English and Hindi |
 | [phases/phase-20-languages-server.md](phases/phase-20-languages-server.md) | The server's side of translation: Accept-Language, typed catalogs checked at startup, errors written where the response is built, CLDR money and dates, telling the model which language to reply in |
-| [phases/phase-21-receipts.md](phases/phase-21-receipts.md) | Receipt scanning. Part 1: the receipts module (uploads checked by their bytes, files kept apart from the database, Gemini reading an image or a PDF into a schema, the receipt's text treated as data) |
+| [phases/phase-21-receipts.md](phases/phase-21-receipts.md) | Receipt scanning: the receipts module (uploads checked by their bytes, files kept apart from the database, Gemini reading an image or a PDF into a schema, the receipt's text treated as data), and a receipt attached in the chat offered as the expense form to confirm |
 | [phases/refactor-solid.md](phases/refactor-solid.md) | SOLID in practice (surfaces instead of flags, tool and component registries, narrow ports), testability seams and how behaviour was recorded, scalability work and limits |
 | [phases/refactor-architecture.md](phases/refactor-architecture.md) | CQRS and the unit of work, ports and adapters, feature slices, migrations, the generated contract; then the code-review fixes (versions, transactional SQLite) |
 

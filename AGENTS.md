@@ -2,7 +2,7 @@
 
 Rules for AI coding agents, and anyone else, changing SpendWise. They describe how this codebase is built: a change
 that doesn't follow them isn't finished. The reasoning behind each rule is in [docs/](docs/README.md). Read the linked
-doc before working in an area, and check [decisions.md](docs/decisions.md) (D1–D182) before changing a settled choice.
+doc before working in an area, and check [decisions.md](docs/decisions.md) (D1–D183) before changing a settled choice.
 
 | Before you change… | Read |
 |---|---|

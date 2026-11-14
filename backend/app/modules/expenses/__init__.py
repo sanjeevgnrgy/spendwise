@@ -10,7 +10,8 @@ Inside, each command and each query is one file holding the message, its handler
 the write side's repository). This file only re-exports the contract names from those files.
 
 Who uses it: the MCP server (every command and query, behind its tools), the assistant (PaymentMethod
-and payment_method_label for its forms) and seed.py (CreateExpense, ListExpenses).
+and payment_method_label for its forms, MAX_NOTE_LENGTH for a receipt's note), the receipts module (PaymentMethod,
+in what a receipt is read into) and seed.py (CreateExpense, ListExpenses).
 """
 
 from app.modules.expenses.commands.create_expense import CreateExpense
@@ -22,10 +23,11 @@ from app.modules.expenses.queries.get_expense import GetExpense
 from app.modules.expenses.queries.get_monthly_summary import CategoryTotal, GetMonthlySummary, MonthlySummary
 from app.modules.expenses.queries.get_monthly_trend import GetMonthlyTrend, MonthlyTrend, MonthTotal
 from app.modules.expenses.queries.list_expenses import ListExpenses
-from app.modules.expenses.values import MAX_LIST_LIMIT, ExpenseId, PaymentMethod
+from app.modules.expenses.values import MAX_LIST_LIMIT, MAX_NOTE_LENGTH, ExpenseId, PaymentMethod
 
 __all__ = [
     "MAX_LIST_LIMIT",
+    "MAX_NOTE_LENGTH",
     "CategoryTotal",
     "CreateExpense",
     "DeleteExpense",

@@ -68,11 +68,14 @@ NO_TOOL_CONTENT = ""
 def _events_for(
     request: AgentRequest, assistant: Assistant, today: date, language: Language
 ) -> Iterator[AgentEvent]:
-    """Which use case this run is: a decision on a delete card, or a message (typed, or a form's Save)."""
+    """Which use case this run is: a decision on a delete card, a receipt to read, or a message (typed, or a form's
+    Save)."""
     if request.decision is not None:
         approved = request.decision.name == a2ui.ActionName.APPROVE_DELETE
         return assistant.decide(request.thread_id, request.decision.surface_id, approved=approved, language=language)
     assert request.text is not None  # read_request sets exactly one of the two
+    if request.receipt_id is not None:
+        return assistant.read_receipt(request.thread_id, request.receipt_id, request.text, today, language)
     # AG-UI clients name their threads themselves, so an unknown id starts a new conversation.
     return assistant.run_turn(request.thread_id, request.text, today, language)
 

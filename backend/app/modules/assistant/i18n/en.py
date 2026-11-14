@@ -43,6 +43,7 @@ class ChatText(StrEnum):
     # The expense form (a2ui/forms.py)
     FORM_TITLE = "form.title"
     FORM_AMOUNT = "form.amount"
+    FORM_CURRENCY = "form.currency"
     FORM_CATEGORY = "form.category"
     FORM_MERCHANT = "form.merchant"
     FORM_DATE = "form.date"
@@ -78,6 +79,11 @@ class ChatText(StrEnum):
     TOO_MANY_STEPS = "replies.tooManySteps"
     FORM_SHOWN = "replies.formShown"
     TOOLS_UNAVAILABLE = "replies.toolsUnavailable"
+    # A receipt attached in the web panel (application/receipt_turn.py): the reply, and the note it pre-fills
+    RECEIPT_READ = "replies.receiptRead"
+    RECEIPT_NOTHING_FOUND = "replies.receiptNothingFound"
+    RECEIPT_ITEMS = "receipt.items"
+    RECEIPT_TAX = "receipt.tax"
     STALE_APPROVAL = "replies.staleApproval"
     CANCELLED = "replies.cancelled"
     CHANGED_SINCE = "replies.changedSince"
@@ -92,6 +98,8 @@ class ChatText(StrEnum):
     NO_USER_MESSAGE = "errors.noUserMessage"
     MESSAGE_LENGTH = "errors.messageLength"
     INVALID_ACTION = "errors.invalidAction"
+    ONE_RECEIPT = "errors.oneReceipt"
+    INVALID_ATTACHMENT = "errors.invalidAttachment"
     THREAD_ID_LENGTH = "errors.threadIdLength"
     FORM_TOO_LONG = "errors.formTooLong"
 
@@ -126,7 +134,8 @@ EN: dict[ChatText, TextValue] = {
     ChatText.LIST_ROW_DETAILS: "{ref} · {category} · {date}",
     ChatText.LIST_MORE: "Showing the newest {shown} of {total}",
     ChatText.FORM_TITLE: "Add an expense",
-    ChatText.FORM_AMOUNT: "Amount (₹)",
+    ChatText.FORM_AMOUNT: "Amount",
+    ChatText.FORM_CURRENCY: "Currency (e.g. INR)",
     ChatText.FORM_CATEGORY: "Category",
     ChatText.FORM_MERCHANT: "Merchant",
     ChatText.FORM_DATE: "Date",
@@ -163,6 +172,13 @@ EN: dict[ChatText, TextValue] = {
         "Sorry, that took too many steps, so I stopped. Could you try a simpler or more specific request?"
     ),
     ChatText.FORM_SHOWN: "Please check the details in the form and press Save.",
+    ChatText.RECEIPT_READ: "I read the receipt. Check the details, fill in anything missing, and press Save.",
+    ChatText.RECEIPT_NOTHING_FOUND: (
+        "I couldn't find an expense on that file. Fill in the form yourself, or try a clearer photo."
+    ),
+    # The note a receipt pre-fills: its line items as printed ({items}), then its tax ({tax}, as printed).
+    ChatText.RECEIPT_ITEMS: "Items: {items}.",
+    ChatText.RECEIPT_TAX: "Tax: {tax}.",
     ChatText.TOOLS_UNAVAILABLE: (
         "Sorry, I can't reach the expense tools right now, so I can't look up or change anything. "
         "Please try again in a moment."
@@ -194,6 +210,9 @@ EN: dict[ChatText, TextValue] = {
     ChatText.NO_USER_MESSAGE: "The run has no user message to answer.",
     ChatText.MESSAGE_LENGTH: "The message must be 1 to {max} characters long.",
     ChatText.INVALID_ACTION: "The button's action isn't valid.",
+    ChatText.ONE_RECEIPT: "Attach one receipt at a time.",
+    # An attachment that isn't an uploaded receipt (sent inline or by URL, from another service, a bad id).
+    ChatText.INVALID_ATTACHMENT: "The attachment isn't a receipt uploaded to this app. Upload it first.",
     ChatText.THREAD_ID_LENGTH: "threadId must be 1 to {max} characters long.",
     ChatText.FORM_TOO_LONG: "The form's values must be under {max} characters in total.",
 }

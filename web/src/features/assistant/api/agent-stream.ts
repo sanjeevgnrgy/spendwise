@@ -3,7 +3,7 @@
 // agent endpoint. model/use-agent-run.ts calls `runAgent` (injectable, see RunAgent); the model files use its
 // types.
 
-import { EventType, type Event as AgentEvent, type RunAgentInput } from "@ag-ui/core"
+import { EventType, type Event as AgentEvent, type RunAgentInput, type UserMessage } from "@ag-ui/core"
 import { EventSchemas } from "@ag-ui/core/schemas"
 
 import { A2UI, AGUI } from "@/shared/api/contracts.gen"
@@ -16,17 +16,23 @@ import { newId } from "@/shared/lib/ids"
 
 import type { A2uiAction } from "../a2ui/protocol"
 import { assistantTexts } from "../i18n"
+import { receiptPart, uploadReceipt, type Receipt } from "./receipts"
 import { connectionLostMessage, sseData } from "./sse"
 
 /** One AG-UI event, as validated by @ag-ui/core. */
 export type { AgentEvent }
 
-/** What starts a run: something typed, or a button's click (an A2UI `action`). */
-export type AgentPrompt = { text: string } | { action: A2uiAction }
+/**
+ * What starts a run: something typed (possibly empty, with a receipt `file` attached), or a button's click (an A2UI
+ * `action`).
+ */
+export type AgentPrompt = { text: string; file?: File } | { action: A2uiAction }
 
 // Checked against the API's paths, like every other call (a typo is a compile error).
 const AGENT_PATH = "/api/v1/agent" satisfies keyof paths
 const USER_ROLE = "user"
+// AG-UI's text content part (a receipt travels as a media part: receipts.ts).
+const TEXT_PART = "text"
 
 // The message when an event can't be read. A function, so it's written in the language on when that happens.
 function notUnderstoodMessage(): string {
@@ -44,16 +50,30 @@ export class AgentRunError extends UserFacingError {
 }
 
 /**
+ * A user message's content: the text alone, or (with a receipt) the text, if any, then the receipt as an image or
+ * document part pointing at the uploaded file. The server reads the file it holds; no bytes travel here.
+ */
+export function messageContent(text: string, receipt?: Receipt): UserMessage["content"] {
+  if (!receipt) return text
+  return text ? [{ type: TEXT_PART, text }, receiptPart(receipt)] : [receiptPart(receipt)]
+}
+
+/**
  * AG-UI's run input. The browser names the thread; the server only needs the newest message, because it keeps
  * the conversation's history itself. `dataVersion` is the shared state as this browser knows it: the server
- * sends it back, raised, when data changed.
+ * sends it back, raised, when data changed. `receipt` is the prompt's file, already uploaded.
  */
-export function runInput(threadId: string, prompt: AgentPrompt, dataVersion: number): RunAgentInput {
+export function runInput(
+  threadId: string,
+  prompt: AgentPrompt,
+  dataVersion: number,
+  receipt?: Receipt,
+): RunAgentInput {
   return {
     threadId,
     runId: newId(),
     state: { [AGUI.stateDataVersion]: dataVersion },
-    messages: "text" in prompt ? [{ id: newId(), role: USER_ROLE, content: prompt.text }] : [],
+    messages: "text" in prompt ? [{ id: newId(), role: USER_ROLE, content: messageContent(prompt.text, receipt) }] : [],
     tools: [],
     context: [],
     // A click is an A2UI action message. AG-UI has no official place for one, so it goes in
@@ -77,15 +97,17 @@ export function parseEvent(data: string): AgentEvent {
   return parsed.data
 }
 
-// Sends the run and returns the answer's body, decoded to text. Anything that fails while sending is an
-// ApiError (unreachableError()), unless it was stopped. Problems found before the stream starts (like a malformed
-// body) are ordinary HTTP problems: an ApiError with the problem's message.
+// Sends the run and returns the answer's body, decoded to text. An attached file is uploaded first (so Stop stops
+// that too). Anything that fails while sending is an ApiError (unreachableError()), unless it was stopped. Problems
+// found before the stream starts (a refused file, a malformed body) are ordinary HTTP problems: an ApiError with the
+// problem's message.
 async function startRun(
   threadId: string,
   prompt: AgentPrompt,
   dataVersion: number,
   signal?: AbortSignal,
 ): Promise<ReadableStream<string>> {
+  const receipt = "file" in prompt && prompt.file ? await uploadReceipt(prompt.file, signal) : undefined
   let response: Response
   try {
     // fetch, not EventSource: EventSource can only send GET requests, and a run needs a POST body.
@@ -94,7 +116,7 @@ async function startRun(
       // The run's language: the server writes its cards, progress labels and errors in it, and the model replies in
       // it.
       headers: { "Content-Type": "application/json", Accept: "text/event-stream", ...languageHeaders() },
-      body: JSON.stringify(runInput(threadId, prompt, dataVersion)),
+      body: JSON.stringify(runInput(threadId, prompt, dataVersion, receipt)),
       signal,
     })
   } catch (error) {

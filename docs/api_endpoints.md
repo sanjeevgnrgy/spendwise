@@ -296,8 +296,23 @@ The same agent, streamed. The web app's chat panel uses this one. The request is
   message is read: the server keeps the history.
 - A button click (a form's Save, a card's Approve or Cancel) goes in `forwardedProps.a2uiAction` as an A2UI `action`
   message instead of a message.
-- Problems found before streaming starts (bad thread id, no message, an invalid action) are ordinary **422 problem**
-  responses. Once streaming has started, a failure is a `RUN_ERROR` event.
+- **A receipt** goes in the message's content, after its text (which may then be empty), as one `image` or
+  `document` part pointing at a receipt uploaded first (`POST /receipts`). The run then reads it and answers with
+  the expense form, pre-filled (no agent loop):
+
+  ```json
+  {"id": "m1", "role": "user", "content": [
+    {"type": "text", "text": "team lunch"},
+    {"type": "image",
+     "source": {"type": "file", "value": "12", "provider": "spendwise-receipts", "mimeType": "image/jpeg"}}
+  ]}
+  ```
+
+  Only this is accepted: one part, a `file` source with that provider, a valid receipt id. Several files, bytes sent
+  inline or by URL, audio or video, or another provider's handle are a 422. An unknown receipt is a `RUN_ERROR`
+  (`not-found`).
+- Problems found before streaming starts (bad thread id, no message, an invalid action or attachment) are ordinary
+  **422 problem** responses. Once streaming has started, a failure is a `RUN_ERROR` event.
 
 The answer is `text/event-stream`, one AG-UI event per `data:` line, plus a `: ping` comment every 15 s:
 
@@ -309,7 +324,7 @@ The answer is `text/event-stream`, one AG-UI event per `data:` line, plus a `: p
 | `TOOL_CALL_ARGS` / `TOOL_CALL_END` | the arguments' JSON; END means "complete", not "run" |
 | `TOOL_CALL_RESULT` | that the tool ran, and `metadata.ok`; `content` is empty (the tool's text is for the model) |
 | `STATE_SNAPSHOT` | `{"dataVersion": n}` after a tool changed data: the pages reload |
-| `CUSTOM` named `a2ui` | an A2UI message: a card, a form (with `metadata.source`: `model` or `fallback`), or an Approve/Cancel card |
+| `CUSTOM` named `a2ui` | an A2UI message: a card, a form (with `metadata.source`: `model`, `fallback` or `receipt`), or an Approve/Cancel card |
 | `RUN_ERROR` | `message` (written for people, in the request's language) and `code`, the problem kind as in a problem's `type` (`external-service`, `not-found`, `business-rule`, `internal`) |
 
 To watch it raw:

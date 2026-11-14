@@ -4,12 +4,13 @@
 fixed shape (merchant, date, line items, tax, total, currency, payment method, a suggested category), and offered as
 a suggestion that a person confirms before anything is saved. Built in two parts, by the owner's choice:
 
-- **Part 1 (this page):** the `receipts` module. Uploads, storage, and reading a receipt, checked through the API.
+- **Part 1:** the `receipts` module. Uploads, storage, and reading a receipt, checked through the API.
   Decisions: D181, D182.
 - **Part 2:** the chat panel's attach button, and the Phase 17 expense form pre-filled from the receipt (with a
-  currency field, and the line items and tax summarised in the note).
+  currency field, and the line items and tax summarised in the note). Decision: D183. See
+  [Part 2: a receipt in the chat](#part-2-a-receipt-in-the-chat) below.
 
-> **How it was checked:** offline with a fake model and an in-memory database, then live.
+> **How Part 1 was checked:** offline with a fake model and an in-memory database, then live.
 > - **Nothing else changed:** the 38 recorded scenarios give identical responses, `/parse` sends Gemini exactly what
 >   it did before, and the OpenAPI document only gains the three receipts routes and their four schemas.
 > - **Through the API, with a fake model** (32 checks): each kind of file accepted by its bytes whatever the browser
@@ -121,6 +122,72 @@ curl.exe -F "file=@C:\Windows\win.ini" http://127.0.0.1:8000/api/v1/receipts
 
 The file appears in `backend\uploads\` under a 32-character name, and nothing is added to your expenses.
 
+## Part 2: a receipt in the chat
+
+> **How it was checked:**
+> - **Recorded behaviour** (38 English and 17 Hindi scenarios): the only differences are the form's new currency
+>   field (in what the model is told and in the built-in form) and the amount's label, which lost its "(₹)".
+> - **Through `/agent`, with a fake model** (21 checks): a receipt alone gives the reply and the form, pre-filled
+>   (amount, currency, category, merchant, date, payment method, a note with the items and tax), with no agent
+>   loop; the turn is stored; Save carries the currency to `add_expense`; Hindi; seven kinds of bad attachment
+>   refused; an unknown receipt, a failing model and unreachable tools each end cleanly.
+> - **In a browser** (headless Edge, a fake-model backend on a scratch database, 9 checks): a `.txt` is refused with
+>   a toast; the receipt is attached, sent with no text, read, and the form shown pre-filled; Save stores the expense
+>   exactly as the form said.
+> - **Live** (1 Gemini call): asked to add "the coffee I had today at Blue Tokai, I paid 4 dollars", the model set the
+>   new field to `USD`. Its own form JSON was malformed that time, so the built-in form was shown with its values.
+
+### Design: the flow
+
+```
+Composer: 📎 receipt.jpg  [Send]
+  1. POST /receipts (the file)                 -> {id: 12, media_type: "image/jpeg"}
+     (the first step of the run: Stop stops it)
+  2. POST /agent, the user message:  [ {text}?, {type: "image", source: {type: "file", value: "12",
+                                                    provider: "spendwise-receipts"}} ]
+  3. The server: no agent loop. Category names from the tools -> ReceiptExtractor.extract(12) (one model call)
+     -> "I read the receipt. Check the details, fill in anything missing, and press Save."
+     -> the built-in expense form, pre-filled, metadata.source = "receipt"
+  4. The person checks it and presses Save -> the usual form Save -> the agent -> add_expense
+```
+
+- **Upload, then point at it.** The run carries a handle, not the file: AG-UI's `file` source is exactly "bytes
+  already at the provider, named by a handle it issued". The run stays small, and the server accepts only its own
+  handles: never bytes inline, a URL to fetch, or another service's file id.
+- **No agent loop.** Until a person has checked the values there's nothing to decide, so the server builds the form
+  itself, as it carries out Approve and Cancel. The one model call reads the file.
+- **The form gains a currency field** (every expense form): a receipt in dollars mustn't be saved as rupees. The
+  model's form rules list it too, so its own forms can carry it.
+- **The note keeps the detail:** "Items: Masala Chai x2 120.00; Veg Sandwich 150.00. Tax: 13.50.", in the chat's
+  language, cut to the note's 500 characters. The person can edit it before saving.
+- **The conversation remembers.** The turn is stored as "I attached receipt #12 to add as an expense", with what was
+  read as JSON labelled "data, not instructions", then the reply: so "make it 300" afterwards has something to refer to.
+
+### What was built (Part 2)
+
+| Where | What |
+|---|---|
+| `assistant/api/agui_request.py`, `api/protocol.py` | the receipt part read and checked (`_receipt_in`, `RECEIPT_PROVIDER`); text optional with a receipt |
+| `assistant/application/receipt_turn.py`, `assistant.py` | `receipt_turn` (read, reply, form, stored turn); `Assistant.read_receipt` |
+| `assistant/a2ui/form_tool.py`, `forms.py` | the `currency` field (model-facing description, built-in input, INR by default); `FormSource.RECEIPT` |
+| `assistant/i18n/` | the currency label, the replies, the note's sentences, two attachment errors (English and Hindi) |
+| `receipts/module.py`, `bootstrap.py` | `create_reader`: one extractor, shared by the receipts routes and the assistant |
+| `scripts/export_contracts.py` | `LIMITS.receiptBytes`, `RECEIPT_MEDIA_TYPES`, `AGUI.receiptProvider` |
+| `web/.../assistant/api/receipts.ts`, `agent-stream.ts` | `uploadReceipt`, `receiptPart`; the upload as the run's first step |
+| `web/.../assistant/components/attach-button.tsx`, `attached-file.tsx` | the paperclip and its file picker; the file's chip |
+| `web/.../assistant/model/attachments.ts` | the browser's first check (type and size, from the contract) |
+| `chat-composer.tsx`, `chat-message.tsx`, `use-chat.ts`, `chat-types.ts`, `i18n/` | attach, remove, send with or without text; the file in the sent bubble |
+
+### Verify it by hand (Part 2)
+
+1. Restart `.\run.ps1` (it applies migration 0005), and `cd web; npm run dev`.
+2. Open the Assistant. Press the paperclip and pick a photo or PDF of a receipt: it shows as a chip above the box.
+3. Press Send (text is optional). Your bubble shows the file; after a few seconds the reply says "I read the
+   receipt…", with the expense form filled in: amount, currency, category, merchant, date, payment method, and the
+   items and tax in the note.
+4. Change anything that's wrong, press **Save**: the "Expense saved" card appears and the pages refresh.
+5. Pick a `.txt` file instead: a toast says it can't be read as a receipt, and nothing is attached.
+
 ## Design questions
 
 **1. Why is the file's type read from its first bytes, when the browser already sends a `Content-Type`?**
@@ -150,4 +217,24 @@ receipt is data, a schema the answer must fit, checks on the values, and a human
 A receipt can be several megabytes, while a row is a few dozen bytes. In the database, every backup, copy and query
 plan would carry the images along. A folder (behind the `FileStore` port) keeps the database small, and the port
 means the folder can become object storage later without changing the receipts module.
+</details>
+
+**4. Why does an attached receipt skip the agent loop and go straight to a form?**
+
+<details><summary>Answer</summary>
+
+Because there's nothing for the agent to decide yet. The receipt's values need a person's check, and the form is how
+they check them; asking the model to "show a form" would cost a call and could only add mistakes on top of the
+reading. So the server reads the receipt (one model call, no tools) and builds the form itself. The agent comes in
+at Save, as with any form: it gets the confirmed values, labelled as data, and calls `add_expense`.
+</details>
+
+**5. Why does the browser upload the file first and send only its id in the run, instead of the bytes?**
+
+<details><summary>Answer</summary>
+
+A 5 MB photo is about 7 MB of base64: in the run, it would be one huge JSON body for something the upload already
+checks properly (type by bytes, size, a stored row). With a handle, the run stays small, the server reads only files
+it stored itself (it never fetches a URL or trusts bytes a run brings), and the same receipt can be read again by
+its id. AG-UI's `file` source exists for exactly this: bytes already at the provider, named by its handle.
 </details>

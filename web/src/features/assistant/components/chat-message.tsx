@@ -8,6 +8,7 @@ import { cn } from "@/shared/lib/utils"
 import { A2uiSurfaceView } from "../a2ui/a2ui-surface"
 import type { A2uiRenderContext } from "../a2ui/protocol"
 import type { ChatMessage } from "../model/chat-types"
+import { AttachedFile } from "./attached-file"
 import { ToolChip } from "./tool-chip"
 
 interface ChatMessageBubbleProps {
@@ -19,8 +20,9 @@ interface ChatMessageBubbleProps {
 }
 
 /**
- * One bubble: yours on the right, the assistant's on the left. The assistant's tool chips come first, then its
- * cards or forms (they arrive with a tool's result), then its text, because the tools run before it answers.
+ * One bubble: yours on the right (with the receipt you attached, if any), the assistant's on the left. The
+ * assistant's tool chips come first, then its cards or forms (they arrive with a tool's result), then its text,
+ * because the tools run before it answers. A message with no text (a receipt sent alone) shows no text box.
  *
  * Memoised: while a reply streams, only its own bubble draws again, not every earlier bubble and card (charts
  * included). That needs stable `onFormChange` and `onFormSubmit` functions, which useChat provides.
@@ -60,7 +62,9 @@ export const ChatMessageBubble = memo(function ChatMessageBubble({
         </div>
       )}
 
-      {(isUser || message.text) && (
+      {message.attachment && <AttachedFile name={message.attachment} />}
+
+      {message.text && (
         <div
           className={cn(
             "max-w-[85%] rounded-lg px-3 py-2 text-sm wrap-break-word whitespace-pre-wrap",

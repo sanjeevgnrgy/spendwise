@@ -38,8 +38,16 @@ export const LIMITS = {
   "listDefault": 100,
   "listMax": 500,
   "trendMonthsDefault": 6,
-  "trendMonthsMax": 24
+  "trendMonthsMax": 24,
+  "receiptBytes": 5242880
 } as const
+
+export const RECEIPT_MEDIA_TYPES = [
+  "image/jpeg",
+  "image/png",
+  "image/webp",
+  "application/pdf"
+] as const
 
 export const A2UI = {
   "version": "1.0",
@@ -89,6 +97,7 @@ export const AGUI = {
   },
   "forwardedA2uiAction": "a2uiAction",
   "stateDataVersion": "dataVersion",
+  "receiptProvider": "spendwise-receipts",
   "metadata": {
     "ok": "ok",
     "labels": "labels",

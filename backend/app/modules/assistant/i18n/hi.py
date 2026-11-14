@@ -34,7 +34,8 @@ HI: dict[ChatText, TextValue] = {
     ChatText.LIST_ROW_DETAILS: "{ref} · {category} · {date}",
     ChatText.LIST_MORE: "{total} में से सबसे नए {shown} दिखाए जा रहे हैं",
     ChatText.FORM_TITLE: "खर्च जोड़ें",
-    ChatText.FORM_AMOUNT: "राशि (₹)",
+    ChatText.FORM_AMOUNT: "राशि",
+    ChatText.FORM_CURRENCY: "मुद्रा (जैसे INR)",
     ChatText.FORM_CATEGORY: "श्रेणी",
     ChatText.FORM_MERCHANT: "व्यापारी",
     ChatText.FORM_DATE: "तारीख",
@@ -70,6 +71,12 @@ HI: dict[ChatText, TextValue] = {
         "क्या आप कोई आसान या ज़्यादा स्पष्ट अनुरोध आज़मा सकते हैं?"
     ),
     ChatText.FORM_SHOWN: "कृपया फ़ॉर्म में दी गई जानकारी जाँचें और सहेजें दबाएँ।",
+    ChatText.RECEIPT_READ: "मैंने रसीद पढ़ ली। जानकारी जाँचें, जो छूटा है उसे भरें, और सहेजें दबाएँ।",
+    ChatText.RECEIPT_NOTHING_FOUND: (
+        "उस फ़ाइल में मुझे कोई खर्च नहीं मिला। फ़ॉर्म ख़ुद भरें, या ज़्यादा साफ़ फ़ोटो आज़माएँ।"
+    ),
+    ChatText.RECEIPT_ITEMS: "सामान: {items}।",
+    ChatText.RECEIPT_TAX: "कर: {tax}।",
     ChatText.TOOLS_UNAVAILABLE: (
         "माफ़ कीजिए, मैं अभी खर्च के टूल तक नहीं पहुँच पा रहा हूँ, इसलिए कुछ भी देख या बदल नहीं सकता। "
         "कृपया थोड़ी देर में फिर से कोशिश करें।"
@@ -96,6 +103,8 @@ HI: dict[ChatText, TextValue] = {
     ChatText.NO_USER_MESSAGE: "इस रन में जवाब देने के लिए उपयोगकर्ता का कोई संदेश नहीं है।",
     ChatText.MESSAGE_LENGTH: "संदेश 1 से {max} अक्षरों तक का होना चाहिए।",
     ChatText.INVALID_ACTION: "बटन की कार्रवाई मान्य नहीं है।",
+    ChatText.ONE_RECEIPT: "एक बार में एक ही रसीद जोड़ें।",
+    ChatText.INVALID_ATTACHMENT: "यह अटैचमेंट इस ऐप पर अपलोड की गई रसीद नहीं है। पहले उसे अपलोड करें।",
     ChatText.THREAD_ID_LENGTH: "threadId 1 से {max} अक्षरों तक का होना चाहिए।",
     ChatText.FORM_TOO_LONG: "फ़ॉर्म के सभी मान मिलाकर {max} अक्षरों से कम होने चाहिए।",
 }

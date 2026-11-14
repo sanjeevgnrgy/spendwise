@@ -20,11 +20,12 @@ from app.core.cqrs import MessageBus
 from app.core.errors import NotFoundError
 from app.core.i18n import Language, translatable
 from app.core.llm import ToolCallingModel
-from app.modules import conversations
+from app.modules import conversations, receipts
 from app.modules.assistant.agent.agent import Agent
 from app.modules.assistant.agent.events import AgentEvent, TurnFinished
 from app.modules.assistant.agent.surfaces import Surface, TextChat, WebPanel
 from app.modules.assistant.application.decisions import approval_turn
+from app.modules.assistant.application.receipt_turn import receipt_turn
 from app.modules.assistant.approvals import ExpenseSnapshot, RequestApproval, RestoreApproval, TakeApproval
 from app.modules.assistant.tools.port import ExpenseTools
 from app.modules.mcp import ExpenseView
@@ -50,14 +51,15 @@ def new_thread_id() -> str:
 class Assistant:
     """The use cases, with what they need. Built once by the composition root.
 
-    module.create_router builds it from the bus, the tools adapter and the language model, and the routes
-    (api/routes.py) call it: run_turn and decide through api/agui_stream.py for POST /agent, chat for
-    POST /chat.
+    module.create_router builds it from the bus, the tools adapter, the language model and the receipts module's
+    extractor, and the routes (api/routes.py) call it: run_turn, read_receipt and decide through
+    api/agui_stream.py for POST /agent, chat for POST /chat.
     """
 
     bus: MessageBus
     tools: ExpenseTools
     llm: ToolCallingModel
+    receipts: receipts.ReceiptExtractor
 
     def _next_turn(self, thread_id: str) -> int:
         """The number the thread's next turn gets: 1 for a new thread."""
@@ -104,6 +106,20 @@ class Assistant:
         """
         panel = WebPanel(request_approval=lambda expense: self._request_approval(thread_id, expense))
         return self._answer(thread_id, text, today, panel, language)
+
+    def read_receipt(
+        self, thread_id: str, receipt_id: int, message: str, today: date, language: Language
+    ) -> Iterator[AgentEvent]:
+        """A receipt attached in the web panel (with `message`, possibly empty): read it and offer it as the expense
+        form, pre-filled, saving the turn when it finishes. No agent loop: a person confirms the form first.
+
+        Raises NotFoundError for an unknown receipt and LlmError if it can't be read (receipt_turn.py).
+        """
+        turn = self._next_turn(thread_id)
+        for event in receipt_turn(self.receipts, self.tools, receipt_id, message, today, language):
+            if isinstance(event, TurnFinished):
+                self._save(thread_id, turn, event)
+            yield event
 
     def decide(self, thread_id: str, approval_id: str, approved: bool, language: Language) -> Iterator[AgentEvent]:
         """Approve or Cancel on a delete card. WHAT gets deleted is the server's snapshot of that card.

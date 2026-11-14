@@ -157,7 +157,7 @@ Never fetch in a `useEffect` by hand: use a query.
 | File | Holds | Use it for |
 |---|---|---|
 | `shared/api/schema.gen.ts` | every route's types, plus enum value lists (`paymentMethodValues`) | `Schemas["ExpenseRead"]`, `paths`, enums |
-| `shared/api/contracts.gen.ts` | `API_PREFIX`, `LANGUAGES` (the server's), `LIMITS`, `PAYMENT_METHOD_LABELS` (by language), `A2UI` (catalogs, components, chart types, actions), `AGUI` (event names, metadata keys) | any value the backend also uses |
+| `shared/api/contracts.gen.ts` | `API_PREFIX`, `LANGUAGES` (the server's), `LIMITS` (including `receiptBytes`), `RECEIPT_MEDIA_TYPES`, `PAYMENT_METHOD_LABELS` (by language), `A2UI` (catalogs, components, chart types, actions), `AGUI` (event names, metadata keys, `receiptProvider`) | any value the backend also uses |
 
 Never edit them. After a backend change: run `backend\scripts\export_contracts.py`, then `npm run gen:api`.
 

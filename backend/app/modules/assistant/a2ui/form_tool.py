@@ -19,6 +19,7 @@ DATA_ROOT = "expense"
 # data model, its Save context and the tool's arguments are all built from it.
 FIELD_DESCRIPTIONS = {
     "amount": "Amount as a plain number string, e.g. '250'.",
+    "currency": "ISO 4217 currency code of the amount, e.g. 'INR' (the usual one) or 'USD'.",
     "category": "Category name.",
     "merchant": "The shop, company or person paid.",
     "spent_on": "Date as YYYY-MM-DD.",

@@ -24,12 +24,18 @@ class MetadataKey(StrEnum):
 
     OK = "ok"  # TOOL_CALL_RESULT: did the tool succeed?
     LABELS = "labels"  # TOOL_CALL_START: what the chip says (ToolLabels)
-    SOURCE = "source"  # CUSTOM a2ui form: "model" or "fallback"
+    SOURCE = "source"  # CUSTOM a2ui form: "model", "fallback" or "receipt" (a2ui.FormSource)
 
 
 # Nothing official says how an A2UI action travels over AG-UI, so the client puts the A2UI `action`
 # message in RunAgentInput.forwardedProps (AG-UI's field for extra data from the client) under this key.
 FORWARDED_A2UI_ACTION = "a2uiAction"
+
+# A receipt attached to a message is an AG-UI image or document part whose source is a file handle:
+# {"type": "file", "value": "<receipt id>", "provider": RECEIPT_PROVIDER}. The browser uploads the file first
+# (POST /receipts); AG-UI's file source is "bytes already at the provider, named by a handle it issued", and this
+# app is that provider. A handle from any other provider can't be resolved here, so it's refused.
+RECEIPT_PROVIDER = "spendwise-receipts"
 # AG-UI shared state: the client sends {"dataVersion": n} with each run and gets it back, raised,
 # after a tool changed data. A new number is what makes the pages reload.
 STATE_DATA_VERSION = "dataVersion"

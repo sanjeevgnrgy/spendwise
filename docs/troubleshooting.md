@@ -5,6 +5,12 @@ the project folder (the repo root, where `run.ps1` is) unless noted.
 
 ## Running the app
 
+### The backend stopped answering after pulling changes ("the database isn't at the latest migration")
+- **Cause:** the code expects a newer database than yours (a new migration, e.g. 0005 for receipts). The app
+  refuses to start rather than run on the wrong tables; with `--reload`, the reloaded app stops at that check while
+  the reloader keeps the port, so requests hang or fail instead of reaching an error page.
+- **Fix:** stop `run.ps1` (Ctrl+C) and start it again: it runs `alembic upgrade head` first.
+
 ### `./run.ps1 : The term './run.ps1' is not recognized...`
 - **Cause:** the terminal isn't in the project folder (the one containing `run.ps1`).
 - **Fix:** `cd` into the project folder, then `.\run.ps1`. Or call the script by its path from anywhere
@@ -125,6 +131,16 @@ is in the backend terminal (D180).
   isn't positive.
 - **Fix:** nothing is wrong; the person fills the gaps when confirming (Part 2's form). A blurred or cropped photo
   gives more `null`s.
+
+### Chat: attaching a receipt shows a toast "… can't be read as a receipt" or "… is larger than 5 MB"
+- **Cause:** the browser checks the file before uploading it: a photo (JPEG, PNG, WEBP) or a PDF, at most 5 MB.
+  An iPhone photo may be HEIC (see "Upload returns 422 …" above).
+- **Fix:** attach a JPEG or PDF of the receipt instead.
+
+### Chat: the receipt's form has empty fields, or a wrong category
+- **Cause:** whatever the receipt doesn't show clearly is left empty rather than guessed, and the category is only
+  a suggestion from your list.
+- **Fix:** fill in or change the fields, then press Save: nothing is saved before that.
 
 ## Web app
 

@@ -26,6 +26,8 @@ export interface ChatMessage {
   id: number
   role: "user" | "assistant"
   text: string
+  /** User only: the name of the receipt file sent with the message (the user's own data, shown as it is). */
+  attachment?: string
   /** Assistant only: the tools used for this reply, in order. */
   tools?: ToolActivity[]
   /** Assistant only: A2UI cards and forms sent with this reply. */
@@ -39,8 +41,11 @@ export interface ChatState {
   messages: ChatMessage[]
   /** A run is in progress: forms are locked, and Send becomes Stop. */
   sending: boolean
-  /** Sends a typed message as the next run. Resolves when the run has ended, however it ended. */
-  send: (text: string) => Promise<void>
+  /**
+   * Sends a typed message as the next run, with a receipt file if one is attached (then the text may be empty: the
+   * file is uploaded, read, and offered as the expense form). Resolves when the run has ended, however it ended.
+   */
+  send: (text: string, file?: File) => Promise<void>
   /** Stops the run in progress; what already arrived stays. */
   stop: () => void
   /** Typing in a form: the value lands in that form's data model, in the browser only. */

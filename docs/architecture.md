@@ -96,8 +96,10 @@ backend/
       assistant/         the agent, one folder per role; imports run api/ -> application/ -> the rest:
                            api/          adapters: routes.py, schemas.py (bodies), agui_request.py (AG-UI in),
                                          agui_stream.py (AG-UI out), protocol.py (names on the wire)
-                           application/  use cases: assistant.py (Assistant: run_turn, decide, chat), decisions.py
-                                         (Approve/Cancel, no model), expense_parser.py (ExpenseParser, POST /parse)
+                           application/  use cases: assistant.py (Assistant: run_turn, read_receipt, decide, chat),
+                                         decisions.py (Approve/Cancel, no model), receipt_turn.py (an attached
+                                         receipt offered as the form, no agent loop), expense_parser.py
+                                         (ExpenseParser, POST /parse)
                            agent/        the loop: agent.py (Agent.run), surfaces.py (WebPanel, TextChat: what
                                          differs by surface), prompts.py (system instruction), tool_runs.py
                                          (running a tool), events.py (what a turn yields)
@@ -198,10 +200,10 @@ at the database level. Instead, `CreateExpense`'s handler asks `categories.GetCa
 | Module | Contract (`from app.modules import <name>`) | Used by |
 |---|---|---|
 | `categories` | `CategoryRead`, `CreateCategory`, `ListCategories`, `GetCategory`, `FindCategoryByName`, `CategoryId`, `MAX_NAME_LENGTH`, `UNKNOWN_CATEGORY`, `CategoryText` (its texts' keys, e.g. `NO_CATEGORIES_YET`) | expenses, mcp, assistant, seed |
-| `expenses` | `ExpenseRead`, `ExpenseList`, `CreateExpense`, `UpdateExpense` + `ExpenseChanges`, `DeleteExpense` (with `expected_version`), `GetExpense`, `ListExpenses`, `GetMonthlySummary`, `GetMonthlyTrend` (+ their result types), `ExpenseId`, `MAX_LIST_LIMIT`, `PaymentMethod`, `payment_method_label(method, language)`, `ExpenseText` | mcp, assistant (`PaymentMethod`, labels), seed |
+| `expenses` | `ExpenseRead`, `ExpenseList`, `CreateExpense`, `UpdateExpense` + `ExpenseChanges`, `DeleteExpense` (with `expected_version`), `GetExpense`, `ListExpenses`, `GetMonthlySummary`, `GetMonthlyTrend` (+ their result types), `ExpenseId`, `MAX_LIST_LIMIT`, `MAX_NOTE_LENGTH`, `PaymentMethod`, `payment_method_label(method, language)`, `ExpenseText` | mcp, assistant (`PaymentMethod`, labels, the note's limit), receipts (`PaymentMethod`), seed |
 | `conversations` | `AppendTurn`, `GetLastTurn`, `GetHistory`, `GetThread`, `ThreadRead`, `ThreadId`, `THREAD_ID_MAX_LENGTH`, `ConversationText` (e.g. `THREAD_NOT_FOUND`) | assistant |
 | `mcp` | `ToolName`, `ResourceUri`, `SERVER_NAME`, `AUTHORIZATION_HEADER` and `BEARER_SCHEME` (how `/mcp/` is authenticated), the argument names (`EXPENSE_ID_ARGUMENT`, `CONFIRM_ARGUMENT`, `EXPECTED_VERSION_ARGUMENT`, `CLEAR_NOTE_ARGUMENT`), the typed results (`ExpenseView`, `ExpenseSaved`, `MonthSpending`, ...). The server itself (`create_server`, `create_http_app`) comes from `mcp/module.py`, for the composition root only | assistant |
-| `receipts` | `ReceiptExtractor` (reads an uploaded receipt with the model: `extract(receipt_id, today)`), `ReceiptExtraction`, `LineItem`, `ReceiptRead`, `ReceiptId`, `ReceiptMediaType`, `MAX_RECEIPT_BYTES`, `ReceiptText`. Its `module.py` gives the composition root `create_router(bus, files, llm)` | the assistant (Phase 21, part 2) |
+| `receipts` | `ReceiptExtractor` (reads an uploaded receipt with the model: `extract(receipt_id, today)`), `ReceiptExtraction`, `LineItem`, `ReceiptRead`, `ReceiptId`, `ReceiptMediaType`, `MAX_RECEIPT_BYTES`, `ReceiptText`. Its `module.py` gives the composition root `create_reader(bus, files, llm)` and `create_router(bus, files, reader)` | the assistant (reads a receipt attached in the chat) |
 | `assistant` | nothing for other modules; its `module.py` gives the composition root `create_router` and the `ExpenseTools` port type | — |
 
 Each module's `module.py` is what `bootstrap.py` plugs in: `register_handlers(bus)`, its router (or a function that

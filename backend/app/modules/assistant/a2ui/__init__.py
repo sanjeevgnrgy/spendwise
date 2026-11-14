@@ -9,8 +9,8 @@ what the model is told about the form (English); parts.py what cards and forms a
 """
 
 from app.modules.assistant.a2ui.cards import approval_card, card_for
-from app.modules.assistant.a2ui.form_tool import SHOW_FORM_TOOL, SHOW_FORM_TOOL_NAME, form_instructions
-from app.modules.assistant.a2ui.forms import FormSource, describe_action, expense_form_from_call
+from app.modules.assistant.a2ui.form_tool import FIELDS, SHOW_FORM_TOOL, SHOW_FORM_TOOL_NAME, form_instructions
+from app.modules.assistant.a2ui.forms import FormSource, describe_action, expense_form, expense_form_from_call
 from app.modules.assistant.a2ui.models import (
     MAX_USER_MESSAGE_LENGTH,
     ActionMessage,
@@ -22,6 +22,7 @@ from app.modules.assistant.a2ui.models import (
 from app.modules.assistant.a2ui.parts import expense_ref
 
 __all__ = [
+    "FIELDS",
     "MAX_USER_MESSAGE_LENGTH",
     "SHOW_FORM_TOOL",
     "SHOW_FORM_TOOL_NAME",
@@ -34,6 +35,7 @@ __all__ = [
     "approval_card",
     "card_for",
     "describe_action",
+    "expense_form",
     "expense_form_from_call",
     "expense_ref",
     "form_instructions",

@@ -1,7 +1,8 @@
-"""The expense form: shown when the user wants to add an expense but details are missing.
+"""The expense form: shown when the user wants to add an expense but details are missing, or to confirm a receipt.
 
 Presentation layer. The agent (agent/agent.py) turns the model's show-form call into a form with
-expense_form_from_call, in the request's language; api/agui_request.py writes a submitted form as the next
+expense_form_from_call, in the request's language; a receipt's turn (application/receipt_turn.py) builds the form
+with expense_form, pre-filled from what was read; api/agui_request.py writes a submitted form as the next
 message with describe_action. The show-form tool and the form rules the model is given are in form_tool.py.
 
 The model writes the form itself (as A2UI JSON, from the catalog described in its instructions).
@@ -17,6 +18,7 @@ from functools import partial
 from typing import Any
 
 from app.core.i18n import Language, text
+from app.core.money import DEFAULT_CURRENCY
 from app.modules.assistant.a2ui.form_tool import DATA_ROOT, FIELDS, FORM_ARGUMENT, field_path
 from app.modules.assistant.a2ui.models import (
     ROOT_ID,
@@ -50,10 +52,12 @@ FORM_COMPONENTS = (Card, Column, Row, Text, TextField, ChoicePicker, DateTimeInp
 
 
 class FormSource(StrEnum):
-    """Whose form the user sees: the model's own (it passed the checks), or the built-in one."""
+    """Whose form the user sees: the model's own (it passed the checks), the built-in one, or the built-in one
+    pre-filled from a receipt (application/receipt_turn.py)."""
 
     MODEL = "model"
     FALLBACK = "fallback"
+    RECEIPT = "receipt"
 
 
 def _bind(field: str) -> DataBinding:
@@ -74,6 +78,7 @@ def _inputs(category_names: list[str], language: Language) -> list[Component]:
     return [
         Text(id="title", text=t(ChatText.FORM_TITLE), variant="caption"),
         TextField(id="amount", label=t(ChatText.FORM_AMOUNT), value=_bind("amount"), variant="number"),
+        TextField(id="currency", label=t(ChatText.FORM_CURRENCY), value=_bind("currency")),
         ChoicePicker(id="category", label=t(ChatText.FORM_CATEGORY), options=categories, value=_bind("category")),
         TextField(id="merchant", label=t(ChatText.FORM_MERCHANT), value=_bind("merchant")),
         DateTimeInput(id="spent_on", label=t(ChatText.FORM_DATE), value=_bind("spent_on")),
@@ -95,8 +100,10 @@ def _inputs(category_names: list[str], language: Language) -> list[Component]:
 
 
 def _data_model(values: dict[str, Any], today: date) -> dict[str, Any]:
-    """The built-in form's starting data: what was understood (no date means today), and "" or [] for the rest."""
-    known = {"spent_on": today.isoformat(), **{key: value for key, value in values.items() if value}}
+    """The built-in form's starting data: what was understood (no date means today, no currency INR), and "" or []
+    for the rest."""
+    defaults = {"spent_on": today.isoformat(), "currency": DEFAULT_CURRENCY}
+    known = {**defaults, **{key: value for key, value in values.items() if value}}
 
     def typed(field: str) -> str:
         """A text input's starting value: what was understood, or ""."""

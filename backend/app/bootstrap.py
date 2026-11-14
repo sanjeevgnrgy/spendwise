@@ -100,16 +100,18 @@ def build(
 def api_routers(services: Services) -> list[APIRouter]:
     """Every module's REST routes. Their order is the OpenAPI document's order.
 
-    The receipts and assistant routers are built from `services` (the file store, the tools and the model). The
-    others are fixed routers that read the bus and the clock from `app.state` at request time (web/dependencies),
-    which create_app sets from the same services.
+    The receipts and assistant routers are built from `services` (the file store, the tools and the model), and share
+    one receipt reader: the receipts routes read a receipt on request, the assistant when one is attached in the
+    chat. The others are fixed routers that read the bus and the clock from `app.state` at request time
+    (web/dependencies), which create_app sets from the same services.
     """
+    reader = receipts_module.create_reader(services.bus, services.files, services.llm)
     return [
         categories_module.router,
         expenses_module.router,
         conversations_module.router,
-        receipts_module.create_router(services.bus, services.files, services.llm),
-        assistant_module.create_router(services.bus, services.tools, services.llm),
+        receipts_module.create_router(services.bus, services.files, reader),
+        assistant_module.create_router(services.bus, services.tools, services.llm, reader),
     ]
 
 

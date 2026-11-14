@@ -33,6 +33,7 @@ from app.modules.assistant.a2ui.models import (  # noqa: E402
 )
 from app.modules.assistant.api.protocol import (  # noqa: E402
     FORWARDED_A2UI_ACTION,
+    RECEIPT_PROVIDER,
     STATE_DATA_VERSION,
     CustomEventName,
     MetadataKey,
@@ -40,6 +41,7 @@ from app.modules.assistant.api.protocol import (  # noqa: E402
 from app.modules.assistant.api.schemas import MAX_MESSAGE_LENGTH  # noqa: E402
 from app.modules.conversations import THREAD_ID_MAX_LENGTH  # noqa: E402
 from app.modules.expenses import PaymentMethod, payment_method_label  # noqa: E402
+from app.modules.receipts import MAX_RECEIPT_BYTES, ReceiptMediaType  # noqa: E402
 from app.modules.expenses.values import (  # noqa: E402
     DEFAULT_LIST_LIMIT,
     DEFAULT_TREND_MONTHS,
@@ -94,7 +96,10 @@ def main() -> None:
             "listMax": MAX_LIST_LIMIT,
             "trendMonthsDefault": DEFAULT_TREND_MONTHS,
             "trendMonthsMax": MAX_TREND_MONTHS,
+            "receiptBytes": MAX_RECEIPT_BYTES,
         },
+        # The kinds of file a receipt may be (the chat's file picker offers these; the server checks the bytes).
+        "RECEIPT_MEDIA_TYPES": [media_type.value for media_type in ReceiptMediaType],
         "A2UI": {
             "version": A2UI_VERSION,
             "rootId": ROOT_ID,
@@ -116,6 +121,7 @@ def main() -> None:
             "customEvents": {"a2ui": CustomEventName.A2UI.value},
             "forwardedA2uiAction": FORWARDED_A2UI_ACTION,
             "stateDataVersion": STATE_DATA_VERSION,
+            "receiptProvider": RECEIPT_PROVIDER,
             "metadata": {key.name.lower(): key.value for key in MetadataKey},
         },
     }

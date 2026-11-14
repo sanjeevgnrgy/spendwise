@@ -67,6 +67,8 @@ behaving:
 | A huge upload | At most 5 MB is accepted: the route reads at most one byte past the limit. FastAPI (Starlette) has already spooled the upload to a temporary file by then, with no size limit of its own, so a request-size limit belongs at the proxy (below) |
 | A file left without its row (or a row without its file) | The upload deletes the file again if the row can't be added; a row whose file has gone answers 404 "upload it again" |
 | The storage key reaching a client | Only the module sees it: the API's `ReceiptRead` has no such field (D180) |
+| A chat run smuggling a file, a URL to fetch, or another service's file handle | A run may carry only a handle to a receipt uploaded here (`provider: "spendwise-receipts"`, a valid id); inline bytes, URLs, audio or video and other providers' handles are refused with a 422, so the server never fetches anything a client names (D183) |
+| What was read from a receipt steering later turns | It's stored in the conversation as JSON labelled "data, not instructions", like a form's values |
 | Runaway cost or hangs | at most 5 model calls per message, 60 s × 2 attempts per call, no retry on quota errors, 15 s per tool call, input length limits |
 
 ## The A2UI renderer

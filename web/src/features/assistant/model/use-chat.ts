@@ -25,13 +25,16 @@ export function useChat(onDataChanged: () => void, runAgentFn: RunAgent = runAge
   const nextId = useRef(0) // a counter for message ids (a ref: changing it shouldn't re-render anything)
   const { sending, run: runAgentOnce, stop, forgetThread } = useAgentRun(runAgentFn)
 
-  // One run of the agent. `shown` is what appears in your bubble. Resolves to whether the run finished, and
-  // whether the server changed data during it, or might have.
+  // One run of the agent. `shown` is what appears in your bubble, with the attached file's name if there's one.
+  // Resolves to whether the run finished, and whether the server changed data during it, or might have.
   const run = useCallback(
     async (shown: string, prompt: AgentPrompt) => {
       const userId = nextId.current++
       const replyId = nextId.current++ // reserved now; the bubble appears when the first text, chip or card does
-      setMessages((current) => transcript.appendMessage(current, { id: userId, role: "user", text: shown }))
+      const attachment = "file" in prompt ? prompt.file?.name : undefined
+      setMessages((current) =>
+        transcript.appendMessage(current, { id: userId, role: "user", text: shown, attachment }),
+      )
       let progress = NEW_RUN
       const ok = await runAgentOnce(prompt, {
         onEvent: (event) => {
@@ -61,8 +64,8 @@ export function useChat(onDataChanged: () => void, runAgentFn: RunAgent = runAge
   )
 
   const send = useCallback(
-    async (text: string) => {
-      await run(text, { text })
+    async (text: string, file?: File) => {
+      await run(text, { text, file })
     },
     [run],
   )

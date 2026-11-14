@@ -1,8 +1,8 @@
 """How the composition root plugs this module in: its handlers, routes and tables. Nothing else uses it.
 
-The receipts module's wiring. bootstrap.py calls register_handlers() when it builds the bus, mounts the router from
-create_router() (built with the FileStore and the model it chose), and gives TABLES to the migrations. Other modules
-use the contract in __init__.py instead.
+The receipts module's wiring. bootstrap.py calls register_handlers() when it builds the bus, builds the extractor
+with create_reader() (from the FileStore and the model it chose; the assistant gets the same one), mounts the router
+from create_router(), and gives TABLES to the migrations. Other modules use the contract in __init__.py instead.
 """
 
 from fastapi import APIRouter
@@ -24,9 +24,14 @@ def register_handlers(bus: MessageBus) -> None:
     bus.register(GetReceipt, get_receipt)
 
 
-def create_router(bus: MessageBus, files: FileStore, llm: StructuredOutputModel) -> APIRouter:
-    """The receipts routes, around the upload and extraction use cases built from what's passed in."""
-    return api.create_router(ReceiptUploader(bus=bus, files=files), ReceiptExtractor(bus=bus, files=files, llm=llm))
+def create_reader(bus: MessageBus, files: FileStore, llm: StructuredOutputModel) -> ReceiptExtractor:
+    """The one ReceiptExtractor: the composition root shares it between these routes and the assistant."""
+    return ReceiptExtractor(bus=bus, files=files, llm=llm)
 
 
-__all__ = ["TABLES", "create_router", "register_handlers"]
+def create_router(bus: MessageBus, files: FileStore, reader: ReceiptExtractor) -> APIRouter:
+    """The receipts routes, around the upload use case (built here) and the extractor (`reader`)."""
+    return api.create_router(ReceiptUploader(bus=bus, files=files), reader)
+
+
+__all__ = ["TABLES", "create_reader", "create_router", "register_handlers"]

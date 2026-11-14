@@ -8,9 +8,9 @@ slices). Each half has strict boundaries, and the two share one contract that's 
 **One app, deployed as one unit, with one database**, divided inside into **modules by business domain**:
 categories, expenses, conversations, assistant, and an MCP adapter.
 
-Think of an apartment building. Everyone shares the foundation and the plumbing (`core/`). Each flat (module) has its
-own locked door. When you need something from a neighbour, you knock (send a command or query through the bus, using
-their contract); you don't walk through the wall.
+Think of an apartment building. Everyone shares the foundation (`core/`), the plumbing (`infrastructure/`) and the
+entrance (`web/`). Each flat (module) has its own locked door. When you need something from a neighbour, you knock
+(send a command or query through the bus, using their contract); you don't walk through the wall.
 
 - **Compared with microservices** (separate buildings): one process to run, debug and deploy; calls between modules
   are plain function calls, not network requests.
@@ -48,24 +48,28 @@ backend/
                          /mcp/ (uvicorn calls it with --factory: nothing is built at import)
     bootstrap.py         the composition root: the one list of modules; build() makes the Services (clock, engine,
                          bus, LLM, expense tools, MCP server), each replaceable; api_routers(services)
-    migrations.py        run / check the Alembic migrations from code
-    core/                shared technical code, no business rules; never imports a module
-      config.py          settings from .env; API_PREFIX, API_VERSION, MCP_PATH
+    core/                shared building blocks: no I/O, no framework, no business rules; imports nothing else
       cqrs.py            Command, Query, MessageBus (also the unit of work)
-      db.py              create_db_engine(url) (SQLite made transactional: DDL, savepoints; in-memory databases
-                         share one connection), session_factory(), the default engine
-      ids.py             RecordId, MAX_ID (apart from db.py, so a contract doesn't load the database)
-      errors.py          NotFoundError, BusinessRuleError, ExternalServiceError -> RFC 9457 problem details;
-                         the unexpected-error middleware
+      errors.py          NotFoundError, BusinessRuleError, ExternalServiceError (each with its status and type)
+      ids.py             RecordId, MAX_ID (apart from the database, so a contract doesn't load it)
       clock.py           Clock (today, now), instead of date.today()
-      dependencies.py    BusDep, ClockDep, IdPath for routes
       months.py          YearMonth: "2026-11", its range and arithmetic
       money.py           rupees <-> paise, CURRENCY_PATTERN, format_money
-      logging.py         console logging for our own loggers ("app.*")
       llm/               the LLM port (port.py: StructuredOutputModel, ToolCallingModel, LanguageModel = both,
-                         LlmStream, LlmError), neutral messages (messages.py), the Gemini adapter (gemini.py:
-                         GeminiModel, SDK calls and errors; gemini_wire.py: pure translation to and from Gemini's
-                         wire format, and the stream's step assembly)
+                         LlmStream, LlmError) and neutral messages (messages.py)
+    infrastructure/      what talks to the outside world; imports only core/; only the composition root and the
+                         entry points import it
+      config.py          settings from .env; API_PREFIX, API_VERSION, MCP_PATH
+      db.py              create_db_engine(url) (SQLite made transactional: DDL, savepoints; in-memory databases
+                         share one connection), session_factory(), the default engine
+      migrations.py      run / check the Alembic migrations from code
+      logging.py         console logging for our own loggers ("app.*")
+      llm/               the Gemini adapter (gemini.py: GeminiModel, SDK calls and errors; gemini_wire.py: pure
+                         translation to and from Gemini's wire format, and the stream's step assembly)
+    web/                 the FastAPI plumbing every route shares; imports only core/
+      dependencies.py    BusDep, ClockDep, IdPath for routes
+      problems.py        RFC 9457 problem details for every error: the error handlers and the unexpected-error
+                         middleware
     modules/
       categories/        a domain module, as vertical slices (rule 2):
                            commands/     one file per command: the message and its handler (create_category.py)
@@ -127,14 +131,17 @@ backend/
    then asks a query. A query that tries to send a command is refused.
 5. **Handlers never commit.** The bus does, once per outermost command. Repositories only stage changes.
 6. **Links between modules are plain ids** with no database foreign key, checked through the other module's queries.
-7. **`core/` never imports from `modules/`.**
+7. **Outside the modules, shared code is grouped by concern** (D177). `core/` imports nothing else in the app;
+   `infrastructure/` and `web/` import only `core/`. Modules never import `infrastructure/` (what it builds, the
+   bus's sessions and the model, is passed in), and only their HTTP adapters (`api.py`, `assistant/api/routes.py`,
+   `mcp/http.py`) import `web/`.
 8. **`bootstrap.py` is the composition root:** the only file that knows every module. `main.py`, `seed.py`,
    `mcp_stdio.py` and the migrations all build from it. Nothing registers itself just by being imported.
 9. **Adapters translate, use cases decide.** REST routes, the MCP server and the AG-UI adapter are adapters over the
    same commands and queries. The assistant's use cases yield plain events; `api/agui_stream.py` turns them into
    AG-UI.
 10. **Ports for the outside world:** the LLM (`core/llm/port.py`) and the expense tools (`assistant/tools/port.py`:
-    `ExpenseTools`) are protocols with one adapter each (`GeminiModel`; `McpExpenseTools` in
+    `ExpenseTools`) are protocols with one adapter each (`GeminiModel` in `infrastructure/llm/`; `McpExpenseTools` in
     `assistant/tools/mcp_adapter.py`, in-process by default).
     Each user depends only on what it calls: `/parse` on `StructuredOutputModel`, the agent on `ToolCallingModel`.
     `bootstrap.build()` creates the adapters and injects them; nothing else imports a provider (D166, D172).
@@ -204,8 +211,9 @@ showed, so an expense edited while the card waited is never deleted unseen (D162
 
 ### Errors
 
-Handlers raise `NotFoundError`, `BusinessRuleError` or `ExternalServiceError` (e.g. `LlmError`). `core/errors.py` turns
-them, FastAPI's validation errors and its own 404/405 into one shape, RFC 9457 problem details:
+Handlers raise `NotFoundError`, `BusinessRuleError` or `ExternalServiceError` (e.g. `LlmError`), from
+`core/errors.py`, which knows nothing of HTTP. `web/problems.py` turns them, FastAPI's validation errors and its own
+404/405 into one shape, RFC 9457 problem details:
 
 ```json
 {"type": "urn:spendwise:problem:not-found", "title": "Not found", "status": 404,
@@ -396,8 +404,15 @@ The web app's rules are checked by `npx oxlint` in `web/`. The backend has no au
 architecture test was removed with the other tests, D64), so run these scans from the project folder:
 
 ```powershell
-# 1. core/ never imports a module. Expect no output.
-Get-ChildItem backend\app\core -Recurse -Filter *.py | Select-String -Pattern '^\s*(from|import)\s+app\.modules'
+# 1. Shared code grouped by concern (D177). Expect no output from any of the four: core/ imports nothing else in
+#    the app; infrastructure/ and web/ import only core/; no module imports infrastructure/.
+Get-ChildItem backend\app\core -Recurse -Filter *.py |
+  Select-String -Pattern '^\s*(from|import)\s+app\.(modules|infrastructure|web|bootstrap|main)\b'
+Get-ChildItem backend\app\infrastructure -Recurse -Filter *.py |
+  Select-String -Pattern '^\s*(from|import)\s+app\.(modules|web|bootstrap|main)\b'
+Get-ChildItem backend\app\web -Recurse -Filter *.py |
+  Select-String -Pattern '^\s*(from|import)\s+app\.(modules|infrastructure|bootstrap|main)\b'
+Get-ChildItem backend\app\modules -Recurse -Filter *.py | Select-String -Pattern 'app\.infrastructure\b'
 
 # 2. Imports of a module's files. Every line must be inside that same module's folder (expenses/commands/
 #    create_expense.py importing app.modules.expenses.persistence.repository is fine; anything else isn't).
@@ -406,7 +421,7 @@ Get-ChildItem backend\app\modules -Recurse -Filter *.py | Select-String -Pattern
 # 3. Only the composition root imports a module.py. Expect bootstrap.py and main.py.
 Get-ChildItem backend -Recurse -Filter *.py | Select-String -Pattern 'import module as' | Split-Path -Leaf | Sort-Object -Unique
 
-# 4. Only bootstrap.py picks the LLM provider. Expect bootstrap.py, and gemini.py itself.
+# 4. Only bootstrap.py picks the LLM provider. Expect bootstrap.py, and the adapter (infrastructure/llm/gemini.py).
 Get-ChildItem backend -Recurse -Filter *.py | Select-String -Pattern 'llm\.gemini|from google'
 
 # 5. Inside the assistant, imports run api/ -> application/ -> agent/, approvals/, tools/, a2ui/, never back.
@@ -421,4 +436,9 @@ $assistant | Where-Object FullName -NotMatch '\\assistant\\(api|application)\\' 
 foreach ($m in "categories", "conversations", "expenses", "mcp", "assistant") {
   .\.venv\Scripts\python.exe -c "import sys; sys.path.insert(0, 'backend'); import app.modules.$m"
 }
+
+# 7. Only a module's HTTP adapters import web/. Expect api.py (categories, conversations, expenses), http.py (mcp)
+#    and routes.py (the assistant's api/).
+Get-ChildItem backend\app\modules -Recurse -Filter *.py | Select-String -Pattern 'app\.web\b' | Split-Path -Leaf |
+  Sort-Object -Unique
 ```

@@ -102,6 +102,7 @@ add a new entry and mark the old one **Superseded by D<n>**.
 - **What:** `backend/app/core/config.py` reads `.env` into a typed `Settings` object.
 - **Details:** real environment variables override `.env`; an empty value (`KEY=`) counts as not set;
   the API key is a `SecretStr`, which prints as `**********`.
+- **Updated by D177:** settings are read in `backend/app/infrastructure/config.py`.
 
 ### D17. SQLite file `backend/spendwise.db` by default
 - **Why:** zero setup for learning. `DATABASE_URL` switches to another database (e.g. Postgres) without code changes.
@@ -170,6 +171,7 @@ add a new entry and mark the old one **Superseded by D<n>**.
 - **Revisit when:** a third kind of error appears, or to move `/ask`'s Gemini → 502 mapping here too.
 - **Updated by D48:** a third kind was added (`ExternalServiceError` → 502).
 - **Updated by D149:** every error is now an RFC 9457 problem-details response.
+- **Updated by D177:** the errors stay in `core/errors.py`; turning them into responses is `web/problems.py`.
 
 ### D29. 404 only for the resource in the URL
 - An unknown `category_id` in a request body is **422**, not 404: the endpoint exists, the body is invalid.
@@ -351,6 +353,7 @@ add a new entry and mark the old one **Superseded by D<n>**.
 - The agent logs the user message, each step, each tool call with its arguments, and each result (first 300 characters).
 - These logs contain expense data. Fine on your own console; don't ship them to an external service without thinking about privacy.
 - **Updated by D152:** message text and tool arguments are logged only at DEBUG.
+- **Updated by D177:** the setup is `infrastructure/logging.py`.
 
 ---
 
@@ -1142,6 +1145,8 @@ is natural. It's still a soft, model-judged guard.
   `core/llm/gemini.py` is the only code that knows Gemini's steps, events and schema subset. Its wire names are enums.
 - `ask_gemini()` went with `/ask` (D150).
 - **Updated by D166:** the port is a `LanguageModel` protocol, injected from `bootstrap.py`.
+- **Updated by D177:** the port stays in `core/llm/`; the Gemini adapter is `infrastructure/llm/gemini.py` and
+  `gemini_wire.py`.
 
 ### D143. The assistant's tools are a port; this app's MCP server is called in-process by default
 - The agent only knows `ExpenseTools` (`assistant/tools.py`). `McpExpenseTools` implements it with the MCP SDK's
@@ -1292,6 +1297,7 @@ is natural. It's still a soft, model-judged guard.
 - A command sent from inside another runs in a SAVEPOINT (`begin_nested`): if it fails and the caller carries on, only
   its own changes are undone.
 - **Why:** a failing 0002 left the table renamed but unconverted, and every later upgrade failed.
+- **Updated by D177:** the recipe is in `infrastructure/db.py`.
 
 ### D164. No database session around slow work; approvals decided eagerly
 - `/parse` is a use case, not a query handler: it reads the categories (a short query), then calls the model with no
@@ -1520,3 +1526,49 @@ is natural. It's still a soft, model-judged guard.
 - **Keeping it current:** a new rule for how the code is built is added to `AGENTS.md` in the same change as its
   decision and docs. `AGENTS.md` summarises; `docs/` keeps the reasoning.
 
+
+---
+
+## Shared code grouped by concern
+
+> Outside the business modules, the backend's shared code was regrouped by what it's for, with no change to what the
+> app does: `core/` keeps the building blocks, and two new folders hold what talks to the outside world
+> (`infrastructure/`) and the FastAPI plumbing every route shares (`web/`). The layout:
+> [architecture.md](architecture.md#layout).
+
+### D177. `core/`, `infrastructure/` and `web/`: shared code grouped by concern
+- **What:**
+  - **`core/`** keeps what every module builds on, with no I/O and no framework: `cqrs.py`, `errors.py`, `ids.py`,
+    `clock.py`, `months.py`, `money.py`, and `llm/` (the port and the provider-neutral messages).
+  - **`infrastructure/`** (new) holds what talks to the outside world: `config.py`, `db.py` and `logging.py` (from
+    `core/`), `migrations.py` (from `app/`), and `llm/gemini.py` and `llm/gemini_wire.py` (from `core/llm/`).
+  - **`web/`** (new) holds the FastAPI plumbing routes share: `dependencies.py` (from `core/`) and `problems.py`.
+  - `core/errors.py` was split. The error classes stay (`AppError`, `NotFoundError`, `BusinessRuleError`,
+    `ExternalServiceError`, each with its status, slug and title). The problem-details responses, the exception
+    handlers and `UnexpectedErrorMiddleware` moved to `web/problems.py`, with `PROBLEM_JSON`, `PROBLEM_TYPE_PREFIX`
+    and the slugs of errors that aren't `AppError`s.
+  - The import rules: `core/` imports nothing else in the app; `infrastructure/` and `web/` import only `core/`;
+    modules never import `infrastructure/`, and only their HTTP adapters (`api.py`, `assistant/api/routes.py`,
+    `mcp/http.py`) import `web/`. [architecture.md](architecture.md#checking-the-rules)'s scan 1 now checks the first
+    three, and the new scan 7 checks who imports `web/`.
+  - `bootstrap.py` and `main.py` stay at `app/`, so `run.ps1` (`app.main:create_app`), every module's contract and
+    every import between modules are unchanged. `main.py`, `seed.py`, `mcp_stdio.py`, the migrations' `env.py` and
+    the export script now import settings, the database, migrations and logging from `infrastructure/`.
+- **Why:** `core/` had become four things in one flat folder: the bus and the values every handler uses, code that
+  talks to the outside world (settings, the database, logging, Gemini), FastAPI dependencies, and an `errors.py` that
+  was half domain errors, half HTTP reporting, so a handler raising `NotFoundError` loaded FastAPI. The imports
+  already kept to these boundaries (no module imported settings, the database or Gemini), so the folders now show
+  what the code already did, and the scans keep it that way.
+- **Not changed, on purpose:** `mcp` stays a module (D12, D166: its package is the assistant's contract, and outside
+  `modules/` the assistant would import from an adapter's folder). The shared query helpers stay beside their slices,
+  and the approvals' `store.py` keeps its name (D175).
+- **How it was verified:**
+  - the recorded behaviour (D173) was **identical** before and after: 38 HTTP scenarios with a scripted fake model
+    and an in-memory database (REST; every problem type, including the 500 inside CORS and MCP's 401; `/parse`;
+    `/chat`; `/agent` with tool calls, cards and the approval card), every model call, the MCP tool listing and the
+    OpenAPI document;
+  - the migrations check is clean on a copy of the database, and the generated web contract is byte-identical;
+  - every package imports on its own, and `seed.py` and `mcp_stdio.py` run against an in-memory database;
+  - the scans in [architecture.md](architecture.md#checking-the-rules) are clean.
+- **Revisit:** if a module ever needs something from `infrastructure/`, pass it in through the composition root
+  instead: a port in `core/`, an adapter in `infrastructure/`, as with the model.

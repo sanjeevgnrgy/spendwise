@@ -191,3 +191,9 @@ A query handler runs inside the bus's unit of work, so a database connection was
 two minutes). A few slow calls at once could take every pooled connection, and other requests would wait. As a use
 case it asks for the categories (a short query, connection returned), then calls the model with no session open.
 </details>
+
+> **Later changes:** `core/` was later split by concern, with no change in behaviour (D177). It keeps `cqrs.py`,
+> `errors.py` (the error classes only), `clock.py`, `months.py`, `money.py`, `ids.py` and the LLM port. Settings, the
+> database, logging, the migrations runner and the Gemini adapter moved to `infrastructure/`; `dependencies.py` and
+> the problem-details responses (from `errors.py`) moved to `web/`. See
+> [D177](../decisions.md#d177-core-infrastructure-and-web-shared-code-grouped-by-concern).

@@ -322,8 +322,10 @@ agent.
 - **Vertical slices:** one file per command or query, holding the message and its handler (named like the file);
   what several slices share goes in `values.py`, `models.py`, `domain/` or `persistence/`, never in one slice that
   others import.
-- **Boundaries:** `core/` imports no module; a module imports another's package only; only `bootstrap.py` and
-  `main.py` import a `module.py`; inside the assistant, imports run `api/` → `application/` → the rest.
+- **Boundaries:** `core/` imports nothing else in the app, and `infrastructure/` and `web/` only `core/` (D177); a
+  module never imports `infrastructure/`, and only its routes import `web/`; a module imports another's package
+  only; only `bootstrap.py` and `main.py` import a `module.py`; inside the assistant, imports run `api/` →
+  `application/` → the rest.
 - **Logging:** `logger = logging.getLogger(__name__)`; user data only at DEBUG.
 - **Pins:** a new dependency gets an exact version in `requirements.txt`.
 
@@ -343,7 +345,8 @@ Automated tests aren't part of the repository yet. Until they are, before asking
 - [ ] A new command or query is one slice file (message + handler, named like the file), registered in `module.py`,
       exported from `__init__.py` if other modules use it
 - [ ] Files under ~180 code lines, functions under ~50; extend through tables and protocols, not new branches
-- [ ] No import of another module's files, or of another slice's handler; `core/` untouched by module imports
+- [ ] No import of another module's files, or of another slice's handler; no module imports `infrastructure/`, and
+      `core/`, `infrastructure/` and `web/` import no module
 - [ ] Inputs validated by contract types; business rules raise `BusinessRuleError`
 - [ ] No literal names, keys or limits that already exist elsewhere
 - [ ] Time from the clock, money in paise

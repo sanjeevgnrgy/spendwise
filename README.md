@@ -64,10 +64,15 @@ flowchart TD
         MCP["mcp<br/>tools & resources (adapter)"]
     end
 
-    subgraph Core ["core/ (no business rules)"]
+    subgraph Core ["core/ (building blocks, no I/O)"]
         BUS["MessageBus<br/>CQRS + unit of work"]
-        LLM["LLM port<br/>Gemini adapter"]
-        INFRA["config · db · clock · money · errors"]
+        LLM["LLM port"]
+        VALUES["errors · clock · money · months · ids"]
+    end
+
+    subgraph Infra ["infrastructure/ (the outside world)"]
+        GEMA["Gemini adapter"]
+        INFRA["config · db · migrations · logging"]
     end
 
     DB[("SQLite<br/>Alembic migrations")]
@@ -85,7 +90,8 @@ flowchart TD
     EXT -->|"stdio or HTTP"| MCP
     BUS --> CAT & EXP & CONV & AST
     CAT & EXP & CONV & AST --> DB
-    LLM --> GEM
+    GEMA -.->|implements| LLM
+    GEMA --> GEM
 ```
 
 ---
@@ -95,7 +101,8 @@ flowchart TD
 - **Modular monolith, strictly bounded:** each module (`categories`, `expenses`, `conversations`, `assistant`) owns
   its tables, contracts and handlers. Another module's names come only from its package (`app.modules.expenses`), never
   its files; no module queries another's tables; links are plain ids with no cross-module foreign keys.
-  `core/` never imports a module, and `bootstrap.py` is the one composition root.
+  Outside the modules, shared code is grouped by concern: `core/` (building blocks) imports nothing else,
+  `infrastructure/` and `web/` import only `core/`, and `bootstrap.py` is the one composition root.
 - **Vertical slices inside a module:** each command or query is one file holding the message and its handler, so a
   use case is one file to read and adding one is a new file plus one registration line.
 - **CQRS-lite with a unit of work:** every operation is a **command** (changes data, returns at most an id) or a
@@ -206,8 +213,9 @@ spendwise/
     app/
       main.py             the web app: routes under /api/v1, /health, /mcp/, error handling, CORS
       bootstrap.py        the composition root: modules, bus, LLM adapter, MCP server, routers
-      migrations.py       run or check the database migrations from code
-      core/               config, db, cqrs (the bus), errors, clock, months, money, logging, llm/ (port + Gemini)
+      core/               building blocks: cqrs (the bus), errors, ids, clock, months, money, llm/ (the port)
+      infrastructure/     the outside world: config, db, migrations, logging, llm/ (the Gemini adapter)
+      web/                what every route shares: dependencies (BusDep, ClockDep), problems (RFC 9457 errors)
       modules/
         categories/       commands/ and queries/ (one file per message: the message and its handler), values,
                           models, persistence/ (tables), api, module

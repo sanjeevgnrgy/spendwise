@@ -2,7 +2,7 @@
 
 Rules for AI coding agents, and anyone else, changing SpendWise. They describe how this codebase is built: a change
 that doesn't follow them isn't finished. The reasoning behind each rule is in [docs/](docs/README.md). Read the linked
-doc before working in an area, and check [decisions.md](docs/decisions.md) (D1–D176) before changing a settled choice.
+doc before working in an area, and check [decisions.md](docs/decisions.md) (D1–D177) before changing a settled choice.
 
 | Before you change… | Read |
 |---|---|
@@ -67,7 +67,11 @@ modules need it. Recipes: [backend_onboarding.md](docs/backend_onboarding.md).
 - Use another module only through its package (`from app.modules import categories`), never its files.
 - Never query another module's tables. Links between modules are plain ids (no foreign keys), checked through the
   other module's queries.
-- `core/` imports no module. Only `bootstrap.py` and `main.py` import a `module.py`.
+- Outside `modules/`, shared code is grouped by concern (D177): `core/` (the bus, errors, values, the LLM port)
+  imports nothing else in the app; `infrastructure/` (settings, database, migrations, logging, Gemini) and `web/`
+  (route dependencies, problem responses) import only `core/`. Modules never import `infrastructure/` (what it builds
+  is passed in); only their HTTP adapters (`api.py`, `assistant/api/routes.py`, `mcp/http.py`) import `web/`.
+- Only `bootstrap.py` and `main.py` import a `module.py`.
 - Module dependencies stay one-way: expenses → categories; mcp → expenses, categories; assistant → the rest. A new
   dependency must not create a cycle; if two modules need each other, redesign (an event, or a third module).
 - Inside the assistant, imports run `api/` → `application/` → `agent/`, `approvals/`, `tools/`, `a2ui/`, never back.
@@ -76,15 +80,15 @@ modules need it. Recipes: [backend_onboarding.md](docs/backend_onboarding.md).
 `main.create_app(services)` serves it; nothing is built at import (uvicorn runs with `--factory`).
 
 **Ports and adapters.** The model sits behind `core/llm` ports: depend on the narrowest one you call
-(`StructuredOutputModel` or `ToolCallingModel`). Only `bootstrap.py` imports the Gemini adapter. The expense tools sit
-behind `ExpenseTools`. Time comes from the injected clock (`ctx.clock`, `ClockDep`), never `date.today()` or
-`datetime.now()`.
+(`StructuredOutputModel` or `ToolCallingModel`). Only `bootstrap.py` imports the Gemini adapter
+(`infrastructure/llm/`). The expense tools sit behind `ExpenseTools`. Time comes from the injected clock
+(`ctx.clock`, `ClockDep`), never `date.today()` or `datetime.now()`.
 
 **Money** is stored as integer paise; it's `Decimal` rupees at the edges (`rupees_to_paise`, `format_money`). Never
 `float`.
 
-**Errors.** Raise `NotFoundError`, `BusinessRuleError` or `ExternalServiceError`. Never catch them in routes:
-`core/errors.py` turns every error into an RFC 9457 problem.
+**Errors.** Raise `NotFoundError`, `BusinessRuleError` or `ExternalServiceError` (`core/errors.py`, no HTTP in it).
+Never catch them in routes: `web/problems.py` turns every error into an RFC 9457 problem.
 
 **API.** Routes live under `/api/v1`. Inputs are validated by contract types: `RecordId`, `IdPath`, `Annotated`
 limits, `extra="forbid"`.

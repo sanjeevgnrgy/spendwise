@@ -7,14 +7,16 @@ import { EventType, type Event as AgentEvent, type RunAgentInput } from "@ag-ui/
 import { EventSchemas } from "@ag-ui/core/schemas"
 
 import { A2UI, AGUI } from "@/shared/api/contracts.gen"
-import { ApiError, UNREACHABLE } from "@/shared/api/http"
+import { ApiError, unreachableError } from "@/shared/api/http"
 import type { paths } from "@/shared/api/schema.gen"
 import { API_ORIGIN } from "@/shared/config/env"
+import { i18n } from "@/shared/i18n"
 import { isAbort } from "@/shared/lib/errors"
 import { newId } from "@/shared/lib/ids"
 
 import type { A2uiAction } from "../a2ui/protocol"
-import { CONNECTION_LOST, sseData } from "./sse"
+import { assistantTexts } from "../i18n"
+import { connectionLostMessage, sseData } from "./sse"
 
 /** One AG-UI event, as validated by @ag-ui/core. */
 export type { AgentEvent }
@@ -25,7 +27,11 @@ export type AgentPrompt = { text: string } | { action: A2uiAction }
 // Checked against the API's paths, like every other call (a typo is a compile error).
 const AGENT_PATH = "/api/v1/agent" satisfies keyof paths
 const USER_ROLE = "user"
-const NOT_UNDERSTOOD = "The assistant sent something this app doesn't understand."
+
+// The message when an event can't be read. A function, so it's written in the language on when that happens.
+function notUnderstoodMessage(): string {
+  return i18n.t("stream.notUnderstood", { ns: assistantTexts.name })
+}
 
 /** The run itself failed on the server (RUN_ERROR): its message is meant for the user. */
 export class AgentRunError extends Error {
@@ -63,17 +69,17 @@ export function parseEvent(data: string): AgentEvent {
   try {
     json = JSON.parse(data)
   } catch {
-    throw new Error(NOT_UNDERSTOOD)
+    throw new Error(notUnderstoodMessage())
   }
   // Network data is checked, not trusted: AG-UI's own schemas say what a valid event looks like.
   const parsed = EventSchemas.safeParse(json)
-  if (!parsed.success) throw new Error(NOT_UNDERSTOOD)
+  if (!parsed.success) throw new Error(notUnderstoodMessage())
   return parsed.data
 }
 
 // Sends the run and returns the answer's body, decoded to text. Anything that fails while sending is an
-// ApiError (UNREACHABLE), unless it was stopped. Problems found before the stream starts (like a malformed body)
-// are ordinary HTTP problems: an ApiError with the problem's message.
+// ApiError (unreachableError()), unless it was stopped. Problems found before the stream starts (like a malformed
+// body) are ordinary HTTP problems: an ApiError with the problem's message.
 async function startRun(
   threadId: string,
   prompt: AgentPrompt,
@@ -91,7 +97,7 @@ async function startRun(
     })
   } catch (error) {
     if (isAbort(error)) throw error
-    throw new ApiError(UNREACHABLE, 0)
+    throw unreachableError()
   }
   if (!response.ok || !response.body) {
     throw ApiError.fromProblem(await response.json().catch(() => null), response.status)
@@ -119,7 +125,7 @@ export async function runAgent(
     onEvent(event)
     if (event.type === EventType.RUN_FINISHED) return
   }
-  throw new Error(CONNECTION_LOST)
+  throw new Error(connectionLostMessage())
 }
 
 /** The shape of `runAgent`, so a test (or another transport) can be passed to useChat in its place. */

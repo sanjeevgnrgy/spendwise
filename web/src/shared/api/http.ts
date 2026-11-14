@@ -8,6 +8,7 @@ import createClient from "openapi-fetch"
 import type { components, paths } from "@/shared/api/schema.gen"
 import { APP_NAME } from "@/shared/config/app"
 import { API_ORIGIN } from "@/shared/config/env"
+import { i18n, type CommonTexts } from "@/shared/i18n"
 import { isAbort } from "@/shared/lib/errors"
 import { isObject } from "@/shared/lib/guards"
 
@@ -20,14 +21,13 @@ export type Schemas = components["schemas"]
  */
 export const api = createClient<paths>({ baseUrl: API_ORIGIN })
 
-/** The message when no answer came back at all: the backend is down, unreachable, or blocked by CORS. */
-export const UNREACHABLE = `Can't reach the ${APP_NAME} API at ${API_ORIGIN}. Is the backend running?`
-/** The message when the backend answered, but with something that couldn't be read (not valid JSON). */
-export const UNREADABLE = "The API sent an answer this app couldn't read."
+/** One of the client's own error messages: a key of the common "errors" texts. */
+type ClientMessage = keyof CommonTexts["errors"]
 
 /**
- * A failed API call. `message` is for people (the backend's own `detail`, or one of the messages above), `status`
- * is the HTTP status (0 when no answer came back), and `problemType` is the problem's `type`, when it had one.
+ * A failed API call. `message` is for people (the backend's own `detail`, or one of the client's own messages),
+ * `status` is the HTTP status (0 when no answer came back), and `problemType` is the problem's `type`, when it had
+ * one.
  */
 export class ApiError extends Error {
   /** The HTTP status; 0 when the backend couldn't be reached or its answer couldn't be read. */
@@ -42,6 +42,19 @@ export class ApiError extends Error {
   }
 
   /**
+   * An ApiError whose message is one of the client's own texts, looked up each time it's read: an error already on
+   * screen (TanStack Query keeps it) follows a language switch. (A backend `detail` is the server's text.)
+   */
+  static ofText(text: ClientMessage, status: number, values: Record<string, string | number> = {}): ApiError {
+    const read = () => i18n.t(`errors.${text}`, values)
+    // Built with the text as it reads now, so the stack trace (captured here) carries it; then `message` becomes a
+    // getter on this one error. (A class accessor can't replace Error's own `message` field.)
+    const error = new ApiError(read(), status)
+    Object.defineProperty(error, "message", { get: read, configurable: true })
+    return error
+  }
+
+  /**
    * An ApiError from an error answer's body. Every backend error is an RFC 9457 problem:
    * {"type", "title", "status", "detail", ...}; its `detail` becomes the message. A body that isn't one gives a
    * plain "Request failed (status)".
@@ -50,8 +63,13 @@ export class ApiError extends Error {
     if (isObject(body) && typeof body.detail === "string") {
       return new ApiError(body.detail, status, typeof body.type === "string" ? body.type : undefined)
     }
-    return new ApiError(`Request failed (${status})`, status)
+    return ApiError.ofText("requestFailed", status, { status })
   }
+}
+
+/** The error when no answer came back at all: the backend is down, unreachable, or blocked by CORS. */
+export function unreachableError(): ApiError {
+  return ApiError.ofText("unreachable", 0, { app: APP_NAME, origin: API_ORIGIN })
 }
 
 // What an openapi-fetch call resolves to: the data (on success) or the problem (on error).
@@ -71,7 +89,7 @@ async function settle<T>(pending: Promise<Outcome<T>>): Promise<Outcome<T>> {
     if (isAbort(error)) throw error
     // fetch throws a TypeError when there's no response at all: the backend is down, or CORS blocked it.
     // Anything else (a body that isn't valid JSON) means the backend answered, but unreadably.
-    throw new ApiError(error instanceof TypeError ? UNREACHABLE : UNREADABLE, 0)
+    throw error instanceof TypeError ? unreachableError() : ApiError.ofText("unreadable", 0)
   }
   if (!outcome.response.ok) throw ApiError.fromProblem(outcome.error, outcome.response.status)
   return outcome
@@ -83,7 +101,7 @@ async function settle<T>(pending: Promise<Outcome<T>>): Promise<Outcome<T>> {
  */
 export async function unwrap<T>(pending: Promise<Outcome<T>>): Promise<T> {
   const { data, response } = await settle(pending)
-  if (data === undefined) throw new ApiError(`The API sent an empty answer (${response.status})`, response.status)
+  if (data === undefined) throw ApiError.ofText("emptyAnswer", response.status, { status: response.status })
   return data
 }
 

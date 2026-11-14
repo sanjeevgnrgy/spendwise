@@ -1,7 +1,7 @@
-// The frame around every page: the sidebar, the top bar (sidebar toggle, app name, Assistant button, theme menu),
-// the page area, and the assistant's chat panel. Part of the app composition (app/layout/). app.tsx uses it as the
-// layout route, so the router draws the current page inside it. The page area and the chat panel each get their
-// own error boundary, so a crash in one leaves the other working.
+// The frame around every page: the sidebar, the top bar (sidebar toggle, app name, Assistant button, language and
+// theme menus), the page area, and the assistant's chat panel. Part of the app composition (app/layout/). app.tsx
+// uses it as the layout route, so the router draws the current page inside it. The page area and the chat panel each
+// get their own error boundary, so a crash in one leaves the other working.
 
 import { MessageSquare } from "lucide-react"
 import { Suspense, useState } from "react"
@@ -12,6 +12,7 @@ import { ErrorBoundary } from "@/shared/components/error-boundary"
 import { SectionError } from "@/shared/components/section-error"
 import { useIsMobile } from "@/shared/hooks/use-mobile"
 import { APP_NAME } from "@/shared/config/app"
+import { LanguageMenu } from "@/shared/i18n"
 import { messageOf } from "@/shared/lib/errors"
 import { ModeToggle } from "@/shared/theme"
 import { Button } from "@/shared/ui/button"
@@ -20,6 +21,7 @@ import { Separator } from "@/shared/ui/separator"
 import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from "@/shared/ui/sheet"
 import { SidebarInset, SidebarProvider, SidebarTrigger } from "@/shared/ui/sidebar"
 
+import { useTexts } from "../i18n"
 import { AppSidebar } from "./app-sidebar"
 
 // The page that matches the URL (<Outlet /> is where the router puts it). If it crashes while drawing, only the
@@ -29,10 +31,11 @@ import { AppSidebar } from "./app-sidebar"
 // with an empty fallback: the area stays blank for the moment a page's code takes to arrive.
 function Page() {
   const { pathname } = useLocation()
+  const { t } = useTexts()
   return (
     <ErrorBoundary
       key={pathname}
-      fallback={(error, reset) => <SectionError title="This page hit a problem" message={messageOf(error)} onRetry={reset} />}
+      fallback={(error, reset) => <SectionError title={t("errors.page")} message={messageOf(error)} onRetry={reset} />}
     >
       <Suspense fallback={null}>
         <Outlet />
@@ -48,8 +51,9 @@ interface TopBarProps {
   onToggleChat: () => void
 }
 
-// The bar across the top: the sidebar toggle, the app's name, the Assistant button and the theme menu.
+// The bar across the top: the sidebar toggle, the app's name, the Assistant button, and the language and theme menus.
 function TopBar({ chatOpen, onToggleChat }: TopBarProps) {
+  const { t } = useTexts()
   return (
     <header className="flex h-14 shrink-0 items-center gap-2 border-b px-4">
       <SidebarTrigger />
@@ -57,8 +61,9 @@ function TopBar({ chatOpen, onToggleChat }: TopBarProps) {
       <span className="font-medium">{APP_NAME}</span>
       <div className="ml-auto flex items-center gap-1">
         <Button variant={chatOpen ? "secondary" : "ghost"} size="sm" onClick={onToggleChat} aria-pressed={chatOpen}>
-          <MessageSquare /> Assistant
+          <MessageSquare /> {t("assistant.open")}
         </Button>
+        <LanguageMenu />
         <ModeToggle />
       </div>
     </header>
@@ -75,12 +80,15 @@ export function AppLayout() {
   // The chat starts closed. Only its panel closes: the conversation itself lives in AssistantProvider (providers.tsx).
   const [chatOpen, setChatOpen] = useState(false)
   const isMobile = useIsMobile()
+  const { t } = useTexts()
 
   // The chat has its own safety net: if it crashes, the pages keep working (and vice versa).
   // Built once here, then placed in whichever container suits the window (the Sheet or the side panel).
   const panel = (
     <ErrorBoundary
-      fallback={(error, reset) => <SectionError title="The assistant hit a problem" message={messageOf(error)} onRetry={reset} />}
+      fallback={(error, reset) => (
+        <SectionError title={t("errors.assistant")} message={messageOf(error)} onRetry={reset} />
+      )}
     >
       <ChatPanel onClose={() => setChatOpen(false)} />
     </ErrorBoundary>
@@ -104,8 +112,8 @@ export function AppLayout() {
             <Sheet open={chatOpen} onOpenChange={setChatOpen}>
               <SheetContent side="right" showCloseButton={false} className="w-full gap-0 p-0 sm:max-w-md">
                 <SheetHeader className="sr-only">
-                  <SheetTitle>Assistant</SheetTitle>
-                  <SheetDescription>Chat with the {APP_NAME} assistant.</SheetDescription>
+                  <SheetTitle>{t("assistant.title")}</SheetTitle>
+                  <SheetDescription>{t("assistant.description", { app: APP_NAME })}</SheetDescription>
                 </SheetHeader>
                 {panel}
               </SheetContent>

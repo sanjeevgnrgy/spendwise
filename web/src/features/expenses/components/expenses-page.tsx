@@ -1,6 +1,7 @@
 // A component of the expenses feature: the Expenses page, the feature's main export (app/pages.tsx routes to it).
 // It holds the page's state (the filters, and which expenses are waiting for "are you sure?"), loads the list
 // through useExpenses, and lays out its parts: the Add dialog, the filters bar, the table, and the delete dialog.
+// Its texts come from the feature's i18n namespace.
 
 import { useState } from "react"
 
@@ -10,6 +11,7 @@ import { useDebouncedValue } from "@/shared/hooks/use-debounced-value"
 import { messageOf } from "@/shared/lib/errors"
 
 import type { Expense, ExpenseFilters } from "../api"
+import { useTexts } from "../i18n"
 import { useExpenses } from "../queries"
 import { AddExpenseDialog } from "./dialogs/add-expense-dialog"
 import { DeleteExpensesDialog } from "./dialogs/delete-expenses-dialog"
@@ -30,6 +32,7 @@ const NO_EXPENSES: Expense[] = []
  * stay and a "couldn't refresh" notice appears above them.
  */
 export function ExpensesPage() {
+  const { t } = useTexts()
   const [filters, setFilters] = useState<ExpenseFilters>({})
   // The expenses waiting for "are you sure?"; null means the confirmation dialog is closed.
   const [pendingDelete, setPendingDelete] = useState<Expense[] | null>(null)
@@ -45,8 +48,8 @@ export function ExpensesPage() {
     <div className="flex flex-col gap-4">
       <div className="flex flex-wrap items-center justify-between gap-2">
         <div>
-          <h1 className="text-2xl font-semibold">Expenses</h1>
-          <p className="text-sm text-muted-foreground">Add, find, edit and delete your expenses.</p>
+          <h1 className="text-2xl font-semibold">{t("page.title")}</h1>
+          <p className="text-sm text-muted-foreground">{t("page.description")}</p>
         </div>
         <AddExpenseDialog />
       </div>
@@ -54,11 +57,15 @@ export function ExpensesPage() {
       <FiltersBar filters={filters} onChange={setFilters} />
 
       {expenses.isError && expenses.data && (
-        <RefreshNotice message={messageOf(expenses.error)} onRetry={() => expenses.refetch()} retrying={expenses.isFetching} />
+        <RefreshNotice
+          message={messageOf(expenses.error)}
+          onRetry={() => expenses.refetch()}
+          retrying={expenses.isFetching}
+        />
       )}
       {expenses.isError && !expenses.data ? (
         <SectionError
-          title="Couldn't load your expenses"
+          title={t("page.loadFailed")}
           message={messageOf(expenses.error)}
           onRetry={() => expenses.refetch()}
           retrying={expenses.isFetching}

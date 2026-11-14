@@ -1,6 +1,7 @@
 // A hook of the expenses feature: the expenses table's inline editing. Which row is open for editing, saving an
 // edit (through useUpdateExpense, with its toasts), and which row's save is running. Used by expenses-table.tsx,
-// which draws the open row as an EditRow and gives `start` to the columns' Edit buttons.
+// which draws the open row as an EditRow and gives `start` to the columns' Edit buttons. Its toast's text comes
+// from the feature's i18n namespace.
 
 import { useState } from "react"
 import { toast } from "sonner"
@@ -8,6 +9,7 @@ import { toast } from "sonner"
 import { messageOf } from "@/shared/lib/errors"
 
 import type { ExpenseChanges } from "../../api"
+import { useTexts } from "../../i18n"
 import { useSavingExpenseIds, useUpdateExpense } from "../../queries"
 
 /** What useExpenseEditor returns: the open row, and what can be done with it. */
@@ -30,6 +32,7 @@ export interface ExpenseEditor {
  * open with what you typed, ready to fix.
  */
 export function useExpenseEditor(): ExpenseEditor {
+  const { t } = useTexts()
   const [editingId, setEditingId] = useState<number | null>(null)
   const update = useUpdateExpense()
   const savingIds = useSavingExpenseIds()
@@ -44,7 +47,7 @@ export function useExpenseEditor(): ExpenseEditor {
     // Each mutateAsync call has its own promise, so every save gets its own answer.
     void update.mutateAsync({ id, changes }).then(
       () => {
-        toast.success("Expense updated")
+        toast.success(t("edit.updated"))
         close(id)
       },
       (error: unknown) => toast.error(messageOf(error)),

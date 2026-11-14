@@ -11,6 +11,7 @@ import { messageOf } from "@/shared/lib/errors"
 import { currentMonth } from "@/shared/lib/format"
 import { queryGroupStatus } from "@/shared/lib/query-status"
 
+import { useTexts } from "../i18n"
 import { useMonthlySummary, useMonthlyTrend } from "../queries"
 import { CategoryChart } from "./category-chart"
 import { DashboardSkeleton } from "./dashboard-skeleton"
@@ -27,6 +28,7 @@ const RECENT_COUNT = 5
  * Once loaded, a failed reload keeps the numbers on screen with a "couldn't refresh" notice.
  */
 export function DashboardPage() {
+  const { t } = useTexts()
   // Small requests, sent at the same time. The backend does the adding up and sends back only totals
   // and 5 rows, not every expense. Each one reloads by itself when the data changes.
   const summary = useMonthlySummary(currentMonth())
@@ -37,8 +39,8 @@ export function DashboardPage() {
 
   const header = (
     <div>
-      <h1 className="text-2xl font-semibold">Dashboard</h1>
-      <p className="text-sm text-muted-foreground">Your spending at a glance (amounts in {DEFAULT_CURRENCY}).</p>
+      <h1 className="text-2xl font-semibold">{t("page.title")}</h1>
+      <p className="text-sm text-muted-foreground">{t("page.description", { currency: DEFAULT_CURRENCY })}</p>
     </div>
   )
 
@@ -49,7 +51,12 @@ export function DashboardPage() {
       <div className="flex flex-col gap-4">
         {header}
         {failed ? (
-          <SectionError title="Couldn't load the dashboard" message={messageOf(failed.error)} onRetry={retry} retrying={retrying} />
+          <SectionError
+            title={t("page.loadFailed")}
+            message={messageOf(failed.error)}
+            onRetry={retry}
+            retrying={retrying}
+          />
         ) : (
           <DashboardSkeleton />
         )}

@@ -3,7 +3,7 @@
 // renderer in a2ui-insights.tsx. A chart's data comes from the server, so nothing here trusts its shape.
 
 import { A2UI } from "@/shared/api/contracts.gen"
-import { LOCALE } from "@/shared/config/locale"
+import { currentLanguageInfo } from "@/shared/i18n"
 import { formatAmount } from "@/shared/lib/format"
 import { isObject } from "@/shared/lib/guards"
 
@@ -44,9 +44,9 @@ export function readUnit(unit: unknown): string {
 /**
  * A value as a chart writes it. With a unit (money): grouped with two decimals, exactly like the amounts
  * the server writes in the same card ("₹2,340.00"), so a number never appears in two styles side by side.
- * Without one: up to two decimals.
+ * Without one: up to two decimals. Both in the locale of the language on now.
  */
 export function formatValue(value: unknown, unit: string): string {
   if (unit) return `${unit}${formatAmount(Number(value))}`
-  return Number(value).toLocaleString(LOCALE, { maximumFractionDigits: 2 })
+  return Number(value).toLocaleString(currentLanguageInfo().locale, { maximumFractionDigits: 2 })
 }

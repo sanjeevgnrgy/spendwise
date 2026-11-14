@@ -25,7 +25,7 @@ it's built that way.
 | [assistant_architecture.md](assistant_architecture.md) | The agent loop, tools over MCP, AG-UI streaming, A2UI cards and forms, approvals, memory, cost |
 | [how_spendwise_works.md](how_spendwise_works.md) | The main flows as diagrams: adding an expense, the Dashboard, asking, deleting with approval, staying in sync |
 | [architecture-review.md](architecture-review.md) | Every finding of the architecture review and the two code reviews, and how each was resolved |
-| [decisions.md](decisions.md) | Every design decision (D1–D177), with why, and when to revisit it |
+| [decisions.md](decisions.md) | Every design decision (D1–D178), with why, and when to revisit it |
 
 ## Developer guides
 
@@ -75,6 +75,7 @@ it, and design questions with their answers (collapsed). Later changes are noted
 | [phases/phase-16-a2ui-card.md](phases/phase-16-a2ui-card.md) | Why agents send UI as data not HTML, A2UI v1.0 messages and catalog, a card for each tool result, a safe renderer |
 | [phases/phase-17-a2ui-forms.md](phases/phase-17-a2ui-forms.md) | Data binding, why model-written UI is validated, a form instead of questions, Save as an A2UI action |
 | [phases/phase-18-insight-cards.md](phases/phase-18-insight-cards.md) | Human in the loop and which actions deserve it, Approve/Cancel enforced by the server, a custom catalog for Chart and Stat |
+| [phases/phase-19-languages.md](phases/phase-19-languages.md) | Translating a web app: namespaces and keys, plurals and placeholders, loading a language on demand, numbers and dates per locale, English and Hindi |
 | [phases/refactor-solid.md](phases/refactor-solid.md) | SOLID in practice (surfaces instead of flags, tool and component registries, narrow ports), testability seams and how behaviour was recorded, scalability work and limits |
 | [phases/refactor-architecture.md](phases/refactor-architecture.md) | CQRS and the unit of work, ports and adapters, feature slices, migrations, the generated contract; then the code-review fixes (versions, transactional SQLite) |
 

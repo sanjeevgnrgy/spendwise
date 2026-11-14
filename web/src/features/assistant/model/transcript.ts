@@ -1,22 +1,24 @@
 // The conversation's message list and every change made to it, as pure functions: each takes the messages and
 // returns the next list, never changing the old one (React state). use-chat.ts calls them inside setMessages;
 // they hold the rules for where a reply, a chip, a card and an error bubble go, so those rules can be checked
-// without React or a network.
+// without React or a network. The few texts they write ("Stopped.", "Sent: …") are read from the assistant's
+// texts when the bubble is made, so a bubble stays in the language it was made in.
 
 import { EventType } from "@ag-ui/core"
 
 import { AGUI } from "@/shared/api/contracts.gen"
+import { i18n } from "@/shared/i18n"
 import { isAbort, messageOf } from "@/shared/lib/errors"
 
 import { applyA2uiMessage, createsSurface, setAt, type A2uiAction, type A2uiSurface } from "../a2ui/protocol"
 import { toolLabelsOf, toolResultText, toolSucceeded } from "../api/agent-events"
 import type { AgentEvent } from "../api/agent-stream"
-import { CONNECTION_LOST } from "../api/sse"
+import { connectionLostMessage } from "../api/sse"
+import { assistantTexts } from "../i18n"
 import type { ChatMessage, ToolActivity } from "./chat-types"
 
-const STOPPED = "Stopped."
-// How a form's values read in your bubble: "Sent: 250 · Food · Subway · 2026-11-13 · upi".
-const SENT_PREFIX = "Sent: "
+// How a form's values read in your bubble: "Sent: 250 · Food · Subway · 2026-11-13 · upi" (the text
+// "transcript.sent", with the values joined by these).
 const SENT_SEPARATOR = " · "
 const CHOICES_SEPARATOR = ", "
 
@@ -142,23 +144,28 @@ export function markToolsUnknown(messages: ChatMessage[], replyId: number, ids: 
 }
 
 /**
- * What your side of the chat shows for a button's click: the button's own message ("Approve deleting #14"),
- * or else the form's non-empty values, e.g. "Sent: 250 · Food · Subway · 2026-11-13 · upi".
+ * What your side of the chat shows for a button's click: the button's own message ("Approve deleting #14", from
+ * the server), or else the form's non-empty values, e.g. "Sent: 250 · Food · Subway · 2026-11-13 · upi" (in the
+ * language on now). Only shown: the agent is sent the action itself, never this text.
  */
 export function sentText(action: A2uiAction): string {
   const values = Object.values(action.context)
     .map((value) => (Array.isArray(value) ? value.join(CHOICES_SEPARATOR) : value))
     .filter((value) => value !== "" && value !== null && value !== undefined)
-  return action.userMessage ?? `${SENT_PREFIX}${values.join(SENT_SEPARATOR)}`
+    .join(SENT_SEPARATOR)
+  return action.userMessage ?? i18n.t("transcript.sent", { ns: assistantTexts.name, values })
 }
 
 /**
  * The bubble a run that ended early adds below whatever already arrived: "Stopped." if it was stopped, else
  * what went wrong. Errors carry messages meant for people (a RUN_ERROR, an API problem, our own); anything
- * thrown that isn't even an Error gets a plain explanation.
+ * thrown that isn't even an Error gets a plain explanation. Our own texts are in the language on now.
  */
 export function endedEarlyMessage(id: number, error: unknown): ChatMessage {
-  if (isAbort(error)) return { id, role: "assistant", text: STOPPED, status: "stopped" }
-  const text = error instanceof Error ? messageOf(error) : CONNECTION_LOST
+  if (isAbort(error)) {
+    const stopped = i18n.t("transcript.stopped", { ns: assistantTexts.name })
+    return { id, role: "assistant", text: stopped, status: "stopped" }
+  }
+  const text = error instanceof Error ? messageOf(error) : connectionLostMessage()
   return { id, role: "assistant", text, status: "failed" }
 }

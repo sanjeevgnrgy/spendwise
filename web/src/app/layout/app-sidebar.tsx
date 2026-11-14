@@ -19,15 +19,17 @@ import {
   SidebarRail,
 } from "@/shared/ui/sidebar"
 
+import { useTexts } from "../i18n"
 import { PAGES } from "../pages"
 
 /**
- * The menu: one entry per page, the current one highlighted (its path equals the address exactly). When the
- * sidebar is collapsed to icons, hovering an entry shows its title as a tooltip. The rail along the sidebar's
- * edge (SidebarRail) collapses or expands it when clicked, like the top bar's toggle.
+ * The menu: one entry per page, the current one highlighted (its path equals the address exactly), each named in
+ * the language on now. When the sidebar is collapsed to icons, hovering an entry shows its name as a tooltip. The
+ * rail along the sidebar's edge (SidebarRail) collapses or expands it when clicked, like the top bar's toggle.
  */
 export function AppSidebar() {
   const { pathname } = useLocation()
+  const { t } = useTexts()
 
   // collapsible="icon": collapsing leaves a narrow strip of icons instead of hiding the menu. The entries are the
   // same list the router uses (pages.tsx), so a page and its menu entry can't drift apart. Each menu button renders
@@ -42,15 +44,15 @@ export function AppSidebar() {
       </SidebarHeader>
       <SidebarContent>
         <SidebarGroup>
-          <SidebarGroupLabel>Menu</SidebarGroupLabel>
+          <SidebarGroupLabel>{t("menu")}</SidebarGroupLabel>
           <SidebarGroupContent>
             <SidebarMenu>
               {PAGES.map((item) => (
                 <SidebarMenuItem key={item.path}>
-                  <SidebarMenuButton asChild isActive={pathname === item.path} tooltip={item.title}>
+                  <SidebarMenuButton asChild isActive={pathname === item.path} tooltip={t(`pages.${item.name}`)}>
                     <NavLink to={item.path}>
                       <item.icon />
-                      <span>{item.title}</span>
+                      <span>{t(`pages.${item.name}`)}</span>
                     </NavLink>
                   </SidebarMenuButton>
                 </SidebarMenuItem>

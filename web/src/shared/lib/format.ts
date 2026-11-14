@@ -1,17 +1,30 @@
-// Shared display helpers: money, dates, months and counts, written the way people read them (Indian English, see
-// shared/config/locale.ts). They only format values; no arithmetic happens here. Part of shared/lib. Used by every
-// page and dialog that shows an amount or a date, and by the assistant's cards and date inputs.
+// Shared display helpers: money, dates and months, written the way people read them in the language on now
+// (each language's locale is in shared/i18n/languages.ts). They only format values; no arithmetic happens here.
+// Part of shared/lib. Used by every page and dialog that shows an amount or a date, and by the assistant's cards and
+// date inputs. A component re-renders when the language changes, so its next call uses the new locale.
 
 import { CURRENCY_SYMBOLS } from "@/shared/api/contracts.gen"
-import { LOCALE } from "@/shared/config/locale"
+import { currentLanguageInfo } from "@/shared/i18n"
 import { pick } from "@/shared/lib/guards"
 
-// Always two decimals, with the locale's digit grouping. Made once: building a formatter is the slow part.
-const amountFormat = new Intl.NumberFormat(LOCALE, { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+// The Intl locale of the language on now ("en-IN", "hi-IN").
+function locale(): string {
+  return currentLanguageInfo().locale
+}
+
+// Always two decimals, with the locale's digit grouping. One formatter per locale, made on first use: building a
+// formatter is the slow part.
+const amountFormats = new Map<string, Intl.NumberFormat>()
 
 /** 125000.5 -> "1,25,000.50" (Indian grouping). Number() is fine for *display*: exact values stay in paise. */
 export function formatAmount(value: number | string): string {
-  return amountFormat.format(Number(value))
+  const current = locale()
+  let format = amountFormats.get(current)
+  if (!format) {
+    format = new Intl.NumberFormat(current, { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+    amountFormats.set(current, format)
+  }
+  return format.format(Number(value))
 }
 
 /**
@@ -23,9 +36,19 @@ export function formatMoney(amount: number | string, currency: string): string {
   return symbol ? `${symbol}${formatAmount(amount)}` : `${formatAmount(amount)} ${currency}`
 }
 
+// Compact currency formatters, one per locale and currency, made on first use (an axis formats every tick).
+const compactFormats = new Map<string, Intl.NumberFormat>()
+
 /** A short money label for chart axes: 125000 -> "₹1.3L" style. */
 export function formatCompactMoney(amount: number, currency: string): string {
-  return new Intl.NumberFormat(LOCALE, { style: "currency", currency, notation: "compact" }).format(amount)
+  const current = locale()
+  const cacheKey = `${current}|${currency}`
+  let format = compactFormats.get(cacheKey)
+  if (!format) {
+    format = new Intl.NumberFormat(current, { style: "currency", currency, notation: "compact" })
+    compactFormats.set(cacheKey, format)
+  }
+  return format.format(amount)
 }
 
 /**
@@ -47,14 +70,14 @@ export function isoDate(day: Date): string {
 /** "2026-11-13" (or a Date) -> "13 Nov 2026"; text that isn't a date -> "". */
 export function formatDate(value: string | Date): string {
   const day = value instanceof Date ? value : parseIsoDate(value)
-  return day ? day.toLocaleDateString(LOCALE, { day: "numeric", month: "short", year: "numeric" }) : ""
+  return day ? day.toLocaleDateString(locale(), { day: "numeric", month: "short", year: "numeric" }) : ""
 }
 
 /** "2026-11" -> "November 2026" (long) or "Nov" (short, for chart axes). */
 export function formatMonth(isoMonth: string, style: "long" | "short" = "long"): string {
   const [year, month] = isoMonth.split("-").map(Number)
   const options: Intl.DateTimeFormatOptions = style === "long" ? { month: "long", year: "numeric" } : { month: "short" }
-  return new Date(year, month - 1, 1).toLocaleDateString(LOCALE, options)
+  return new Date(year, month - 1, 1).toLocaleDateString(locale(), options)
 }
 
 /** Today, on this device's calendar, as "YYYY-MM-DD" (a new expense's default date). */
@@ -65,9 +88,4 @@ export function todayIso(): string {
 /** This month as "YYYY-MM" (the Dashboard's summary month). */
 export function currentMonth(): string {
   return todayIso().slice(0, 7)
-}
-
-/** A count and its word: plural(1, "expense") -> "1 expense", plural(3, "category", "categories") -> "3 categories" */
-export function plural(count: number, word: string, words = `${word}s`): string {
-  return `${count} ${count === 1 ? word : words}`
 }

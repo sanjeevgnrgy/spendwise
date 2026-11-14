@@ -5,10 +5,13 @@
 // writes what the user does back to that path. That happens in the browser only; nothing is sent to the
 // agent until a button's action fires. An input given a plain value instead of a binding has nowhere to
 // write, so it's read-only. Paths are checked by protocol.ts, which refuses "__proto__" and friends.
+// Labels, placeholders and options come from the server and are shown as sent; only the renderer's own
+// fallbacks ("Choose…", "Pick a date") and the calendar's month and day names follow the language on now.
 
 import { CalendarIcon } from "lucide-react"
 import { useState, type ChangeEvent, type ReactNode } from "react"
 
+import { useLanguage } from "@/shared/i18n"
 import { Button } from "@/shared/ui/button"
 import { Calendar } from "@/shared/ui/calendar"
 import { Input } from "@/shared/ui/input"
@@ -19,6 +22,7 @@ import { Textarea } from "@/shared/ui/textarea"
 import { formatDate, isoDate, parseIsoDate } from "@/shared/lib/format"
 import { isObject } from "@/shared/lib/guards"
 
+import { useTexts } from "../i18n"
 import { Unsupported } from "./a2ui-unsupported"
 import { CHOICE_VARIANT, TEXT_FIELD_VARIANT } from "./basic-catalog"
 import { boundPath, resolve, textOf, type A2uiComponent, type A2uiRenderContext } from "./protocol"
@@ -98,7 +102,8 @@ function isOption(option: unknown): option is ChoiceOption {
  * Only one choice at a time is supported: a multiple-selection picker becomes a "Can't show …" note.
  */
 export function A2uiChoicePicker({ node, ctx }: InputProps) {
-  if (node.variant === CHOICE_VARIANT.multipleSelection) return <Unsupported what="a multiple-choice picker" />
+  const { t } = useTexts()
+  if (node.variant === CHOICE_VARIANT.multipleSelection) return <Unsupported reason="multipleChoice" />
   const id = inputId(ctx, node)
   const path = boundPath(node.value)
   const editable = canEdit(ctx, path)
@@ -117,7 +122,7 @@ export function A2uiChoicePicker({ node, ctx }: InputProps) {
         }}
       >
         <SelectTrigger id={id} size="sm" className="w-full">
-          <SelectValue placeholder="Choose…" />
+          <SelectValue placeholder={t("cards.choose")} />
         </SelectTrigger>
         <SelectContent>
           {options.map((option, index) => (
@@ -136,13 +141,16 @@ export function A2uiChoicePicker({ node, ctx }: InputProps) {
  * "Can't show …" note; the date picker itself is its own component, so its state hook always runs.
  */
 export function A2uiDateTimeInput({ node, ctx }: InputProps) {
-  if (node.enableDate !== true || node.enableTime === true) return <Unsupported what="a time picker" />
+  if (node.enableDate !== true || node.enableTime === true) return <Unsupported reason="timePicker" />
   return <DatePicker node={node} ctx={ctx} />
 }
 
-// A button that opens a calendar in a popover (shadcn's date picker).
+// A button that opens a calendar in a popover (shadcn's date picker). The date and the calendar are written in
+// the language on now.
 function DatePicker({ node, ctx }: InputProps) {
   const [open, setOpen] = useState(false)
+  const { t } = useTexts()
+  const { datePickerLocale } = useLanguage()
   const id = inputId(ctx, node)
   const path = boundPath(node.value)
   const editable = canEdit(ctx, path)
@@ -159,11 +167,11 @@ function DatePicker({ node, ctx }: InputProps) {
         <PopoverTrigger asChild>
           <Button id={id} variant="outline" size="sm" className="justify-start font-normal" disabled={!editable}>
             <CalendarIcon />
-            {day ? formatDate(day) : "Pick a date"}
+            {day ? formatDate(day) : t("cards.pickDate")}
           </Button>
         </PopoverTrigger>
         <PopoverContent className="w-auto p-0" align="start">
-          <Calendar mode="single" selected={day} defaultMonth={day} onSelect={select} />
+          <Calendar mode="single" locale={datePickerLocale} selected={day} defaultMonth={day} onSelect={select} />
         </PopoverContent>
       </Popover>
     </Field>

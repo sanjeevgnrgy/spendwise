@@ -339,16 +339,19 @@ Known limits, to address when the load calls for it (D174):
 
 ```
 web/src/
-  app/          the composition: main.tsx (root error boundary), providers.tsx (TanStack Query, theme, router,
-                assistant), query-client.ts (the cache and the one refresh rule), pages.tsx (every page once),
-                app.tsx (routes), layout/ (sidebar, top bar, the page area's and chat panel's error boundaries)
-  features/     one folder per feature, each owning its components, hooks, API calls, types and constants:
+  app/          the composition: main.tsx (starts i18next, then the root error boundary), providers.tsx (TanStack
+                Query, theme, router, assistant), query-client.ts (the cache and the one refresh rule), pages.tsx
+                (every page once), namespaces.ts (the texts loaded at boot), app.tsx (routes), layout/ (sidebar,
+                top bar, the page area's and chat panel's error boundaries), i18n/ (the frame's own texts)
+  features/     one folder per feature, each owning its components, hooks, API calls, types, constants and texts
+                (i18n/: en.ts, hi.ts, the namespace and its useTexts hook):
     expenses/     the Expenses page; components/ grouped into table/, dialogs/, filters/, fields/; api.ts, queries.ts
     categories/   categories API and queries, CategorySelect, category names
     dashboard/    the Dashboard page, stat cards, charts, recent list; api.ts, queries.ts
     assistant/    the chat panel; model/ (useChat, AssistantProvider); api/ (the AG-UI stream); a2ui/ (renderer)
   shared/       knows no feature: ui/ (shadcn kit), api/ (typed HTTP client, generated contract), config/ (app name,
-                env, routes, locale, data scopes), lib/ (formatting, guards, errors, ids), components/ (empty state,
+                env, routes, data scopes), i18n/ (the languages and their locales, the i18next setup, the language
+                menu, shared/'s "common" texts), lib/ (formatting, guards, errors, ids), components/ (empty state,
                 error boundary, section error, refresh notice, placeholder page), hooks/, theme/
 ```
 
@@ -376,6 +379,13 @@ web/src/
    a switch (D172).
 9. **Load on demand:** each feature's `index.ts` exports its page through `lazyWithRetry`; the chat panel is loaded the
    same way, in the background, so the first page doesn't wait for code it doesn't need (D174).
+10. **Every text from a namespace, loaded with what uses it** (D178). Each feature (and `app/`, and `shared/` as
+    "common") owns its texts in `i18n/`: English in `en.ts` is the source, and each other language is a file with
+    the same keys. Every file is its own chunk: a page's (or the chat panel's) load together with its code, from its
+    lazy loader, and "common" and the frame's texts load when the app boots (their English bundled, so the frame can
+    always be drawn). Keys are typed, so a
+    misspelt key or a translation missing one fails the build. A language switch loads the new language for the
+    namespaces in use, then redraws; numbers and dates follow the language's locale. The app speaks English and Hindi.
 
 `.oxlintrc.json` enforces rules 2 and 3 (`no-restricted-imports`, including relative imports out of a feature at
 every folder depth, relative imports out of `shared/` and deep imports from `app/`); `npx oxlint` fails on a

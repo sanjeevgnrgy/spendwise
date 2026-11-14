@@ -1,8 +1,10 @@
 // A component of the categories feature: the category dropdown (shadcn's Select), filled from the categories
-// query. Public (index.ts): the expenses feature uses it in its Add dialog, edit row and filters.
+// query. Public (index.ts): the expenses feature uses it in its Add dialog, edit row and filters. Its placeholder
+// texts come from the feature's i18n namespace; the category names are data from the backend.
 
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/shared/ui/select"
 
+import { useTexts } from "./i18n"
 import { useCategories } from "./queries"
 
 /**
@@ -21,7 +23,7 @@ interface CategorySelectProps {
   className?: string
   /** For a dropdown with no visible <Label>. */
   ariaLabel?: string
-  /** Adds a first option meaning "any category" (value ANY_CATEGORY), e.g. "All categories". */
+  /** Adds a first option meaning "any category" (value ANY_CATEGORY), e.g. "All categories", already translated. */
   anyLabel?: string
 }
 
@@ -30,9 +32,10 @@ interface CategorySelectProps {
  * the categories by name. While they load it says "Loading…"; if they can't be loaded it says so and is disabled.
  */
 export function CategorySelect({ value, onChange, id, className, ariaLabel, anyLabel }: CategorySelectProps) {
+  const { t } = useTexts()
   const { data: categories = [], isPending, isError } = useCategories()
   // Say why the list is empty, instead of an empty dropdown that can't be filled in.
-  const placeholder = isError ? "Couldn't load categories" : isPending ? "Loading…" : "Choose a category"
+  const placeholder = isError ? t("select.loadFailed") : isPending ? t("select.loading") : t("select.choose")
 
   return (
     <Select value={value} onValueChange={onChange} disabled={isError}>

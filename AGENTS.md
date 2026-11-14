@@ -2,7 +2,7 @@
 
 Rules for AI coding agents, and anyone else, changing SpendWise. They describe how this codebase is built: a change
 that doesn't follow them isn't finished. The reasoning behind each rule is in [docs/](docs/README.md). Read the linked
-doc before working in an area, and check [decisions.md](docs/decisions.md) (D1–D177) before changing a settled choice.
+doc before working in an area, and check [decisions.md](docs/decisions.md) (D1–D178) before changing a settled choice.
 
 | Before you change… | Read |
 |---|---|
@@ -137,6 +137,21 @@ files, not new branches in shared code.
 - **Pages** are exported from their feature's `index.ts` through `lazyWithRetry`, and listed once in `PAGES`
   (`app/pages.tsx`).
 - **Logic that doesn't need React** goes in pure functions in their own files.
+- **Texts** (D178): everything a person sees or hears comes from a namespace of texts, never a literal in a component.
+  - Each feature owns `i18n/`: `en.ts` (the source, a default-exported plain object), one file per other language
+    typed `Translation<typeof en>` (a missing key is a compile error), and `index.ts` (`defineNamespace` with a loader
+    per language, `export const useTexts = xTexts.useTexts`, and its `ResourceNamespaceMap` entry, typed by
+    `import type en from "./en"`).
+  - Every language's file is a chunk of its own, loaded with what uses it: a feature's from its page's or panel's lazy
+    loader, `Promise.all([import(page), loadNamespaces(...)])`, so nothing is drawn before its texts are in. `common`
+    (shared/) and `app` (the frame, `app/namespaces.ts`) load when the app boots, their English bundled so the frame
+    can always be drawn.
+  - Components call `const { t } = useTexts()`. Code outside React calls `i18n.t(key, { ns })` when it needs the
+    text. Never keep a text in a module-level constant (store its key), and never build a sentence from pieces: one
+    key per sentence, with `{{placeholders}}`, and `_one`/`_other` keys for counts.
+  - Numbers and dates go through `shared/lib/format.ts`, which follows the language's locale (`LANGUAGES`).
+  - Not translated in the browser: user data, and text the server sends (cards, chip labels, error details,
+    payment labels), which the server will write in the chosen language.
 - **Size.** Files under about 150 lines of code, and components or hooks under about 60. A folder past about eight
   files gets sub-folders by area (e.g. `components/table/`, `dialogs/`).
 - **Network data is untrusted.** Check it with guards or schemas, never with `as` casts.

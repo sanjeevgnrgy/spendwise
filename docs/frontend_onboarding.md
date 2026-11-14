@@ -19,10 +19,12 @@ npm run gen:api      # regenerate API types from openapi.json (after the backend
 ```
 src/
   app/                  composes the app; the only place that knows every feature
-    main.tsx            entry: root error boundary, providers, <App />
+    main.tsx            entry: starts i18next, then root error boundary, providers, <App />
     providers.tsx       TanStack Query, theme, tooltips, router, the assistant, toasts
     query-client.ts     the cache, retry rules, and THE "expenses changed" refresh rule
-    pages.tsx           every page once: path, title, icon, element (router and menu both use it)
+    pages.tsx           every page once: path, name, icon, element (router and menu both use it)
+    namespaces.ts       the texts loaded at boot (the frame's; shared/'s "common" is always added)
+    i18n/               the frame's own texts: menu, page names, top bar, error titles
     app.tsx             the routes
     layout/             sidebar, top bar, the page area (with its error boundary), the chat panel's place
   features/
@@ -34,7 +36,8 @@ src/
     api/                typed HTTP client (http.ts) + generated contract (*.gen.ts)
     ui/                 shadcn/ui components (generated source; edit freely)
     components/         error boundary, section error, refresh notice, empty state, placeholder page
-    config/             app name, env, routes, locale, data scopes
+    config/             app name, env, routes, data scopes
+    i18n/               languages and their locales, i18next setup, language menu, the "common" texts
     hooks/, lib/        use-mobile, use-debounced-value; formatting, guards, errors, ids
     theme/              theme constants, provider, toggle
 ```
@@ -68,6 +71,10 @@ features/expenses/
     dialogs/           Add expense, Delete expenses
     filters/           the filters bar
     fields/            form controls shared by the dialogs, the edit row and the filters
+  i18n/
+    en.ts              every text the feature shows, in English (the source, and the keys' type)
+    hi.ts              the same keys in Hindi
+    index.ts           the namespace (a loader per language), useTexts(), and the keys' types
 ```
 
 A folder that grows past a handful of files is grouped by area like this. Imports stay relative inside the feature;
@@ -189,19 +196,43 @@ How it works end to end: [assistant_architecture.md](assistant_architecture.md).
    })
    ```
 2. Add its address to `shared/config/routes.ts`.
-3. Add one entry to `PAGES` in `app/pages.tsx` (path, title, icon, element). The router and the sidebar both follow.
+3. Add one entry to `PAGES` in `app/pages.tsx` (path, name, icon, element), and the page's name under `pages` in
+   `app/i18n/en.ts` and every other language's file. The router and the sidebar both follow.
 
 ### Add a feature
 
 `features/<name>/` with `index.ts`, `api.ts` (calls through `api` + `unwrap`), `queries.ts` (keys, hooks; mutations
-with `meta.changes`), and `components/`. If its changes should refresh other data, add a scope to
-`shared/config/data-scopes.ts` and its entry to `STALE_AFTER` in `app/query-client.ts` (the compiler insists).
+with `meta.changes`), `components/`, and `i18n/` (copy another feature's three files and rename the namespace; its
+`index.ts` exports `useTexts` from the namespace: `export const useTexts = xTexts.useTexts`).
+Its page's lazy loader in `index.ts` loads its texts with its code:
+`Promise.all([import("./components/x-page"), loadNamespaces(xTexts)])`, plus any other feature's namespace the page
+draws (the Expenses page loads `categoriesTexts` for CategorySelect). If its changes should refresh other data, add a
+scope to `shared/config/data-scopes.ts` and its entry to `STALE_AFTER` in `app/query-client.ts` (the compiler
+insists).
 
 ### Add an API call
 
 1. The backend route exists and the contract is regenerated.
 2. A function in the feature's `api.ts`: `unwrap(api.GET("/api/v1/...", { params, signal }))`.
 3. A hook in `queries.ts` with a key under the feature's `all`.
+
+### Add or change a text
+
+1. Add the key to the feature's `i18n/en.ts`, grouped with its neighbours, with the English text. A sentence is one
+   key; values go in as `{{placeholders}}`; a count gets `_one` and `_other` keys, used as `t("count", { count })`.
+2. Add the same key to every other language's file (`hi.ts`). Until you do, `npx tsc -b` fails, so no language can
+   miss it.
+3. Use it: `const { t } = useTexts()`, then `t("group.key", { name })`. Outside a component, call
+   `i18n.t("group.key", { ns: expensesTexts.name })` at the moment the text is needed, never into a constant.
+
+### Add a language
+
+1. One entry in `LANGUAGES` (`shared/i18n/languages.ts`): its code (a BCP 47 tag, like `pt-BR`), its name in itself,
+   its Intl locale, its writing direction, and a loader for its react-day-picker locale.
+2. One file per namespace, next to `hi.ts` (`common`, `app`, every feature), typed `Translation<typeof en>`, and its
+   loader in that namespace's `defineNamespace` call. The compiler lists every namespace that lacks either.
+3. A language with more plural forms than English adds them as extra keys (`count_few`, `count_many`).
+4. Right-to-left languages also need the layout mirrored; that isn't supported yet.
 
 ### Draw a new A2UI component
 
@@ -218,6 +249,8 @@ with `meta.changes`), and `components/`. If its changes should refresh other dat
 - **Types, not casts:** network data is checked (`isObject`, schema validation) rather than asserted with `as`.
 - **No magic strings or numbers:** a value used twice, or shared with the backend, is a named constant: in the
   feature, in `shared/config`, or from the generated contract.
+- **No text in code:** every text a person sees or hears (labels, `aria-label`s, toasts, placeholders) is a key in
+  the feature's `i18n/en.ts`, translated in every other language's file (D178).
 - **Effects only for the outside world** (subscriptions, timers, the DOM); derive everything else during render.
   `useSyncExternalStore` for browser state like media queries.
 - **Error boundaries** around the app, the page area, the chat panel and every A2UI card.

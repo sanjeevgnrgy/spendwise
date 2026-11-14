@@ -10,7 +10,8 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/sha
 import { ChartContainer, ChartTooltip, ChartTooltipContent } from "@/shared/ui/chart"
 
 import type { MonthlySummary } from "../api"
-import { SPENT_CONFIG } from "./chart-config"
+import { useTexts } from "../i18n"
+import { useSpentConfig } from "./chart-config"
 
 // Room for the category names beside the bars, in pixels.
 const CATEGORY_AXIS_WIDTH = 96
@@ -20,6 +21,8 @@ const CATEGORY_AXIS_WIDTH = 96
  * the amount on hover. With nothing spent yet, it says so and offers a link to add an expense.
  */
 export function CategoryChart({ summary }: { summary: MonthlySummary }) {
+  const { t } = useTexts()
+  const config = useSpentConfig()
   // Recharts draws numbers: the API's rupee string ("450.50") becomes 450.5, for the chart only.
   const rows = summary.by_category.map((c) => ({ name: c.category_name, total: Number(c.total) }))
 
@@ -27,14 +30,14 @@ export function CategoryChart({ summary }: { summary: MonthlySummary }) {
   return (
     <Card>
       <CardHeader>
-        <CardTitle>By category</CardTitle>
+        <CardTitle>{t("byCategory.title")}</CardTitle>
         <CardDescription>{formatMonth(summary.month)}</CardDescription>
       </CardHeader>
       <CardContent>
         {rows.length === 0 ? (
-          <EmptyState message="No spending this month yet." action={{ label: "Add an expense", to: ROUTES.expenses }} />
+          <EmptyState message={t("byCategory.empty")} action={{ label: t("addExpense"), to: ROUTES.expenses }} />
         ) : (
-          <ChartContainer config={SPENT_CONFIG} className="aspect-auto h-64 w-full">
+          <ChartContainer config={config} className="aspect-auto h-64 w-full">
             <BarChart data={rows} layout="vertical" margin={{ left: 8, right: 8 }} accessibilityLayer>
               <XAxis type="number" hide />
               <YAxis dataKey="name" type="category" width={CATEGORY_AXIS_WIDTH} tickLine={false} axisLine={false} />

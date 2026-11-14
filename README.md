@@ -230,9 +230,9 @@ spendwise/
     seed.py               sample categories and expenses
     mcp_stdio.py          the MCP server over stdio
   web/
-    src/app/              providers, routes, layout
-    src/features/         expenses, categories, dashboard, assistant
-    src/shared/           ui kit, typed API client + generated contract, config, formatting, theme
+    src/app/              providers, routes, layout, the list of text namespaces
+    src/features/         expenses, categories, dashboard, assistant (each with its texts in i18n/)
+    src/shared/           ui kit, typed API client + generated contract, config, languages (i18n), formatting, theme
   docs/                   architecture, onboarding, API, schema, security, decisions, phase notes
   run.ps1                 one-command dev start (Windows)
   requirements.txt        pinned backend dependencies

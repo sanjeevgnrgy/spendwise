@@ -1,10 +1,15 @@
 // A part of the expenses feature's table: the line above it, with the count ("140 expenses · showing the newest
-// 100 · 2 selected") and "Delete selected" while any row is ticked. Used by expenses-table.tsx.
+// 100 · 2 selected") and "Delete selected" while any row is ticked. Its texts (with each language's plural forms)
+// come from the feature's i18n namespace. Used by expenses-table.tsx.
 
 import { Trash2 } from "lucide-react"
 
-import { plural } from "@/shared/lib/format"
 import { Button } from "@/shared/ui/button"
+
+import { useTexts } from "../../i18n"
+
+// What goes between the count line's parts.
+const PART_SEPARATOR = " · "
 
 interface ExpensesToolbarProps {
   /** How many expenses match the filters. */
@@ -24,16 +29,20 @@ interface ExpensesToolbarProps {
  * holds fewer than that, and "N selected" while rows are ticked; "Delete selected" shows only then.
  */
 export function ExpensesToolbar({ total, shown, selected, deleting, onDeleteSelected }: ExpensesToolbarProps) {
+  const { t } = useTexts()
+  // Each part is a whole phrase of its own, so it reads right in every language whichever parts are shown.
+  const parts = [
+    t("toolbar.count", { count: total }),
+    total > shown ? t("toolbar.showingNewest", { shown }) : null,
+    selected > 0 ? t("toolbar.selected", { count: selected }) : null,
+  ]
+
   return (
     <div className="flex min-h-8 items-center justify-between gap-2 text-sm text-muted-foreground">
-      <span>
-        {plural(total, "expense")}
-        {total > shown && ` · showing the newest ${shown}`}
-        {selected > 0 && ` · ${selected} selected`}
-      </span>
+      <span>{parts.filter((part) => part !== null).join(PART_SEPARATOR)}</span>
       {selected > 0 && (
         <Button size="sm" variant="destructive" disabled={deleting} onClick={onDeleteSelected}>
-          <Trash2 /> Delete selected
+          <Trash2 /> {t("toolbar.deleteSelected")}
         </Button>
       )}
     </div>

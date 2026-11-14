@@ -4,9 +4,8 @@
 import { useQuery } from "@tanstack/react-query"
 import { useCallback, useMemo } from "react"
 
-import { UNKNOWN_CATEGORY } from "@/shared/api/contracts.gen"
-
 import { listCategories } from "./api"
+import { useTexts } from "./i18n"
 
 /**
  * TanStack Query keys: what a cached answer is filed under. Invalidating `all` (as a change to categories would)
@@ -30,12 +29,14 @@ export function useCategories() {
 
 /**
  * id -> name: what every list of expenses needs. While the names are still loading it gives "" (not
- * "Unknown", which would be wrong for a moment); "Unknown" only for an id that really isn't there.
- * The function stays the same until the categories change, so a table's columns built from it aren't rebuilt.
+ * "Unknown", which would be wrong for a moment); "Unknown" (the categories text "unknown", in the language on now)
+ * only for an id that really isn't there. The function stays the same until the categories or the language change,
+ * so a table's columns built from it aren't rebuilt. A page that uses it loads the categories texts with its own.
  */
 export function useCategoryName(): (categoryId: number) => string {
   const { data } = useCategories()
+  const { t } = useTexts()
   // A Map, built once per answer, so each lookup is direct rather than a search through the list.
   const names = useMemo(() => (data ? new Map(data.map((category) => [category.id, category.name])) : null), [data])
-  return useCallback((categoryId: number) => (names ? (names.get(categoryId) ?? UNKNOWN_CATEGORY) : ""), [names])
+  return useCallback((categoryId: number) => (names ? (names.get(categoryId) ?? t("unknown")) : ""), [names, t])
 }

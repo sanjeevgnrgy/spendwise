@@ -1,8 +1,8 @@
 // A component of the expenses feature: the expenses table (TanStack Table), with the count line above it, sortable
 // headers, tick boxes, Edit and Delete on each row, and the inline edit row. It puts together the parts: the
 // columns (expense-columns.tsx), the count line (expenses-toolbar.tsx), inline editing (use-expense-editor.ts) and
-// the row selection kept here. Deleting goes through the page, which asks "are you sure?" first.
-// Used by the Expenses page.
+// the row selection kept here. Deleting goes through the page, which asks "are you sure?" first. Its texts come
+// from the feature's i18n namespace. Used by the Expenses page.
 
 import { flexRender, useTable, type Row, type RowSelectionState } from "@tanstack/react-table"
 import { useMemo, useState } from "react"
@@ -11,6 +11,7 @@ import { useCategoryName } from "@/features/categories"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/shared/ui/table"
 
 import type { Expense } from "../../api"
+import { useTexts } from "../../i18n"
 import { useIsDeletingExpenses } from "../../queries"
 import { EditRow } from "./edit-row"
 import { ariaSortOf, expenseColumns, expenseTableFeatures } from "./expense-columns"
@@ -49,6 +50,7 @@ function useSelectionOf(expenses: Expense[]) {
  * delete button is disabled.
  */
 export function ExpensesTable({ expenses, total, loading, onDelete }: ExpensesTableProps) {
+  const { t } = useTexts()
   const editor = useExpenseEditor()
   // A delete is running (the confirmation dialog started it): its rows can't be deleted twice meanwhile.
   const deleting = useIsDeletingExpenses()
@@ -58,10 +60,11 @@ export function ExpensesTable({ expenses, total, loading, onDelete }: ExpensesTa
   const onEdit = editor.start
 
   // useMemo keeps the same columns between renders, rebuilding them only when their inputs change, as TanStack
-  // recommends. onDelete is the page's state setter, so it's stable too.
+  // recommends. onDelete is the page's state setter, so it's stable too; t changes only with the language, which
+  // rebuilds the columns in it.
   const columns = useMemo(
-    () => expenseColumns({ categoryName, deleting, onEdit, onDelete }),
-    [categoryName, deleting, onEdit, onDelete],
+    () => expenseColumns({ t, categoryName, deleting, onEdit, onDelete }),
+    [t, categoryName, deleting, onEdit, onDelete],
   )
 
   const table = useTable({
@@ -123,12 +126,13 @@ interface ExpenseRowsProps {
 // says "Loading…" or that nothing matches the filters. getAllCells, not getVisibleCells: v9 only has
 // getVisibleCells with the column-visibility feature, which this table doesn't use.
 function ExpenseRows({ rows, columnCount, loading, editor }: ExpenseRowsProps) {
+  const { t } = useTexts()
   return (
     <TableBody>
       {rows.length === 0 ? (
         <TableRow>
           <TableCell colSpan={columnCount} className="h-24 text-center text-muted-foreground">
-            {loading ? "Loading…" : "No expenses match these filters."}
+            {loading ? t("table.loading") : t("table.noMatches")}
           </TableCell>
         </TableRow>
       ) : (

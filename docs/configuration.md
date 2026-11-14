@@ -68,7 +68,7 @@ App-wide constants, each defined once:
 |---|---|
 | the app's name | `src/shared/config/app.ts` (also put into `index.html`'s `<title>` at build time) |
 | page addresses | `src/shared/config/routes.ts` |
-| locale `en-IN` | `src/shared/config/locale.ts` |
+| the languages (English, Hindi), each one's locale for numbers and dates, writing direction and date picker locale, the default (and fallback) language, where the choice is saved (`spendwise-language`) | `src/shared/i18n/languages.ts` |
 | theme storage key, the dark class, the boot script | `src/shared/theme/theme-constants.ts` (the boot script is injected into `index.html` by `vite.config.ts`) |
 | what kinds of data a change touches | `src/shared/config/data-scopes.ts` |
 

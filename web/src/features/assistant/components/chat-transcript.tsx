@@ -9,14 +9,14 @@ import { Button } from "@/shared/ui/button"
 import { ScrollArea } from "@/shared/ui/scroll-area"
 
 import type { A2uiRenderContext } from "../a2ui/protocol"
+import { useTexts } from "../i18n"
+import type en from "../i18n/en"
 import type { ChatMessage } from "../model/chat-types"
 import { ChatMessageBubble } from "./chat-message"
 
-const SUGGESTIONS = [
-  "How much did I spend on food this month?",
-  "Add 250 for lunch at Subway today, paid by UPI",
-  "What were my 3 biggest expenses this month?",
-]
+// The messages to try, in order: keys of the "suggestions" texts, looked up when drawn, so each one is shown (and
+// sent) in the language on now. Nothing parses them: a suggestion is sent like anything typed.
+const SUGGESTIONS: readonly (keyof typeof en.suggestions)[] = ["foodThisMonth", "addLunch", "biggestExpenses"]
 
 interface ChatTranscriptProps {
   messages: ChatMessage[]
@@ -37,19 +37,20 @@ function isWaiting(last: ChatMessage | undefined): boolean {
 
 // What an empty conversation shows: a short hint and a few messages to try.
 function Suggestions({ sending, onSuggestion }: Pick<ChatTranscriptProps, "sending" | "onSuggestion">) {
+  const { t } = useTexts()
   return (
     <div className="flex flex-col gap-2 py-4 text-sm text-muted-foreground">
-      <p>Ask about your spending, or record an expense in plain words. Try:</p>
+      <p>{t("transcript.hint")}</p>
       {SUGGESTIONS.map((suggestion) => (
         <Button
           key={suggestion}
           variant="outline"
           size="sm"
           className="h-auto justify-start py-1.5 text-left whitespace-normal"
-          onClick={() => onSuggestion(suggestion)}
+          onClick={() => onSuggestion(t(`suggestions.${suggestion}`))}
           disabled={sending}
         >
-          {suggestion}
+          {t(`suggestions.${suggestion}`)}
         </Button>
       ))}
     </div>
@@ -63,6 +64,7 @@ function Suggestions({ sending, onSuggestion }: Pick<ChatTranscriptProps, "sendi
  */
 export function ChatTranscript({ messages, sending, onSuggestion, onFormChange, onFormSubmit }: ChatTranscriptProps) {
   const endRef = useRef<HTMLDivElement>(null)
+  const { t } = useTexts()
 
   // Keep the newest content in view: a new message, more reply text, a new chip or card. Not on every
   // keystroke in a form (that changes the messages too), which would yank the field you're typing in
@@ -74,7 +76,7 @@ export function ChatTranscript({ messages, sending, onSuggestion, onFormChange, 
 
   return (
     <ScrollArea className="min-h-0 flex-1">
-      <div role="log" aria-live="polite" aria-label="Conversation" className="flex flex-col gap-3 p-3">
+      <div role="log" aria-live="polite" aria-label={t("transcript.label")} className="flex flex-col gap-3 p-3">
         {messages.length === 0 && <Suggestions sending={sending} onSuggestion={onSuggestion} />}
 
         {messages.map((message) => (
@@ -89,7 +91,7 @@ export function ChatTranscript({ messages, sending, onSuggestion, onFormChange, 
 
         {sending && isWaiting(last) && (
           <div className="flex items-center gap-2 text-sm text-muted-foreground">
-            <Loader2 className="size-4 animate-spin" /> Thinking…
+            <Loader2 className="size-4 animate-spin" /> {t("transcript.thinking")}
           </div>
         )}
         <div ref={endRef} />

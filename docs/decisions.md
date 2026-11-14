@@ -1261,6 +1261,8 @@ is natural. It's still a soft, model-judged guard.
 ### D159. Money looks the same everywhere
 - `₹1,25,000.50` (Indian grouping, two decimals) in cards, charts and pages: `core.money.format_money` on the server,
   `formatMoney` in the browser, same rule.
+- **Updated by D178:** the browser writes money and dates in the chosen language's locale (`LANGUAGES`). English and
+  Hindi both use Indian grouping, so the server's `format_money` still matches.
 
 ### D160. Web dependencies pinned exactly; openapi-typescript runs through `npx`
 - `package.json` lists exact versions, like `requirements.txt` (D2).
@@ -1572,3 +1574,73 @@ is natural. It's still a soft, model-judged guard.
   - the scans in [architecture.md](architecture.md#checking-the-rules) are clean.
 - **Revisit:** if a module ever needs something from `infrastructure/`, pass it in through the composition root
   instead: a port in `core/`, an adapter in `infrastructure/`, as with the model.
+
+---
+
+## Languages
+
+> The web app speaks English and Hindi. Every text it writes comes from a namespace of texts, a language menu in the
+> top bar switches language, and numbers and dates follow the chosen language. The text the server writes (cards,
+> chip labels, error details, payment labels) and the assistant's replies stay English until the next phase. Phase
+> note: [phases/phase-19-languages.md](phases/phase-19-languages.md).
+
+### D178. The web app's texts in namespaces (i18next), in English and Hindi
+- **What:**
+  - **i18next 26.5.12 and react-i18next 17.1.9**, pinned to the newest releases at least two weeks old (27.x and 18.x
+    were days old).
+  - **One namespace per owner:** `common` (shared/), `app` (the frame) and one per feature, each in its own `i18n/`
+    folder. `en.ts` is the source; `hi.ts` is typed `Translation<typeof en>`, so a missing or misspelt key is a compile
+    error; `index.ts` defines the namespace (`defineNamespace`), a `useTexts()` hook bound to it, and the keys' type
+    through i18next's `ResourceNamespaceMap`, so each feature types its own keys with no central file.
+    `app/namespaces.ts` lists only what boots (the frame's texts); `initI18n` adds `common`.
+  - **Loaded with what uses them (route level):** every language's file is a chunk of its own (0.1 to 3.4 kB). A
+    page's texts load together with its code, from its lazy loader (`loadNamespaces`), and the chat panel's with the
+    panel. `common` and the frame's `app` texts load when the app boots (`main.tsx` waits for them, so the first
+    paint is already translated); their English is bundled (about 2 kB), so the frame can always be drawn, even if a
+    file can't be fetched. English is loaded with any other language, as the fallback.
+  - **Switching:** loads the new language for the namespaces in use (again until none was added meanwhile), then
+    redraws once. A page opened during a switch loads the target language too. When choices overlap, only the latest
+    is switched on and saved. If loading fails, nothing changes and the menu says so; the date picker locale is
+    optional (English names if it can't be loaded).
+  - **No i18next backend:** the app imports each file itself and adds it with `addResourceBundle` once every file it
+    needs has arrived. i18next's own loader remembers a failed load and never retries it (even `reloadResources`
+    skips it), so a language that failed once offline could never be switched on again; now a failed attempt adds
+    nothing, and the next attempt fetches again (checked in Edge: offline, then online).
+  - **The starting language:** the saved choice (`spendwise-language` in localStorage), else the first of the
+    browser's languages the app speaks (an exact tag first, then its base language), else English. If it can't be
+    loaded, the app starts in English. `<html lang>` and `<html dir>` follow (each language names its direction).
+  - **The client's own error messages follow the language:** an `ApiError` made from a client text looks its message
+    up each time it's read, so an error already on screen switches with the page. The kit's screen-reader labels
+    (`shared/ui`: Close, Toggle Sidebar) come from the `common` texts too.
+  - **Numbers and dates per language:** `LANGUAGES` gives each language its Intl locale (`en-IN`, `hi-IN`) and its
+    date picker locale (react-day-picker's, loaded with the language, which adds translated screen-reader labels to
+    date-fns's). The helpers in `shared/lib/format.ts` read it on every call. `shared/config/locale.ts` is gone.
+  - **Rules for texts:** one key per sentence with `{{placeholders}}` (no sentence built from pieces: word order
+    differs), `_one`/`_other` keys for counts (the English-only `plural()` helper is gone), and no text in a
+    module-level constant (keys are kept, texts looked up when drawn). Messages made when something fails are made
+    then, in the language on then (`connectionLostMessage()`), or looked up each time they're read (`ApiError`).
+  - **Not translated in the browser:** user data (category names, merchants, notes) and anything the server writes.
+- **Why:** the app should be usable by people who don't read English. i18next is the most widely used option: plural
+  rules for every language through `Intl.PluralRules`, namespaces that match the feature slices, and loading on
+  demand. Typed keys turn a missing translation into a build error instead of an English word on a Hindi screen.
+- **Chosen with the owner:** English and Hindi first, built so more languages are mostly new files; everything
+  translated, in two phases (this one, the web app; the next, the server's texts and the assistant's replies); texts
+  loaded with their page (route level), with the common texts at boot; no right-to-left languages yet; no translation
+  by the model, at run time or as a generator, for now.
+- **Trade-offs:** a non-English start waits for its boot texts (two small files and the date picker locale), and a
+  page's first opening waits for its texts as well as its code. The formatting helpers read
+  the language from i18next, so they're no longer pure. The Hindi was written by an AI and needs a native speaker's
+  review.
+- **How it was verified:** `tsc -b`, `oxlint` (warnings only in `shared/ui`) and `npm run build` pass. Headless Edge
+  screenshots of the Dashboard and Expenses pages, against a backend on a copy of the database: with the browser in
+  English, both pages are identical to the previous build except for the new language button; with the browser in
+  Hindi, the app starts in Hindi, with Hindi plurals, chart axes (`₹8 हज़ार`) and dates (`13 नव॰ 2026`). Driven
+  through Edge's DevTools protocol: the boot fetches only the English date locale and the common, app and Dashboard
+  texts; choosing Hindi offline shows the toast and changes nothing; choosing it again online switches (every file
+  fetched again); opening Expenses fetches its code with the expenses and categories texts; a reload starts in Hindi;
+  opening the Assistant draws it in Hindi with nothing left to fetch (preloaded); choosing English switches back.
+  Two code reviews' findings were fixed:
+  [phases/phase-19-languages.md](phases/phase-19-languages.md#after-the-code-reviews).
+- **Revisit:** a language with more plural forms (the type already accepts `count_few` and the rest); right-to-left
+  languages (mirrored layout, logical CSS); a region setting apart from the language, if English speakers outside
+  India want `125,000.50` rather than `1,25,000.50`.

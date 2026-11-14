@@ -4,7 +4,7 @@
 // decided here. The data rules (which points, the unit, the number format) are in insight-data.ts.
 
 import { Minus, TrendingDown, TrendingUp } from "lucide-react"
-import type { ReactNode } from "react"
+import { useMemo, type ReactNode } from "react"
 import { Bar, BarChart, Cell, Line, LineChart, Pie, PieChart, XAxis } from "recharts"
 
 import { A2UI } from "@/shared/api/contracts.gen"
@@ -12,13 +12,18 @@ import { pick } from "@/shared/lib/guards"
 import { Card, CardContent } from "@/shared/ui/card"
 import { ChartContainer, ChartTooltip, ChartTooltipContent, type ChartConfig } from "@/shared/ui/chart"
 
+import { useTexts } from "../i18n"
 import { Unsupported } from "./a2ui-unsupported"
 import { formatValue, readPoints, readUnit, type ChartPoint } from "./insight-data"
 import type { A2uiRendererProps } from "./renderer-types"
 
-// A FIXED chart config. shadcn's ChartContainer writes the config's keys and colours into a <style>
-// tag, so nothing from the agent may ever become a key or a colour: its labels are only drawn as text.
-const CONFIG = { value: { label: "Amount", color: "var(--chart-1)" } } satisfies ChartConfig
+// The chart config: a FIXED key and colour. shadcn's ChartContainer writes the config's keys and colours into a
+// <style> tag, so nothing from the agent may ever become a key or a colour: its labels are only drawn as text.
+// Only the label is filled in when drawn, and it's our own text (in the language on now), never the server's.
+function chartConfig(label: string) {
+  return { value: { label, color: "var(--chart-1)" } } satisfies ChartConfig
+}
+
 // The theme's five chart colours, for donut slices (more slices simply reuse them). A slice's colour
 // comes from its position, never from the server.
 const SLICE_COLORS = ["var(--chart-1)", "var(--chart-2)", "var(--chart-3)", "var(--chart-4)", "var(--chart-5)"]
@@ -28,15 +33,17 @@ function sliceColor(index: number): string {
   return SLICE_COLORS[index % SLICE_COLORS.length]
 }
 
-// What every kind of chart is drawn from: checked points, and how to write a value (tooltip, legend).
+// What every kind of chart is drawn from: checked points, how to write a value (tooltip, legend), and the
+// fixed config (chartConfig).
 interface ChartKindProps {
   points: ChartPoint[]
   format: (value: unknown) => string
+  config: ChartConfig
 }
 
-function BarInsight({ points, format }: ChartKindProps) {
+function BarInsight({ points, format, config }: ChartKindProps) {
   return (
-    <ChartContainer config={CONFIG} className="aspect-auto h-40 w-full">
+    <ChartContainer config={config} className="aspect-auto h-40 w-full">
       <BarChart data={points} accessibilityLayer>
         <XAxis dataKey="label" tickLine={false} axisLine={false} interval={0} fontSize={10} />
         <ChartTooltip cursor={false} content={<ChartTooltipContent formatter={format} />} />
@@ -46,9 +53,9 @@ function BarInsight({ points, format }: ChartKindProps) {
   )
 }
 
-function LineInsight({ points, format }: ChartKindProps) {
+function LineInsight({ points, format, config }: ChartKindProps) {
   return (
-    <ChartContainer config={CONFIG} className="aspect-auto h-40 w-full">
+    <ChartContainer config={config} className="aspect-auto h-40 w-full">
       <LineChart data={points} margin={{ left: 8, right: 8, top: 8 }} accessibilityLayer>
         <XAxis dataKey="label" tickLine={false} axisLine={false} fontSize={10} />
         <ChartTooltip content={<ChartTooltipContent formatter={format} />} />
@@ -60,10 +67,10 @@ function LineInsight({ points, format }: ChartKindProps) {
 
 // A donut beside its legend. The legend is also the chart's text version: every slice with its value,
 // for screen readers too.
-function DonutInsight({ points, format }: ChartKindProps) {
+function DonutInsight({ points, format, config }: ChartKindProps) {
   return (
     <div className="flex items-center gap-3">
-      <ChartContainer config={CONFIG} className="aspect-square h-28 shrink-0">
+      <ChartContainer config={config} className="aspect-square h-28 shrink-0">
         <PieChart>
           <Pie data={points} dataKey="value" nameKey="label" innerRadius="55%" strokeWidth={2}>
             {points.map((point, index) => (
@@ -98,14 +105,19 @@ const CHART_KINDS: Readonly<Record<string, (props: ChartKindProps) => ReactNode>
  * well-formed points, or of a type not in the contract, becomes a "Can't show …" note.
  */
 export function A2uiChart({ node }: A2uiRendererProps) {
+  const { t } = useTexts()
+  // The same config until the language changes, so the chart doesn't rebuild its styles on every render.
+  const config = useMemo(() => chartConfig(t("cards.chartValue")), [t])
   const points = readPoints(node.data)
-  if (points.length === 0) return <Unsupported what="a chart without data" />
+  if (points.length === 0) return <Unsupported reason="chartWithoutData" />
   const ChartKind = pick(CHART_KINDS, node.chartType)
-  if (!ChartKind) return <Unsupported what="this kind of chart" />
+  if (!ChartKind) return <Unsupported reason="chartKind" />
   const unit = readUnit(node.unit)
+  // The values are written in the language on now (formatValue); useTexts redraws the chart when it changes.
+  const format = (value: unknown) => formatValue(value, unit)
   // The rule can't see that pick() returns a component from a module-level table: none is created here.
   // oxlint-disable-next-line react/static-components -- the chart comes from the fixed CHART_KINDS table
-  return <ChartKind points={points} format={(value) => formatValue(value, unit)} />
+  return <ChartKind points={points} format={format} config={config} />
 }
 
 // The arrow only shows direction. It isn't coloured red or green: whether "up" is good depends on what's measured.

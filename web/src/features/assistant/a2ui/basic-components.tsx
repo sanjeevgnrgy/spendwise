@@ -24,7 +24,7 @@ import type { A2uiRendererProps, WrapChild } from "./renderer-types"
 export function A2uiText({ node, ctx }: A2uiRendererProps) {
   const text = resolve(node.text, ctx.surface.data)
   if (text !== undefined && typeof text !== "string" && typeof text !== "number") {
-    return <Unsupported what="a text that isn't text" />
+    return <Unsupported reason="textNotText" />
   }
   return (
     <span className={cn("block", node.variant === TEXT_VARIANT.caption ? "text-xs text-muted-foreground" : "text-sm")}>

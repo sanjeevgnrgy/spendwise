@@ -9,6 +9,8 @@ import { LIMITS } from "@/shared/api/contracts.gen"
 import { Button } from "@/shared/ui/button"
 import { Textarea } from "@/shared/ui/textarea"
 
+import { useTexts } from "../i18n"
+
 interface ChatComposerProps {
   /** A run is in progress: typing still works, Enter does nothing (the text stays, to send later), Send is Stop. */
   sending: boolean
@@ -20,11 +22,13 @@ interface ChatComposerProps {
 
 /**
  * The message box. Enter sends, Shift+Enter adds a new line; an empty (or all-space) message isn't sent, and
- * while a run is in progress nothing is sent: the text stays in the box until the run ends. Stop ends the run: the connection closes, and anything already
- * said or done stays. Memoised, so a streamed reply doesn't redraw it.
+ * while a run is in progress nothing is sent: the text stays in the box until the run ends. Stop ends the run: the
+ * connection closes, and anything already said or done stays. Memoised, so a streamed reply doesn't redraw it; its
+ * own texts still follow a change of language (useTexts subscribes it).
  */
 export const ChatComposer = memo(function ChatComposer({ sending, onSend, onStop }: ChatComposerProps) {
   const [input, setInput] = useState("")
+  const { t } = useTexts()
 
   function submit() {
     const text = input.trim()
@@ -54,18 +58,25 @@ export const ChatComposer = memo(function ChatComposer({ sending, onSend, onStop
         value={input}
         onChange={(event) => setInput(event.target.value)}
         onKeyDown={handleKeyDown}
-        placeholder="Ask or record an expense…"
+        placeholder={t("composer.placeholder")}
         rows={2}
         maxLength={LIMITS.messageLength}
         className="max-h-40 min-h-0 resize-none"
-        aria-label="Message"
+        aria-label={t("composer.label")}
       />
       {sending ? (
-        <Button type="button" size="icon" variant="outline" aria-label="Stop" title="Stop" onClick={onStop}>
+        <Button
+          type="button"
+          size="icon"
+          variant="outline"
+          aria-label={t("composer.stop")}
+          title={t("composer.stop")}
+          onClick={onStop}
+        >
           <Square />
         </Button>
       ) : (
-        <Button type="submit" size="icon" aria-label="Send" disabled={!input.trim()}>
+        <Button type="submit" size="icon" aria-label={t("composer.send")} disabled={!input.trim()}>
           <SendHorizontal />
         </Button>
       )}

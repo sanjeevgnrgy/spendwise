@@ -1,6 +1,6 @@
 # Sources: what the official docs and libraries say
 
-The facts that Phases 14 to 18 and the architecture refactor are built on: where each came from, what it says, and what SpendWise does with it.
+The facts that Phases 14 to 19 and the refactors are built on: where each came from, what it says, and what SpendWise does with it.
 Earlier phases' doc facts are in [gemini.md](gemini.md) and the phase notes.
 
 All checked on **2026-11-13**. Each fact is marked with where it came from:
@@ -496,6 +496,42 @@ running update with `useMutationState` (D174).
 - `sqlalchemy/dialects/sqlite/pysqlite.py`: a file database gets a `QueuePool`; `sqlalchemy/pool/impl.py`: its
   defaults are `pool_size: int = 5`, `max_overflow: int = 10`.
 Recorded as a known scalability limit (D174, [architecture.md](architecture.md#scalability)).
+
+---
+
+## 23. i18next 26.5.12 and the browser's Intl for Hindi (Phase 19)
+
+Checked on 2026-11-14.
+
+**Package:** `web/node_modules/i18next/` (26.5.12; react-i18next 17.1.9)
+- `dist/esm/i18next.js`, `changeLanguage`: once a language is set, a new one becomes current (`setLngProps`, then the
+  `languageChanged` event) only in `loadResources`' callback, after its texts are loaded. react-i18next re-renders on
+  `languageChanged`, so switching never shows keys in place of texts.
+- `dist/esm/i18next.js`, `PluralResolver.getSuffix`: the plural form comes from `Intl.PluralRules(...).select(count)`
+  and is added to the key after `pluralSeparator`, whose default is `'_'` (`count_one`, `count_other`).
+- `dist/esm/i18next.js`, `BackendConnector.queueLoad`: a namespace whose load failed is marked `-1`
+  (`else if (this.state[name] < 0) ;`) and never queued again, even by `reloadResources` (its `reload: true` only
+  skips the "already loaded" check). So SpendWise gives i18next no backend: it imports the files itself and adds them
+  with `addResourceBundle` once all have arrived, and a failed attempt can simply be repeated.
+- `dist/esm/i18next.js`, `loadResources` and `hasLoadedNamespace`: with `resources` set (even `{}`) and
+  `partialBundledLanguages` off, i18next never tries to load by itself, and without a backend every namespace counts
+  as loaded, so react-i18next never suspends. A page must therefore load its texts before it's drawn (its lazy
+  loader does).
+- `typescript/options.d.ts`: `ResourceNamespaceMap` holds "Per-package namespace types ... Augment this in each
+  package's `i18next.d.ts` instead of `CustomTypeOptions.resources`"; both end up in the resources type. Each feature
+  adds its own namespace there.
+
+**Observed** (Node 24's `Intl`, which uses ICU and CLDR data, as browsers do):
+- `hi-IN` keeps Indian grouping and Latin digits: `1,25,000.50`. Dates and months are in Hindi: `13 नव॰ 2026`,
+  `नवंबर 2026`. Compact money is `₹1.3 लाख` (`en-IN`: `₹1.3L`).
+- Hindi's plural rule puts 0 and 1 in "one" and 2 or more in "other" (`new Intl.PluralRules("hi")`); English puts only
+  1 in "one".
+
+**Observed** (Edge 157, headless, driven through the DevTools protocol): a dynamic `import()` that failed while
+offline is fetched again by the next `import()` once online; the failure isn't remembered.
+
+**Used in:** `web/src/shared/i18n/` (`initI18n`, `loadNamespaces`, `setLanguage`, `defineNamespace`) and
+`web/src/shared/lib/format.ts` (D178).
 
 ---
 

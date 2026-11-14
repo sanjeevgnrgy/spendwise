@@ -1,6 +1,7 @@
 // A part of the expenses feature's table: what each column shows and how it sorts (TanStack Table v9 column
 // definitions), the table's opted-in features, the sortable header and its aria-sort. Pure configuration: no
-// state and no hooks, so the table decides when the columns are rebuilt. Used by expenses-table.tsx.
+// state and no hooks, so the table decides when the columns are rebuilt. Its texts come from the `t` the table
+// passes in (the feature's i18n namespace). Used by expenses-table.tsx.
 
 import {
   createColumnHelper,
@@ -21,6 +22,7 @@ import { Button } from "@/shared/ui/button"
 import { Checkbox } from "@/shared/ui/checkbox"
 
 import type { Expense } from "../../api"
+import type { useTexts } from "../../i18n"
 import { paymentMethodLabel } from "../../payment-methods"
 import { SortButton } from "./sort-button"
 
@@ -62,8 +64,16 @@ export function sortableHeader(title: string, align?: "end") {
   }
 }
 
+// The expenses namespace's t function, as useTexts() gives it.
+type ExpensesT = ReturnType<typeof useTexts>["t"]
+
 /** What the columns need from the table around them. */
 export interface ExpenseColumnOptions {
+  /**
+   * The feature's texts (useTexts' t), in the language on now: column titles and the controls' labels. Each
+   * language change brings a new t, so the table rebuilds the columns in that language.
+   */
+  t: ExpensesT
   /** A category's name by id (the Category column shows and sorts by it). */
   categoryName: (id: number) => string
   /** A delete is running: every Delete button is disabled meanwhile. */
@@ -75,19 +85,19 @@ export interface ExpenseColumnOptions {
 }
 
 // Tick boxes. The header's ticks every row, and shows a dash when only some are ticked.
-function selectColumn() {
+function selectColumn(t: ExpensesT) {
   return columnHelper.display({
     id: "select",
     header: ({ table }) => (
       <Checkbox
-        aria-label="Select all"
+        aria-label={t("table.selectAll")}
         checked={table.getIsAllRowsSelected() || (table.getIsSomeRowsSelected() && "indeterminate")}
         onCheckedChange={(value) => table.toggleAllRowsSelected(value === true)}
       />
     ),
     cell: ({ row }) => (
       <Checkbox
-        aria-label={`Select #${row.original.id}`}
+        aria-label={t("table.selectRow", { id: row.original.id })}
         checked={row.getIsSelected()}
         onCheckedChange={(value) => row.toggleSelected(value === true)}
       />
@@ -97,47 +107,47 @@ function selectColumn() {
 }
 
 // The expense's own fields, in display order. Sorting happens in the browser, within the rows already loaded.
-function dataColumns(categoryName: ExpenseColumnOptions["categoryName"]) {
+function dataColumns({ categoryName, t }: Pick<ExpenseColumnOptions, "categoryName" | "t">) {
   return columnHelper.columns([
     // The id as "#14": the assistant shows ids the same way, so you can say "delete #14".
     columnHelper.accessor("id", {
-      header: sortableHeader("ID"),
+      header: sortableHeader(t("fields.id")),
       cell: ({ getValue }) => <span className="text-muted-foreground tabular-nums">#{getValue()}</span>,
       sortFn: sortFn_basic,
     }),
     columnHelper.accessor("spent_on", {
-      header: sortableHeader("Date"),
+      header: sortableHeader(t("fields.date")),
       cell: ({ getValue }) => formatDate(getValue()),
       // "YYYY-MM-DD" strings sort correctly as plain text.
       sortFn: sortFn_alphanumeric,
     }),
     columnHelper.accessor("merchant", {
-      header: sortableHeader("Merchant"),
+      header: sortableHeader(t("fields.merchant")),
       cell: ({ getValue }) => <span className="font-medium">{getValue()}</span>,
       sortFn: sortFn_alphanumeric,
     }),
     // Shows (and sorts by) the category's name, not its id.
     columnHelper.accessor((expense) => categoryName(expense.category_id), {
       id: "category",
-      header: sortableHeader("Category"),
+      header: sortableHeader(t("fields.category")),
       sortFn: sortFn_alphanumeric,
     }),
     // Sort by the paise value (a whole number), but display the rupee string.
     columnHelper.accessor("amount_minor", {
       id: "amount",
-      header: sortableHeader("Amount", "end"),
+      header: sortableHeader(t("fields.amount"), "end"),
       cell: ({ row }) => (
         <div className="text-right tabular-nums">{formatMoney(row.original.amount, row.original.currency)}</div>
       ),
       sortFn: sortFn_basic,
     }),
     columnHelper.accessor("payment_method", {
-      header: "Paid with",
+      header: t("fields.paidWith"),
       cell: ({ getValue }) => <Badge variant="secondary">{paymentMethodLabel(getValue())}</Badge>,
       enableSorting: false,
     }),
     columnHelper.accessor("note", {
-      header: "Note",
+      header: t("fields.note"),
       cell: ({ getValue }) => <span className="text-muted-foreground">{getValue() ?? ""}</span>,
       enableSorting: false,
     }),
@@ -145,16 +155,16 @@ function dataColumns(categoryName: ExpenseColumnOptions["categoryName"]) {
 }
 
 // Edit opens this row's edit row; Delete asks the page to confirm. Delete is disabled while a delete runs.
-function actionsColumn({ deleting, onEdit, onDelete }: ExpenseColumnOptions) {
+function actionsColumn({ t, deleting, onEdit, onDelete }: ExpenseColumnOptions) {
   return columnHelper.display({
     id: "actions",
-    header: () => <span className="sr-only">Actions</span>,
+    header: () => <span className="sr-only">{t("table.actions")}</span>,
     cell: ({ row }) => (
       <div className="flex justify-end gap-1">
         <Button
           size="icon-sm"
           variant="ghost"
-          aria-label={`Edit #${row.original.id}`}
+          aria-label={t("table.editRow", { id: row.original.id })}
           onClick={() => onEdit(row.original.id)}
         >
           <Pencil />
@@ -162,7 +172,7 @@ function actionsColumn({ deleting, onEdit, onDelete }: ExpenseColumnOptions) {
         <Button
           size="icon-sm"
           variant="ghost"
-          aria-label={`Delete #${row.original.id}`}
+          aria-label={t("table.deleteRow", { id: row.original.id })}
           disabled={deleting}
           onClick={() => onDelete([row.original])}
         >
@@ -179,5 +189,5 @@ function actionsColumn({ deleting, onEdit, onDelete }: ExpenseColumnOptions) {
  * call builds new definitions, so the table memoises the result and rebuilds it only when an option changes.
  */
 export function expenseColumns(options: ExpenseColumnOptions) {
-  return columnHelper.columns([selectColumn(), ...dataColumns(options.categoryName), actionsColumn(options)])
+  return columnHelper.columns([selectColumn(options.t), ...dataColumns(options), actionsColumn(options)])
 }

@@ -10,7 +10,8 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/sha
 import { ChartContainer, ChartTooltip, ChartTooltipContent } from "@/shared/ui/chart"
 
 import type { MonthlyTrend } from "../api"
-import { SPENT_CONFIG } from "./chart-config"
+import { useTexts } from "../i18n"
+import { useSpentConfig } from "./chart-config"
 
 // Room for the money labels beside the chart ("₹1.3L"), in pixels.
 const MONEY_AXIS_WIDTH = 56
@@ -20,6 +21,10 @@ const MONEY_AXIS_WIDTH = 56
  * full month and amount on hover. If nothing was spent in any of them, it says so and offers a link to add one.
  */
 export function TrendChart({ trend }: { trend: MonthlyTrend }) {
+  const { t } = useTexts()
+  const config = useSpentConfig()
+  // How many months the chart covers: the backend sends every one, so this is the trend's length.
+  const count = trend.months.length
   // The backend already filled empty months with 0, so the line has a point for every month.
   const rows = trend.months.map((m) => ({
     label: formatMonth(m.month, "short"),
@@ -31,17 +36,14 @@ export function TrendChart({ trend }: { trend: MonthlyTrend }) {
   return (
     <Card>
       <CardHeader>
-        <CardTitle>Monthly trend</CardTitle>
-        <CardDescription>Last {trend.months.length} months</CardDescription>
+        <CardTitle>{t("trend.title")}</CardTitle>
+        <CardDescription>{t("trend.lastMonths", { count })}</CardDescription>
       </CardHeader>
       <CardContent>
         {nothingSpent ? (
-          <EmptyState
-            message={`No spending in the last ${trend.months.length} months.`}
-            action={{ label: "Add an expense", to: ROUTES.expenses }}
-          />
+          <EmptyState message={t("trend.empty", { count })} action={{ label: t("addExpense"), to: ROUTES.expenses }} />
         ) : (
-          <ChartContainer config={SPENT_CONFIG} className="aspect-auto h-64 w-full">
+          <ChartContainer config={config} className="aspect-auto h-64 w-full">
             <LineChart data={rows} margin={{ left: 4, right: 12, top: 8 }} accessibilityLayer>
               <CartesianGrid vertical={false} />
               <XAxis dataKey="label" tickLine={false} axisLine={false} tickMargin={8} />

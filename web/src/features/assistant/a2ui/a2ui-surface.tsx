@@ -10,6 +10,7 @@ import { A2UI } from "@/shared/api/contracts.gen"
 import { ErrorBoundary } from "@/shared/components/error-boundary"
 import { pick } from "@/shared/lib/guards"
 
+import { useTexts } from "../i18n"
 import { Unsupported } from "./a2ui-unsupported"
 import { MAX_DEPTH, MAX_DRAWN } from "./basic-catalog"
 import { CATALOGS } from "./catalogs"
@@ -34,14 +35,17 @@ interface A2uiSurfaceViewProps {
 
 /**
  * One A2UI surface (a card or a form). Anything that can't be drawn becomes a harmless "Can't show …" note.
- * Memoised: a card is drawn again only when its own surface, lock or callbacks change, not whenever the
- * chat around it does (a streamed token, a keystroke in another form).
+ * Memoised: a card is drawn again only when its own surface, lock or callbacks change, or the language does
+ * (its notes, dates and numbers follow it), not whenever the chat around it does (a streamed token, a keystroke
+ * in another form).
  */
 export const A2uiSurfaceView = memo(function A2uiSurfaceView(props: A2uiSurfaceViewProps) {
+  // Subscribes the card to language changes, so everything in it is drawn again in the new language.
+  useTexts()
   // A card is drawn from data the agent sent: if anything in it crashes while drawing, only this card
   // shows a note, instead of the whole app going blank.
   return (
-    <ErrorBoundary fallback={() => <Unsupported what="this card (it couldn't be drawn)" />}>
+    <ErrorBoundary fallback={() => <Unsupported reason="crashedCard" />}>
       <SurfaceContent {...props} />
     </ErrorBoundary>
   )
@@ -51,7 +55,7 @@ function SurfaceContent({ surface, locked = false, onChange, onAction }: A2uiSur
   // Too large, nested too deep, or containing itself: refused before anything is drawn. Measured once per
   // change of components, not on every keystroke in a form.
   const size = useMemo(() => drawnSize(surface.components, MAX_DRAWN, MAX_DEPTH), [surface.components])
-  if (size > MAX_DRAWN) return <Unsupported what="a card that's this large, or that contains itself" />
+  if (size > MAX_DRAWN) return <Unsupported reason="tooLarge" />
 
   const ctx: A2uiRenderContext = { surface, locked: locked || surface.submitted === true, onChange, onAction }
   // Rendering starts at the component with id "root", as the spec says.
@@ -61,8 +65,8 @@ function SurfaceContent({ surface, locked = false, onChange, onAction }: A2uiSur
 // One child reference, by id. The depth is checked again here while drawing (drawnSize already refused
 // anything deeper), so no description can recurse without end.
 function A2uiNode({ ctx, id, depth }: { ctx: A2uiRenderContext; id: unknown; depth: number }) {
-  if (typeof id !== "string") return <Unsupported what="a child that isn't an id" />
-  if (depth > MAX_DEPTH) return <Unsupported what="components nested this deep" />
+  if (typeof id !== "string") return <Unsupported reason="childNotId" />
+  if (depth > MAX_DEPTH) return <Unsupported reason="tooDeep" />
   const node = ctx.surface.components.get(id)
   if (!node) return null // not sent (yet): the spec draws nothing until it arrives
   return <A2uiComponentView ctx={ctx} node={node} depth={depth} />
@@ -74,16 +78,16 @@ function A2uiNode({ ctx, id, depth }: { ctx: A2uiRenderContext; id: unknown; dep
 function A2uiComponentView({ ctx, node, depth }: { ctx: A2uiRenderContext; node: A2uiComponent; depth: number }) {
   // Which catalog defines this component: its own "@catalogId", else the surface's (the spec's order).
   const catalog = pick(CATALOGS, node[CATALOG_KEY] ?? ctx.surface.catalogId)
-  if (!catalog) return <Unsupported what="a component from a catalog this app doesn't know" />
+  if (!catalog) return <Unsupported reason="unknownCatalog" />
   const Renderer = pick(catalog, node.component)
-  if (!Renderer) return <Unsupported what={`a "${node.component}" component`} />
+  if (!Renderer) return <Unsupported reason="unknownComponent" component={node.component} />
 
   // Children are drawn one level deeper. Index in the key too: the same id may legally appear twice in a list.
   const renderChild = (id: unknown) => <A2uiNode ctx={ctx} id={id} depth={depth + 1} />
   const renderChildren = (ids: unknown, wrap: WrapChild = asIs) =>
     Array.isArray(ids)
       ? ids.map((id, index) => wrap(renderChild(id), `${index}-${String(id)}`))
-      : wrap(<Unsupported what="this kind of child list" />, NOT_A_LIST)
+      : wrap(<Unsupported reason="childList" />, NOT_A_LIST)
   // The rule can't see that pick() returns a component from a module-level table: none is created here.
   // oxlint-disable-next-line react/static-components -- the renderer comes from the fixed CATALOGS table
   return <Renderer node={node} ctx={ctx} renderChild={renderChild} renderChildren={renderChildren} />

@@ -1,11 +1,12 @@
 // A component of the expenses feature: the "are you sure?" dialog before deleting one expense or several. It
 // runs the delete and reports what happened. Used by the Expenses page, which opens it from the table's buttons.
+// Its texts (and the toasts' counts, in each language's plural forms) come from the feature's i18n namespace.
 
 import { useState } from "react"
 import { toast } from "sonner"
 
 import { messageOf } from "@/shared/lib/errors"
-import { formatDate, formatMoney, plural } from "@/shared/lib/format"
+import { formatDate, formatMoney } from "@/shared/lib/format"
 import {
   AlertDialog,
   AlertDialogAction,
@@ -18,6 +19,7 @@ import {
 } from "@/shared/ui/alert-dialog"
 
 import type { Expense } from "../../api"
+import { useTexts } from "../../i18n"
 import { useDeleteExpenses } from "../../queries"
 
 interface DeleteExpensesDialogProps {
@@ -34,6 +36,7 @@ interface DeleteExpensesDialogProps {
  * couldn't be (with the first reason): a partial success shows both.
  */
 export function DeleteExpensesDialog({ expenses, onClose }: DeleteExpensesDialogProps) {
+  const { t } = useTexts()
   const remove = useDeleteExpenses()
   // What the dialog shows. It keeps the last list while it fades out after closing, so the text doesn't
   // flash "Delete 0 expenses?" (React's "adjust state when a prop changes" pattern, during render).
@@ -50,26 +53,37 @@ export function DeleteExpensesDialog({ expenses, onClose }: DeleteExpensesDialog
     // Only onSuccess: the mutation resolves even when some deletes fail, and lists the failures (useDeleteExpenses).
     remove.mutate(ids, {
       onSuccess: ({ deleted, failures }) => {
-        if (deleted > 0) toast.success(deleted === 1 ? "Expense deleted" : `${plural(deleted, "expense")} deleted`)
-        if (failures.length > 0) toast.error(`Couldn't delete ${failures.length}: ${messageOf(failures[0])}`)
+        if (deleted > 0) toast.success(t("delete.deleted", { count: deleted }))
+        if (failures.length > 0) {
+          toast.error(t("delete.failed", { count: failures.length, reason: messageOf(failures[0]) }))
+        }
       },
     })
   }
+
+  // One expense is named (merchant, amount, date) in the same sentence as the warning, so each language can order
+  // them its own way.
+  const description = single
+    ? t("delete.describeOne", {
+        merchant: single.merchant,
+        amount: formatMoney(single.amount, single.currency),
+        date: formatDate(single.spent_on),
+      })
+    : t("delete.describeSeveral")
 
   return (
     <AlertDialog open={expenses !== null} onOpenChange={(open) => !open && onClose()}>
       <AlertDialogContent>
         <AlertDialogHeader>
-          <AlertDialogTitle>{single ? "Delete this expense?" : `Delete ${plural(shown.length, "expense")}?`}</AlertDialogTitle>
-          <AlertDialogDescription>
-            {single && `${single.merchant}, ${formatMoney(single.amount, single.currency)} on ${formatDate(single.spent_on)}. `}
-            This can't be undone.
-          </AlertDialogDescription>
+          <AlertDialogTitle>
+            {single ? t("delete.titleOne") : t("delete.titleSeveral", { count: shown.length })}
+          </AlertDialogTitle>
+          <AlertDialogDescription>{description}</AlertDialogDescription>
         </AlertDialogHeader>
         <AlertDialogFooter>
-          <AlertDialogCancel>Cancel</AlertDialogCancel>
+          <AlertDialogCancel>{t("actions.cancel")}</AlertDialogCancel>
           <AlertDialogAction variant="destructive" onClick={confirm}>
-            Delete
+            {t("actions.delete")}
           </AlertDialogAction>
         </AlertDialogFooter>
       </AlertDialogContent>

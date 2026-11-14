@@ -1,5 +1,6 @@
 // A component of the expenses feature: the filters above the expenses table (search, category, a date range,
-// and Clear filters). Used by the Expenses page, which owns the filters and sends them with its query.
+// and Clear filters). Used by the Expenses page, which owns the filters and sends them with its query. Its texts
+// come from the feature's i18n namespace.
 
 import { Search, X } from "lucide-react"
 
@@ -8,6 +9,7 @@ import { Button } from "@/shared/ui/button"
 import { Input } from "@/shared/ui/input"
 
 import type { ExpenseFilters } from "../../api"
+import { useTexts } from "../../i18n"
 import { LabeledField } from "../fields/labeled-field"
 
 interface FiltersBarProps {
@@ -26,6 +28,7 @@ interface FiltersBarProps {
  * (undefined), never sent as "".
  */
 export function FiltersBar({ filters, onChange }: FiltersBarProps) {
+  const { t } = useTexts()
   // Change one filter, keep the others.
   const set = (changes: Partial<ExpenseFilters>) => onChange({ ...filters, ...changes })
   // Is any filter set? Then "Clear filters" shows.
@@ -35,12 +38,14 @@ export function FiltersBar({ filters, onChange }: FiltersBarProps) {
   // range that ends before it starts (the API would reject it).
   return (
     <div className="flex flex-wrap items-end gap-3">
-      <LabeledField id="filter-search" label="Search">
+      <LabeledField id="filter-search" label={t("filters.search")}>
         <div className="relative">
-          <Search className="pointer-events-none absolute top-1/2 left-2.5 size-4 -translate-y-1/2 text-muted-foreground" />
+          <Search
+            className="pointer-events-none absolute top-1/2 left-2.5 size-4 -translate-y-1/2 text-muted-foreground"
+          />
           <Input
             id="filter-search"
-            placeholder="Merchant or note"
+            placeholder={t("filters.searchPlaceholder")}
             className="w-56 pl-8"
             value={filters.search ?? ""}
             onChange={(event) => set({ search: event.target.value || undefined })}
@@ -48,17 +53,17 @@ export function FiltersBar({ filters, onChange }: FiltersBarProps) {
         </div>
       </LabeledField>
 
-      <LabeledField id="filter-category" label="Category">
+      <LabeledField id="filter-category" label={t("fields.category")}>
         <CategorySelect
           id="filter-category"
           className="w-44"
-          anyLabel="All categories"
+          anyLabel={t("filters.allCategories")}
           value={filters.category_id ? String(filters.category_id) : ANY_CATEGORY}
           onChange={(value) => set({ category_id: value === ANY_CATEGORY ? undefined : Number(value) })}
         />
       </LabeledField>
 
-      <LabeledField id="filter-from" label="From">
+      <LabeledField id="filter-from" label={t("filters.from")}>
         <Input
           id="filter-from"
           type="date"
@@ -69,7 +74,7 @@ export function FiltersBar({ filters, onChange }: FiltersBarProps) {
         />
       </LabeledField>
 
-      <LabeledField id="filter-to" label="To">
+      <LabeledField id="filter-to" label={t("filters.to")}>
         <Input
           id="filter-to"
           type="date"
@@ -82,7 +87,7 @@ export function FiltersBar({ filters, onChange }: FiltersBarProps) {
 
       {hasFilters && (
         <Button variant="ghost" onClick={() => onChange({})}>
-          <X /> Clear filters
+          <X /> {t("filters.clear")}
         </Button>
       )}
     </div>

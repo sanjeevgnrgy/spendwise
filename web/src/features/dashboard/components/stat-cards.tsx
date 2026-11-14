@@ -1,16 +1,18 @@
 // A component of the dashboard feature: the row of three stat cards at the top of the Dashboard. Used by the
 // Dashboard page.
 
-import { formatMoney, formatMonth, plural } from "@/shared/lib/format"
+import { formatMoney, formatMonth } from "@/shared/lib/format"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/shared/ui/card"
 
 import type { MonthlySummary } from "../api"
+import { useTexts } from "../i18n"
 
 /**
  * Three headline numbers for the current month, all straight from the backend's summary: the total spent, how many
  * expenses (and categories used), and the top category with its total.
  */
 export function StatCards({ summary }: { summary: MonthlySummary }) {
+  const { t } = useTexts()
   const top = summary.by_category[0] // the list comes biggest first
   const monthName = formatMonth(summary.month)
 
@@ -18,33 +20,33 @@ export function StatCards({ summary }: { summary: MonthlySummary }) {
     <div className="grid gap-4 md:grid-cols-3">
       <Card>
         <CardHeader>
-          <CardDescription>Spent in {monthName}</CardDescription>
+          <CardDescription>{t("stats.spentIn", { month: monthName })}</CardDescription>
           <CardTitle className="text-3xl tabular-nums">{formatMoney(summary.total, summary.currency)}</CardTitle>
         </CardHeader>
         <CardContent className="text-sm text-muted-foreground">
-          {summary.expense_count === 0 ? "No expenses yet this month" : "Total of this month's expenses"}
+          {summary.expense_count === 0 ? t("stats.noExpensesThisMonth") : t("stats.totalOfMonth")}
         </CardContent>
       </Card>
 
       <Card>
         <CardHeader>
-          <CardDescription>Expenses this month</CardDescription>
+          <CardDescription>{t("stats.expensesThisMonth")}</CardDescription>
           <CardTitle className="text-3xl tabular-nums">{summary.expense_count}</CardTitle>
         </CardHeader>
         <CardContent className="text-sm text-muted-foreground">
-          {plural(summary.by_category.length, "category", "categories")} used
+          {t("stats.categoriesUsed", { count: summary.by_category.length })}
         </CardContent>
       </Card>
 
       <Card>
         <CardHeader>
-          <CardDescription>Top category</CardDescription>
+          <CardDescription>{t("stats.topCategory")}</CardDescription>
           <CardTitle className="text-3xl">{top ? top.category_name : "—"}</CardTitle>
         </CardHeader>
         <CardContent className="text-sm text-muted-foreground">
           {top
-            ? `${formatMoney(top.total, summary.currency)} across ${plural(top.expense_count, "expense")}`
-            : "Nothing spent yet"}
+            ? t("stats.topAcross", { amount: formatMoney(top.total, summary.currency), count: top.expense_count })
+            : t("stats.nothingSpent")}
         </CardContent>
       </Card>
     </div>

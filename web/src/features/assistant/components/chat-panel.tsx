@@ -7,6 +7,7 @@ import { Bot, SquarePen, X } from "lucide-react"
 
 import { Button } from "@/shared/ui/button"
 
+import { useTexts } from "../i18n"
 import { useAssistant } from "../model/assistant-context"
 import { ChatComposer } from "./chat-composer"
 import { ChatTranscript } from "./chat-transcript"
@@ -23,24 +24,25 @@ export interface ChatPanelProps {
  */
 export function ChatPanel({ onClose }: ChatPanelProps) {
   const chat = useAssistant()
+  const { t } = useTexts()
 
   return (
     <div className="flex h-full flex-col bg-background">
       <div className="flex h-12 shrink-0 items-center gap-2 border-b px-3">
         <Bot className="size-4" />
-        <span className="font-medium">Assistant</span>
+        <span className="font-medium">{t("panel.title")}</span>
         <div className="ml-auto flex gap-1">
           <Button
             variant="ghost"
             size="icon-sm"
-            aria-label="New conversation"
-            title="New conversation"
+            aria-label={t("panel.newConversation")}
+            title={t("panel.newConversation")}
             onClick={chat.reset}
             disabled={chat.sending || chat.messages.length === 0}
           >
             <SquarePen />
           </Button>
-          <Button variant="ghost" size="icon-sm" aria-label="Close assistant" onClick={onClose}>
+          <Button variant="ghost" size="icon-sm" aria-label={t("panel.close")} onClick={onClose}>
             <X />
           </Button>
         </div>

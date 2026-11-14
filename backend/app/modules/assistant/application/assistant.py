@@ -3,6 +3,7 @@
 Application layer. They load a thread's history from the conversations module, run the agent
 (agent/agent.py) on the right surface (agent/surfaces.py), record approvals (approvals/), and save the turn
 once it has finished. Both routes (/chat and /agent) use them; neither knows about the database or the tools.
+Each is given the request's language: the agent replies in it, and everything the server writes is in it.
 
 Everything goes through the bus in short, separate steps (read the history, record a card, save the
 turn), never one transaction around the whole run: a model call can take a minute or two, and no
@@ -17,7 +18,7 @@ from uuid import uuid4
 
 from app.core.cqrs import MessageBus
 from app.core.errors import NotFoundError
-from app.core.i18n import translatable
+from app.core.i18n import Language, translatable
 from app.core.llm import ToolCallingModel
 from app.modules import conversations
 from app.modules.assistant.agent.agent import Agent
@@ -79,37 +80,42 @@ class Assistant:
         )
         return approval_id
 
-    def _answer(self, thread_id: str, text: str, today: date, surface: Surface) -> Iterator[AgentEvent]:
-        """Answer one message in a thread on `surface`, saving the turn when it finishes. Yields its events."""
+    def _answer(
+        self, thread_id: str, text: str, today: date, surface: Surface, language: Language
+    ) -> Iterator[AgentEvent]:
+        """Answer one message in a thread on `surface`, saving the turn when it finishes. Yields its events.
+
+        `language` is the request's: the model is asked to reply in it, and the server writes its own texts in it.
+        """
         turn = self._next_turn(thread_id)
         # Only the last few turns are sent. Older ones stay stored, but the model no longer sees them.
         # Whole turns, so a tool call is never cut off from its result.
         history = self.bus.ask(conversations.GetHistory(thread_id=thread_id, from_turn=turn - MAX_HISTORY_TURNS))
-        for event in Agent(llm=self.llm, tools=self.tools).run(text, today, history, surface):
+        for event in Agent(llm=self.llm, tools=self.tools).run(text, today, history, surface, language):
             if isinstance(event, TurnFinished):
                 self._save(thread_id, turn, event)
             yield event
 
-    def run_turn(self, thread_id: str, text: str, today: date) -> Iterator[AgentEvent]:
-        """Answer one message in the web panel (an unknown thread starts a new conversation).
+    def run_turn(self, thread_id: str, text: str, today: date, language: Language) -> Iterator[AgentEvent]:
+        """Answer one message in the web panel, in `language` (an unknown thread starts a new conversation).
 
         There, forms and cards are shown, and every delete waits for the user's Approve on a card
         recorded in this thread.
         """
         panel = WebPanel(request_approval=lambda expense: self._request_approval(thread_id, expense))
-        return self._answer(thread_id, text, today, panel)
+        return self._answer(thread_id, text, today, panel, language)
 
-    def decide(self, thread_id: str, approval_id: str, approved: bool) -> Iterator[AgentEvent]:
+    def decide(self, thread_id: str, approval_id: str, approved: bool, language: Language) -> Iterator[AgentEvent]:
         """Approve or Cancel on a delete card. WHAT gets deleted is the server's snapshot of that card.
 
         The whole decision (take the card, check, delete, save the turn) is carried out before the first
         event goes out. Nothing is left half done if the browser disconnects while reading, and on an error
-        the card is put back at once, in this same thread.
+        the card is put back at once, in this same thread. The reply is written in `language`.
         """
         card = self.bus.execute(TakeApproval(thread_id=thread_id, approval_id=approval_id))
         try:
             turn = self._next_turn(thread_id)
-            events = list(approval_turn(card.expense if card else None, approved, self.tools))
+            events = list(approval_turn(card.expense if card else None, approved, self.tools, language))
             finished = events[-1]
             assert isinstance(finished, TurnFinished)
             self._save(thread_id, turn, finished)
@@ -122,10 +128,13 @@ class Assistant:
             raise
         yield from events
 
-    def chat(self, message: str, thread_id: str | None, today: date) -> tuple[str, TurnFinished]:
+    def chat(
+        self, message: str, thread_id: str | None, today: date, language: Language
+    ) -> tuple[str, TurnFinished]:
         """POST /chat: the whole reply at once, in text only. Unlike AG-UI, the server names threads here.
 
-        Returns the thread id and the finished turn. Raises NotFoundError for a thread id it doesn't know.
+        The model is asked to reply in `language`, and the server writes its own texts in it. Returns the thread id
+        and the finished turn. Raises NotFoundError for a thread id it doesn't know.
         """
         if thread_id is None:
             thread_id = new_thread_id()
@@ -133,7 +142,7 @@ class Assistant:
             # A typo'd id should be an error, not a silent new conversation.
             raise NotFoundError(translatable(conversations.ConversationText.THREAD_NOT_FOUND, thread_id=thread_id))
         finished = None
-        for event in self._answer(thread_id, message, today, TextChat()):
+        for event in self._answer(thread_id, message, today, TextChat(), language):
             if isinstance(event, TurnFinished):
                 finished = event
         if finished is None:  # can't happen: the agent always ends with one

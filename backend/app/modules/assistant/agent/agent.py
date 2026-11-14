@@ -5,8 +5,9 @@ Application layer. The agent has no tools of its own: it gets them from an Expen
 messages (core/llm) through the ToolCallingModel port, and yields AgentEvents (events.py); how those reach
 a user is someone else's job. What differs between text chat and the web panel (prompt rules, tool specs,
 calls handled in place) comes from the Surface it's given (surfaces.py). The Assistant use case
-(application/assistant.py) runs it, one turn at a time; the Approve/Cancel decision, which never asks the
-model, is application/decisions.py.
+(application/assistant.py) runs it, one turn at a time, in the request's language: the model is asked to reply in
+it, and the form and the server's own closing lines are written in it. The Approve/Cancel decision, which never
+asks the model, is application/decisions.py.
 """
 
 import logging
@@ -15,8 +16,9 @@ from dataclasses import dataclass, field
 from datetime import date
 from functools import partial
 
+from app.core import llm
+from app.core.i18n import Language, text, translatable
 from app.core.llm import (
-    AssistantText,
     LlmError,
     LlmStream,
     Message,
@@ -32,6 +34,7 @@ from app.modules.assistant.agent.events import AgentEvent, FormRequested, TextDe
 from app.modules.assistant.agent.prompts import system_instruction
 from app.modules.assistant.agent.surfaces import CallHandler, CallOutcome, Surface
 from app.modules.assistant.agent.tool_runs import run_and_report
+from app.modules.assistant.i18n import ChatText
 from app.modules.assistant.tools.port import ExpenseTools, ToolsUnavailableError
 
 logger = logging.getLogger(__name__)
@@ -45,14 +48,8 @@ REASONING_EFFORT = ReasoningEffort.LOW
 # Separates text the agent says in a later step (or its closing line) from what it already said.
 PARAGRAPH_BREAK = "\n\n"
 
-TOO_MANY_STEPS = "Sorry, that took too many steps, so I stopped. Could you try a simpler or more specific request?"
-FORM_SHOWN = "Please check the details in the form and press Save."
+# What the model is told after a form is put on screen (a tool result: English, like all it reads).
 FORM_ON_SCREEN = "The form is on the user's screen; they will submit it."
-TOOLS_UNAVAILABLE = (
-    "Sorry, I can't reach the expense tools right now, so I can't look up or change anything. "
-    "Please try again in a moment."
-)
-EMPTY_ANSWER = "The model returned neither text nor a tool call."
 
 
 @dataclass
@@ -84,13 +81,13 @@ class _Turn:
         """The TurnFinished event for the turn as it stands."""
         return TurnFinished(reply=self.reply, tool_calls=self.tool_calls, messages=self.messages)
 
-    def end_with(self, text: str) -> Iterator[AgentEvent]:
+    def end_with(self, line: str) -> Iterator[AgentEvent]:
         """End the turn with the server's own closing line: yields it as text, then the TurnFinished.
 
         The line is stored as the model's answer, so the turn ends cleanly for the next message.
         """
-        self.messages.append(AssistantText(text=text))
-        yield self.say(text)
+        self.messages.append(llm.AssistantText(text=line))
+        yield self.say(line)
         yield self.finished()
 
 
@@ -101,12 +98,14 @@ class Agent:
     llm: ToolCallingModel
     tools: ExpenseTools
 
-    def run(self, message: str, today: date, history: list[Message], surface: Surface) -> Iterator[AgentEvent]:
+    def run(
+        self, message: str, today: date, history: list[Message], surface: Surface, language: Language
+    ) -> Iterator[AgentEvent]:
         """Answer one user message, as events: TextDelta pieces, tool events, cards and forms, and finally a
         TurnFinished with the whole reply, the tools used and the messages to store.
 
-        `history` is the earlier conversation (oldest first); `surface` is where the user is (surfaces.py).
-        Raises LlmError if the model fails or answers with nothing; the turn then has no TurnFinished.
+        `history` is the earlier conversation (oldest first); `surface` is where the user is (surfaces.py); `language`
+        the request's. Raises LlmError if the model fails or answers with nothing; the turn then has no TurnFinished.
         """
         turn = _Turn(messages=[UserText(text=message)])
         logger.info("user message (%d characters, %d earlier messages)", len(message), len(history))
@@ -118,12 +117,13 @@ class Agent:
         except ToolsUnavailableError as exc:
             # Without tools the model could only guess, so answer honestly without asking it.
             logger.warning("tools unavailable, not calling the model: %s", exc)
-            yield from turn.end_with(TOOLS_UNAVAILABLE)
+            yield from turn.end_with(text(language, ChatText.TOOLS_UNAVAILABLE))
             return
         specs = surface.tool_specs(specs)
-        instruction = system_instruction(today, category_names, surface.prompt_rules(category_names))
+        rules = surface.prompt_rules(category_names)
+        instruction = system_instruction(today, category_names, rules, language)
         # The form is shown on either surface: a model may ask for one even where the tool wasn't offered.
-        form = partial(_show_form, category_names, today)
+        form = partial(_show_form, category_names, today, language)
         handlers: Mapping[str, CallHandler] = {a2ui.SHOW_FORM_TOOL_NAME: form, **surface.call_handlers(self.tools)}
 
         for step in range(1, MAX_STEPS + 1):
@@ -132,7 +132,7 @@ class Agent:
             calls = [m for m in response.messages if isinstance(m, ToolCall)]
             if not calls:
                 if not response.text:
-                    raise LlmError(EMPTY_ANSWER)
+                    raise LlmError(translatable(ChatText.EMPTY_ANSWER))
                 logger.info("step %d: answered in text, done", step)
                 yield turn.finished()
                 return
@@ -144,11 +144,11 @@ class Agent:
             if ends_turn:
                 # Only a form ends a turn early: the user answers with it now, not in words. Asking the model
                 # again would only say "please fill in the form" (and use up a request).
-                yield from turn.end_with(FORM_SHOWN)
+                yield from turn.end_with(text(language, ChatText.FORM_SHOWN))
                 return
 
         logger.warning("stopped after %d steps without a final answer", MAX_STEPS)
-        yield from turn.end_with(TOO_MANY_STEPS)
+        yield from turn.end_with(text(language, ChatText.TOO_MANY_STEPS))
 
     def _ask(
         self, turn: _Turn, history: list[Message], specs: list[ToolSpec], instruction: str
@@ -176,13 +176,15 @@ class Agent:
         return CallOutcome.reported(call, output)
 
 
-def _show_form(category_names: list[str], today: date, call: ToolCall) -> Generator[AgentEvent, None, CallOutcome]:
+def _show_form(
+    category_names: list[str], today: date, language: Language, call: ToolCall
+) -> Generator[AgentEvent, None, CallOutcome]:
     """show_expense_form: put a form on screen, and end the turn after this step.
 
-    The model's own form if it passes the checks, else the built-in one. Not a tool the agent ran, so no
-    summary; the model is told the form is on screen.
+    The model's own form if it passes the checks, else the built-in one, in `language`. Not a tool the agent ran,
+    so no summary; the model is told the form is on screen.
     """
-    form, source = a2ui.expense_form_from_call(call.arguments, category_names, today)
+    form, source = a2ui.expense_form_from_call(call.arguments, category_names, today, language)
     logger.info("  form shown (%s)", source)
     yield FormRequested(form=form, source=source)
     result = ToolResult(call_id=call.call_id, name=call.name, output=FORM_ON_SCREEN)

@@ -7,7 +7,9 @@ The adapter layer, with no rules of its own:
 - POST /agent runs the same agent, streamed as AG-UI events over Server-Sent Events (agui_request.py reads
   the run, agui_stream.py writes the events). The web app's chat panel uses this one.
 
-module.create_router builds the router at startup, and main.py mounts it under /api/v1.
+/chat and /agent answer in the request's language (LanguageDep, from its Accept-Language): the model is asked to
+reply in it, and everything the server writes (cards, chips, its own replies) is in it. Errors are written in it by
+web/problems.py. module.create_router builds the router at startup, and main.py mounts it under /api/v1.
 """
 
 from collections.abc import Iterator
@@ -21,7 +23,7 @@ from app.modules.assistant.api.agui_request import AgentRequest, read_request
 from app.modules.assistant.api.schemas import ChatRequest, ChatResponse, ParseRequest
 from app.modules.assistant.application.assistant import Assistant
 from app.modules.assistant.application.expense_parser import ExpenseParser, ParseResponse
-from app.web.dependencies import ClockDep
+from app.web.dependencies import ClockDep, LanguageDep
 
 # The tag that groups this module's routes under one heading in /docs.
 TAG = "assistant"
@@ -45,11 +47,11 @@ def create_router(assistant: Assistant, parser: ExpenseParser) -> APIRouter:
 
     # One message in, the whole reply out as one JSON body: no streaming, no cards or buttons.
     @router.post("/chat")
-    def chat(body: ChatRequest, clock: ClockDep) -> ChatResponse:
+    def chat(body: ChatRequest, clock: ClockDep, language: LanguageDep) -> ChatResponse:
         # Unlike /parse, this can change data: the agent may add, update or delete expenses through its tools.
         # There are no buttons here, so a delete needs the user's "yes" in words (see agent/prompts.py, text chat).
         # A thread_id the server doesn't know is a 404 rather than a silent new conversation.
-        thread_id, finished = assistant.chat(body.message, body.thread_id, clock.today())
+        thread_id, finished = assistant.chat(body.message, body.thread_id, clock.today(), language)
         return ChatResponse(thread_id=thread_id, reply=finished.reply, tool_calls=finished.tool_calls)
 
     # The same agent as /chat, but the reply is streamed as AG-UI events over Server-Sent Events, so the
@@ -58,11 +60,11 @@ def create_router(assistant: Assistant, parser: ExpenseParser) -> APIRouter:
     # streaming has begun is a RUN_ERROR event.
     @router.post("/agent", response_class=EventSourceResponse)
     def agent_run(
-        request: Annotated[AgentRequest, Depends(read_request)], clock: ClockDep
+        request: Annotated[AgentRequest, Depends(read_request)], clock: ClockDep, language: LanguageDep
     ) -> Iterator[ServerSentEvent]:
         # A plain (sync) generator: FastAPI runs it in a worker thread, and adds a ": ping" comment every
         # 15 s while the agent is quiet (e.g. running tools), so proxies don't close the connection.
-        for event in agui_stream.stream(request, assistant, clock.today()):
+        for event in agui_stream.stream(request, assistant, clock.today(), language):
             # AG-UI's JSON (camelCase field names) as the event's `data:` line.
             yield ServerSentEvent(raw_data=event.model_dump_json(by_alias=True, exclude_none=True))
 

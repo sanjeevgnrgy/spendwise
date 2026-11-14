@@ -14,7 +14,7 @@ from app.modules.mcp import ExpenseView
 
 # An unanswered card stops working after this long, and at most this many are remembered. A short life
 # means an old card, scrolled out of sight, can't delete anything; the cap keeps the table small even if
-# cards are never answered. (application/decisions.py's STALE_APPROVAL quotes TTL_MINUTES to the user.)
+# cards are never answered. (application/decisions.py quotes TTL_MINUTES to the user: ChatText.STALE_APPROVAL.)
 TTL_MINUTES = 15
 MAX_PENDING = 200
 

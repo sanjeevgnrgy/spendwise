@@ -26,6 +26,7 @@ from app.core.errors import BusinessRuleError
 from app.core.i18n import translatable
 from app.core.llm import LlmError, StructuredOutputModel
 from app.modules import categories
+from app.modules.assistant.i18n import ChatText
 from app.modules.expenses import PaymentMethod
 
 
@@ -72,8 +73,6 @@ assert set(REQUIRED_TO_SAVE) <= set(ParsedExpense.model_fields)
 # The field whose allowed values (the category names) are filled in per request.
 CATEGORY_FIELD = "category"
 assert CATEGORY_FIELD in ParsedExpense.model_fields
-# Said (as a 502) when the model's JSON doesn't fit ParsedExpense; {error} is Pydantic's explanation.
-WRONG_SHAPE = "The model's answer didn't match the expected shape: {error}"
 
 
 def _system_instruction(today: date) -> str:
@@ -133,7 +132,8 @@ class ExpenseParser:
         try:
             parsed = ParsedExpense.model_validate_json(raw)
         except ValidationError as exc:
-            raise LlmError(WRONG_SHAPE.format(error=exc)) from exc
+            # A 502, in the request's language; {error} is Pydantic's explanation (English).
+            raise LlmError(translatable(ChatText.WRONG_SHAPE, error=str(exc))) from exc
         # Model output is data to check, not trust. The enum should already prevent this; verify anyway.
         if parsed.category is not None and parsed.category not in names:
             parsed = parsed.model_copy(update={CATEGORY_FIELD: None})

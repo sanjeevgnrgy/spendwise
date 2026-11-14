@@ -1,8 +1,9 @@
 """The agent's system instruction: what the model is told about SpendWise, today, and how to behave.
 
 Application layer, pure text: no I/O, so it's easy to check by itself. The agent (agent.py) builds the
-instruction once per turn from today's date, the categories and the PromptRules of the surface the user is
-on (surfaces.py): the web panel's rules mention forms, cards and Approve buttons; text chat's don't.
+instruction once per turn from today's date, the categories, the PromptRules of the surface the user is on
+(surfaces.py) and the request's language: the web panel's rules mention forms, cards and Approve buttons; text
+chat's don't. The instruction itself is English in every language; it tells the model which language to reply in.
 
 Every string here is sent to the model as is: changing one changes what the assistant does.
 """
@@ -10,6 +11,7 @@ Every string here is sent to the model as is: changing one changes what the assi
 from dataclasses import dataclass
 from datetime import date
 
+from app.core.i18n import LANGUAGES, Language
 from app.modules.assistant import a2ui
 from app.modules.mcp import CONFIRM_ARGUMENT, ToolName
 
@@ -62,10 +64,11 @@ class PromptRules:
     cards: str
 
 
-def system_instruction(today: date, category_names: list[str], rules: PromptRules) -> str:
+def system_instruction(today: date, category_names: list[str], rules: PromptRules, language: Language) -> str:
     """The whole system instruction for one turn, one rule per line, without trailing blank lines.
 
-    Built per turn because today's date and the categories can change between messages.
+    Built per turn because today's date and the categories can change between messages, and each request names
+    the language the app is shown in (the one the model is asked to reply in).
     """
     example = a2ui.expense_ref(EXAMPLE_EXPENSE_ID)
     return "\n".join(
@@ -87,6 +90,10 @@ def system_instruction(today: date, category_names: list[str], rules: PromptRule
             "If a tool reports an error, fix your call if you can; otherwise tell the user plainly what went wrong.",
             # The web chat panel shows replies as plain text, so Markdown would appear as raw ** and *.
             "Keep replies short, in plain text: no Markdown, no ** or bullet symbols. Use line breaks for lists.",
+            # The app's language, unless the user writes in another; tool arguments keep the forms the tools define.
+            f"Reply in {LANGUAGES[language].english_name}, the language the app is shown in; if the user writes in "
+            "another language, reply in theirs. Whatever language you reply in, tool arguments stay as the tools "
+            "define them: category names exactly as listed, payment method values (not labels), dates as YYYY-MM-DD.",
             rules.cards,
         ]
     ).strip()

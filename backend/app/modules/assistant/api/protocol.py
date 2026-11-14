@@ -36,7 +36,7 @@ STATE_DATA_VERSION = "dataVersion"
 
 
 # Sent in TOOL_CALL_START's metadata (MetadataKey.LABELS), so the browser can show all three texts
-# without knowing any tool names. agui_stream.TOOL_LABELS holds one per tool.
+# without knowing any tool names. chip_labels.labels_for writes them, in the request's language.
 class ToolLabels(BaseModel):
     """What a tool's status chip says while it runs, and after it worked or failed."""
 

@@ -21,7 +21,7 @@ page when the assistant changes data.
 > **How it was checked:** `npm run build` (type-check and bundle) passes, and the backend compiles. The panel hasn't
 > been used in a browser yet, and no live chat calls were made while building this phase.
 
-## Concept: how the panel and pages stay in sync without a page reload
+## Design: how the panel and pages stay in sync without a page reload
 
 The chat panel and the current page are **siblings** inside the layout: neither contains the other, so they can't
 pass props to each other directly. The usual React answer is to put the shared piece of state in a **common
@@ -88,7 +88,7 @@ shadcn/ui.
 `react-resizable-panels` and the scroll-area package were added). Open http://localhost:5173. The chat needs your
 Gemini key in `.env` (Phase 2) and the backend on port 8000 (Phase 10's `MCP_URL`).
 
-## Test it by hand
+## Verify it by hand
 
 1. Click **Assistant** in the top bar: the panel opens on the right with three suggestions. Drag the handle to resize it.
 2. Click **"How much did I spend on food this month?"** You should see "Thinking…", then a reply in plain text with a
@@ -106,7 +106,7 @@ Gemini key in `.env` (Phase 2) and the backend on port 8000 (Phase 10's `MCP_URL
 
 Shift+Enter makes a new line; Enter sends.
 
-## Check your understanding
+## Design questions
 
 **1. The chat panel and the Expenses page are siblings in the layout. How does adding an expense in the chat make the
 Expenses table refresh?**

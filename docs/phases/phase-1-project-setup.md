@@ -11,7 +11,7 @@
 > repo root, so paths below that start with `spendwise/` now start at the project folder.
 > This page records Phase 1 as it was built.
 
-## Concepts
+## Design
 
 A web server is like a restaurant kitchen.
 
@@ -75,7 +75,7 @@ python -m uvicorn backend.main:app --reload
 `backend.main:app` means "in the module `backend/main.py`, use the variable `app`". `--reload` restarts
 the server when a file changes (development only). Ctrl+C stops it.
 
-## Test it by hand
+## Verify it by hand
 
 | Open | Expected |
 |---|---|
@@ -90,7 +90,7 @@ In `/docs`, expand a route, click **Try it out**, then **Execute**.
 (your browser, on a temporary port), what it asked for, and the status. `GET /` is a 404 because no route
 matches `/`. `GET /favicon.ico` is the browser asking for a tab icon on its own.
 
-## Check your understanding
+## Design questions
 
 **1. In `uvicorn backend.main:app`, what does `backend.main` refer to, and what does `app` refer to?**
 

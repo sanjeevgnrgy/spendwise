@@ -17,7 +17,7 @@ the MCP server which tools exist, shows them to Gemini, and sends every tool cal
 > `is_error`, the `/mcp` URL) were checked against the running server before the code was written. The full
 > `/chat` flow through MCP has not been exercised. See "Test it by hand".
 
-## Concepts
+## Design
 
 **Before (Phases 7–9):** the agent had its own Python functions (`assistant/tools.py`) that called the expenses
 module. The list of tools, and how to describe them to Gemini, lived in the assistant's code.
@@ -108,7 +108,7 @@ From the project folder: `.\run.ps1`. No new packages.
 **If you run on another port** (e.g. `.\run.ps1 --port 8001`), set `MCP_URL=http://localhost:8001/mcp` in `.env`,
 or the assistant will look for its tools on port 8000.
 
-## Test it by hand
+## Verify it by hand
 
 These are the checks to run; none has been run yet.
 
@@ -127,7 +127,7 @@ These are the checks to run; none has been run yet.
 If step 1 fails with Gemini rejecting the request (a 502 mentioning the tools or schema), the converted
 declarations are the first place to look: `mcp_client._simplify`.
 
-## Check your understanding
+## Design questions
 
 **1. How does the agent know that a tool called `get_summary` exists and takes a `month` argument?**
 

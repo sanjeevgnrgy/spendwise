@@ -15,7 +15,7 @@ which now allows it through CORS.
 > still compiles. On the first run in a browser, the Expenses page went blank with an endless render loop; that
 > and a console warning were fixed afterwards (see "Two bugs found on the first run").
 
-## Concepts
+## Design
 
 **Components.** A React component is a function that returns what to show (JSX, HTML-like markup). Pages are built
 by putting components inside components: `ExpensesPage` contains `FiltersBar`, `ExpensesTable` and
@@ -126,7 +126,7 @@ if (selectionFor !== expenses) {   // new data arrived
 }
 ```
 
-**Lesson:** an effect re-runs whenever anything in its dependency list is a *different value* than last time. Objects
+**Takeaway:** an effect re-runs whenever anything in its dependency list is a *different value* than last time. Objects
 created during render (option objects, inline functions, a library's return value) are different every time. If such
 an effect then sets state, you get a loop. Prefer deriving things during render, and use effects only to sync with
 the outside world.
@@ -157,7 +157,7 @@ npm run dev
 Open **http://localhost:5173**. (The backend allows `localhost:5173` and `127.0.0.1:5173`; a different port needs
 `CORS_ORIGINS` in `.env`.)
 
-## Test it by hand
+## Verify it by hand
 
 Start the backend first (`.\run.ps1`); without it, every page load shows a red "Can't reach the SpendWise API" toast.
 
@@ -176,7 +176,7 @@ Start the backend first (`.\run.ps1`); without it, every page load shows a red "
 10. **CORS:** in the browser's dev tools (Network tab), a `/expenses` response has the header
     `access-control-allow-origin: http://localhost:5173`.
 
-## Check your understanding
+## Design questions
 
 **1. `FiltersBar` lets you change the filters, but it doesn't hold them, and it doesn't call the API. Who does, and why?**
 

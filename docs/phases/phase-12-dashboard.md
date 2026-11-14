@@ -12,7 +12,7 @@ recent expenses, built from shadcn Cards and shadcn charts, with loading skeleto
 > gaps, a year boundary, currency filtering, `limit`); `npm run build` passes, and the backend compiles. The page
 > wasn't opened in a browser while building it.
 
-## Concept: why the backend aggregates
+## Design: why the backend aggregates
 
 "Aggregating" means turning many rows into a few numbers: totals per month, per category. We could download every
 expense and add them up in the browser, but the backend does it instead:
@@ -96,7 +96,7 @@ Two terminals, from the project folder: `.\run.ps1` (backend; no new Python pack
 (frontend; `recharts` was added, so run `npm install` first if you pulled this change instead of building it here).
 Open **http://localhost:5173**; the Dashboard is the home page.
 
-## Test it by hand
+## Verify it by hand
 
 1. **Dashboard with data:** three cards (e.g. "Spent in November 2026" ₹8,265.85, 8 expenses, top category Travel),
    a bar per category, a 6-month line rising in November, and the 5 latest expenses.
@@ -108,7 +108,7 @@ Open **http://localhost:5173**; the Dashboard is the home page.
 7. **API directly:** http://localhost:8000/summary/trend?months=6 and http://localhost:8000/expenses?limit=5;
    `?months=30` → 422 (maximum is 24).
 
-## Check your understanding
+## Design questions
 
 **1. The trend chart shows 6 numbers. If the browser computed them instead of the backend, what would it have to
 download, and what could go wrong with the money?**

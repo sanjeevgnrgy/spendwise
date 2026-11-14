@@ -18,7 +18,7 @@ number changes. This replaces Phase 13's "guess from the tool names" refresh log
 > raw SSE stream was checked from Python, and the web app's `runAgent()` was run from Node. `POST /chat` still
 > answered. `npm run build` passes. **Not yet tried with real Gemini or in a browser.**
 
-## Concept: why showing tool activity matters for trust
+## Design: why showing tool activity matters for trust
 
 An assistant that can change your data asks for trust. If all you see is "Thinking…" and then "Done!", you can't tell
 what it actually did. It may have looked up the right expense, saved it twice, or quietly failed and still sounded
@@ -34,7 +34,7 @@ confident. Showing each action **as it happens** turns a black box into somethin
 **Analogy:** a food-delivery app that shows "Order received → Being prepared → Out for delivery" is easier to trust
 than one that shows a spinner for 40 minutes. The food is the same; you just know what's happening.
 
-## Concept: the AG-UI events, around one MCP call
+## Design: the AG-UI events, around one MCP call
 
 ```
 TOOL_CALL_START   {toolCallId, toolCallName: "add_expense"}      chip appears: "Saving expense…" (spinning)
@@ -58,7 +58,7 @@ STATE_SNAPSHOT    {snapshot: {dataVersion: 5}}                      only after a
   text and "Thinking…" already show everything a user needs. A step is one round trip to Gemini, which means nothing
   to the user (decisions D113).
 
-## Concept: shared state and `dataVersion`
+## Design: shared state and `dataVersion`
 
 AG-UI lets an agent and its UI share a small piece of **state**. The client sends its copy with every run
 (`RunAgentInput.state`), and the agent sends updates back as `STATE_SNAPSHOT` (the whole state) or `STATE_DELTA`
@@ -100,7 +100,7 @@ pages reload once for nothing, which is harmless (D111).
 `.\run.ps1` (restart it if it was already running: the assistant reads the tool list, now with annotations, only once)
 and `cd web; npm run dev`. Open http://localhost:5173. Needs your Gemini key in `.env`.
 
-## Test it by hand
+## Verify it by hand
 
 **1. In the app.** Open **Expenses** with the Assistant panel open, and send "Add 250 for lunch at Subway today, paid
 by UPI". You should see:
@@ -139,7 +139,7 @@ data: {"type":"STATE_SNAPSHOT","snapshot":{"dataVersion":5}}
 
 Delete `run.json` afterwards (and the expense, if you want).
 
-## Check your understanding
+## Design questions
 
 **1. Why does `TOOL_CALL_END` go out *before* the MCP call, and which event says the call is done?**
 

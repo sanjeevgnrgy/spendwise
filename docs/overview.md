@@ -1,8 +1,8 @@
 # Overview
 
 SpendWise is an **agentic expense tracker**: a web app for recording and understanding your spending, with an AI
-assistant that can do the same things for you in plain words. It's built as a learning project, one phase at a time,
-and every phase is documented ([README.md](README.md)).
+assistant that can do the same things for you in plain words. It was delivered in phases, each with an engineering
+note, and every design decision is recorded with its reasoning ([README.md](README.md)).
 
 ![The Dashboard](images/hero.png)
 
@@ -45,7 +45,7 @@ bearer token ([api_endpoints.md](api_endpoints.md#mcp-tools-and-resources)).
 | Backend framework | **FastAPI** 0.162 (Python 3.14) | Typed request/response models, OpenAPI for free, native Server-Sent Events |
 | Data | **SQLModel** / **SQLAlchemy** 2.1 on **SQLite**, **Alembic** 1.20 migrations | A local file today; `DATABASE_URL` can point at Postgres later |
 | Architecture | Modular monolith, **CQRS-lite** with a message bus and unit of work | Clear boundaries without the cost of microservices ([architecture.md](architecture.md)) |
-| AI model | **Google Gemini** (Interactions API, streaming, function calling), behind a provider-neutral port | Free tier for learning; replaceable ([gemini.md](gemini.md)) |
+| AI model | **Google Gemini** (Interactions API, streaming, function calling), behind a provider-neutral port | Free tier for development; replaceable ([gemini.md](gemini.md)) |
 | Agent tools | **MCP** (Model Context Protocol), Python SDK 2.3 | One set of tools for the assistant and any other AI client |
 | Agent ↔ UI | **AG-UI** 1.0 (events over SSE), **A2UI** 1.0 (UI as data) | Live tool progress, cards and forms the agent describes but can't script ([assistant_architecture.md](assistant_architecture.md)) |
 | Web app | **React** 19, **TypeScript** 7, **Vite** 8 | |

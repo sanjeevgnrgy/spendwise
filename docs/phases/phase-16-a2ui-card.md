@@ -27,7 +27,7 @@ expense deleted, the month's summary, and a list of found expenses.
 >
 > **Not yet seen in a browser or with real Gemini.**
 
-## Concept: why the agent sends data describing UI, not HTML
+## Design: why the agent sends data describing UI, not HTML
 
 HTML is code. If an agent could send HTML, then anything that can influence the agent could put things on your screen:
 
@@ -52,7 +52,7 @@ code:
 **Analogy:** ordering from a menu instead of letting a stranger cook in your kitchen. The agent can only pick dishes
 on the menu (the catalog), and your own kitchen (the renderer) makes them.
 
-## Concept: what an A2UI message looks like (v1.0)
+## Design: what an A2UI message looks like (v1.0)
 
 A UI is a **surface** made of a **flat list** of components that point at each other by `id`. Drawing starts at
 `"root"`. This is the actual card SpendWise sends:
@@ -133,7 +133,7 @@ with it (`#14 · Food · 13 Nov 2026`). The Expenses table has a matching **ID**
 `.\run.ps1` (it reloads on its own if it's already running) and `cd web; npm run dev`. Then hard-refresh the browser
 (Ctrl+Shift+R). Needs your Gemini key in `.env`.
 
-## Test it by hand
+## Verify it by hand
 
 **1. The card.** With the Assistant open, send "Add 250 for lunch at Subway today, paid by UPI". You should see:
 - the chip **Saving expense…**, then **✓ Expense saved**;
@@ -171,7 +171,7 @@ It comes right after the tool's `TOOL_CALL_RESULT` (and, for a tool that changed
 | A Text bound to `{"@path": …}` | "Can't show a data-bound text" (bindings come later) |
 | `"version": "0.8"` | ignored |
 
-## Check your understanding
+## Design questions
 
 **1. Why does the agent send `{"component": "Text", "text": "…"}` instead of `<p>…</p>`?**
 

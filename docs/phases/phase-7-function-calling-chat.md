@@ -15,7 +15,7 @@
 which tools to call (add, list, summarise, update, delete expenses), we run them, and it answers.
 The reply comes back with a list of the tools it used, and every step is logged to the console.
 
-## Concepts
+## Design
 
 **Function calling.** We tell Gemini about some functions it may use: their names, what they do, and what
 arguments they take. Gemini **never runs anything itself**. When it decides a function would help, it answers
@@ -138,7 +138,7 @@ From the project folder: `.\run.ps1`. No new packages. Watch the terminal while 
 14:16:31 INFO    spendwise.agent: step 3: Gemini answered in text, done
 ```
 
-## Test it by hand
+## Verify it by hand
 
 In `/docs`, open **POST /chat** and click **Try it out**. Try these one at a time:
 
@@ -159,7 +159,7 @@ Automated: `python -m pytest` → **56 passed** (9 new). The agent tests use a *
 "call add_expense", then "here's my answer", so each path is checked exactly: a normal run, hitting the 5-step cap,
 a failing tool, an unknown tool, wrong arguments, delete confirmation, logging, and `POST /chat`.
 
-## Check your understanding
+## Design questions
 
 **1. Walk through what happens, step by step, for "How much did I spend on food this month?" in the live run above.**
 

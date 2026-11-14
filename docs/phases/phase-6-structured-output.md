@@ -11,7 +11,7 @@ output, **without saving it**.
 > **Later changes:** the tests mentioned below were removed after Phase 8 ([decisions.md](../decisions.md) D64).
 > This page records Phase 6 as it was built.
 
-## Concepts
+## Design
 
 **Structured output.** Normally a model answers in free text, which your code then has to pick apart and
 hope it's in the expected format. With structured output, you send a **JSON schema** with the request:
@@ -118,7 +118,7 @@ categories (`backend\seed.py`).
 If `/parse` returns **502** with "experiencing high demand", Gemini is overloaded. Wait a few minutes, or
 temporarily set `GEMINI_MODEL=gemini-4-hydrogen` in `.env` and restart.
 
-## Test it by hand
+## Verify it by hand
 
 In `/docs`, open **POST /parse**, click **Try it out**, and send:
 
@@ -138,7 +138,7 @@ Exact wording (like `note`) can vary between runs; the structure never does.
 Automated: `python -m pytest` → **47 passed** (9 new in `tests/assistant/`, with Gemini replaced by a fake via
 `monkeypatch`, so they need no key or network).
 
-## Check your understanding
+## Design questions
 
 **1. Suppose `amount` were a plain required `Decimal` (not nullable) in the schema, and the user typed
 "Dinner at Swiggy". What would Gemini have to do, and why is that dangerous?**

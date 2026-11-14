@@ -25,7 +25,7 @@ sends a built-in form instead if the check fails.
 > **Not yet tried in a browser or with real Gemini.** Typing, the dropdowns and the calendar popover need a real
 > browser, and only real Gemini shows how reliably the model writes valid forms.
 
-## Concept: data binding
+## Design: data binding
 
 A form has its own small JSON **data model**, sent with it and pre-filled by the agent:
 
@@ -50,7 +50,7 @@ Details from the spec:
   choice: `["Food"]`.
 - A **DateTimeInput** holds ISO 8601 text, `"2026-11-13"`, never a browser `Date`.
 
-## Concept: why we validate UI the model generates
+## Design: why we validate UI the model generates
 
 A model writes *plausible* JSON, not guaranteed-correct JSON. It may invent a component (`"Select"`, `"Iframe"`),
 misspell a property, point a child at an id that doesn't exist, forget the Save button, or be steered by a
@@ -108,7 +108,7 @@ Two choices to know about:
 The backend reloads by itself. For the web app, run `npm install` in `web/` first (new packages), then
 `npm run dev`, and hard-refresh the browser (**Ctrl+Shift+R**).
 
-## Test it by hand
+## Verify it by hand
 
 **1. A form instead of questions.** In the Assistant panel, send *"add lunch"*. Expect a card titled "Add an expense"
 (or the model's own title) with Amount, Category, Merchant, Date, Paid with, Note and **Save**. What it understood is
@@ -135,7 +135,7 @@ rejected.
 
 **6. `/chat` is unchanged.** In `/docs`, `POST /chat` with "add lunch" asks for the details in text.
 
-## Check your understanding
+## Design questions
 
 **1. You type "Subway" into the Merchant box. What changes, where, and when does the agent find out?**
 

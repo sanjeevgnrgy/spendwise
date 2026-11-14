@@ -8,7 +8,7 @@
 **Goal:** full CRUD for expenses over HTTP, a monthly summary, and a categories list. Amounts are typed in
 rupees and stored as paise.
 
-## Concepts
+## Design
 
 **Router → service → repository.** Think of a restaurant:
 
@@ -130,7 +130,7 @@ An unknown parameter, such as the typo `catgory_id`, is rejected with 422 instea
 From the project folder: `.\run.ps1`. No new packages and no database changes; your seeded data still works.
 Then open http://127.0.0.1:8000/docs.
 
-## Test it by hand
+## Verify it by hand
 
 The easiest way is `/docs`: expand a route, click **Try it out**, then **Execute**. It shows the status code
 and the body.
@@ -171,7 +171,7 @@ passing. They cover every row of the API table above, including:
 - Summary totals matching the month's expenses.
 - `/health` and `/ask` still working.
 
-## Check your understanding
+## Design questions
 
 **1. A client sends `POST /expenses` with `"category_id": 42`, and there's no category 42. Why is that 422 and
 not 404? What would `GET /expenses/42` return if there's no expense 42?**

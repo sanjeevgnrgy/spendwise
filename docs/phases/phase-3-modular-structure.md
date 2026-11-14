@@ -14,7 +14,7 @@ modules, money helpers, and a seed script, keeping `/health` and `/ask` working.
 > error became `BusinessRuleError`. After Phase 4, the project moved from `spendwise/` to the repo root, so
 > "from `spendwise\`" below means the project folder. This page records Phase 3 as it was built.
 
-## Concepts
+## Design
 
 - **Modular monolith:** one app, deployed as one unit, with one database, divided inside into modules by
   business domain. Like an apartment building: shared foundation and plumbing (`core/`), separate flats
@@ -93,7 +93,7 @@ frozen DTOs, `SecretStr`, a re-runnable seed, icon names, no migrations yet, `/h
 2. From `spendwise\`: `.\run.ps1`. It installs SQLModel and pydantic-settings first, because `requirements.txt` changed.
 3. In a second terminal: `.\.venv\Scripts\python.exe backend\seed.py`.
 
-## Test it by hand
+## Verify it by hand
 
 **Seed on a fresh database** (dates are relative to today):
 
@@ -127,7 +127,7 @@ Running it again prints `Already seeded; nothing to do. Delete backend/spendwise
 - An import scan confirms that `core/` never imports a module, and that the only cross-module import is
   `from app.modules import categories`.
 
-## Check your understanding
+## Design questions
 
 **1. The expenses module needs to know whether category 3 exists. What may it import? What would go wrong
 over time if it ran `select(Category)` itself?**

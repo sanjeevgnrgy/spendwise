@@ -10,9 +10,9 @@ plus an architecture test that fails if anyone breaks the module boundaries.
 
 > **Later changes:** after Phase 8, all tests, `pytest.ini` and `requirements-dev.txt` were removed at the developer's
 > request; tests will be added again later ([decisions.md](../decisions.md) D64). This page records Phase 5 as it was
-> built and is kept as learning notes.
+> built and is kept as a record.
 
-## Concepts
+## Design
 
 **Fixture.** A fixture is a function that prepares something a test needs: a database, a test client,
 a ready-made "Food" category. A test asks for it just by naming it as a parameter:
@@ -195,10 +195,10 @@ pytest compares the **left** side of `==` (what the code produced) with the **ri
 expected) and shows the first difference. For `from app.modules.shop import service`, the module being
 imported from really is `app.modules.shop`, so the checker was right and the test's expectation was fixed.
 
-**Lesson:** a red test means "code and test disagree". It doesn't automatically mean the code is wrong.
+**Takeaway:** a red test means "code and test disagree". It doesn't automatically mean the code is wrong.
 Read the `E` lines and decide which side is mistaken.
 
-## Check your understanding
+## Design questions
 
 **1. `client` needs `session`, which needs `engine`. When a test asks for `client`, what does pytest do,
 in what order, and what happens when the test ends?**

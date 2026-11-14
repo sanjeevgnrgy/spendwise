@@ -15,7 +15,7 @@ FastAPI app at `/mcp/`, and can also run over stdio for local tools.
 > when data changed ([decisions.md](../decisions.md) D111). In Phase 18 `get_summary` also returns `previous_month`
 > (its total, for comparisons), alongside the fields it already had.
 
-## Concepts
+## Design
 
 **MCP** is a standard way for AI apps to plug into tools and data. In Phase 7 we described our tools to Gemini in
 Gemini's own format, inside our own app. MCP describes them once, in a shared format, so *any* compliant AI app
@@ -187,7 +187,7 @@ tools menu; ask *"What did I spend on food this month?"*. This wasn't tried whil
 No API key goes in that config: the MCP server doesn't call Gemini. It reads `.env` and the database by absolute
 path, so it works no matter which folder Claude Desktop starts it from.
 
-## Check your understanding
+## Design questions
 
 **1. You connect the MCP Inspector to SpendWise. Which is the host, which is the client, and which is the server?**
 

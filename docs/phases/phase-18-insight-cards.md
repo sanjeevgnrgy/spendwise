@@ -39,7 +39,7 @@ can only *propose* a delete, and the card's **Approve** button is the only thing
 >
 > **Not yet tried in a browser:** the chart shapes themselves only draw there.
 
-## Concept: human in the loop, and which actions deserve it
+## Design: human in the loop, and which actions deserve it
 
 **Human in the loop** means some actions don't happen when the AI decides; they happen when a person *approves*
 them. The assistant does the work of finding the expense and preparing the action. You make the call.
@@ -72,7 +72,7 @@ actions that really matter.
 **Analogy:** a bank lets an assistant prepare a transfer, but the transfer only leaves when you press "Confirm" in
 your own app. The assistant can't press it for you.
 
-## Concept: a catalog of our own for charts
+## Design: a catalog of our own for charts
 
 A2UI v1.0's basic catalog has no chart or stat component. Its 18 components cover layout, text, media and inputs.
 So SpendWise defines its **own catalog**, `urn:spendwise:catalog:insights:v1`, with **Chart** and **Stat**.
@@ -110,7 +110,7 @@ you say "yes").
 
 The backend reloads by itself; hard-refresh the browser (**Ctrl+Shift+R**). No new packages.
 
-## Test it by hand
+## Verify it by hand
 
 **1. Insight card.** Ask *"Where did my money go this month?"* Expect a short reply and a card:
 - "Where your money went in November 2026";
@@ -135,7 +135,7 @@ pressing Approve only gets you a new card to approve: the model can't delete.
 **5. Restart.** Ask to delete, restart the backend, then press Approve: "That card can't be used any more…". The
 server forgot the card, so nothing is deleted. Ask again.
 
-## Check your understanding
+## Design questions
 
 **1. The model is told "never delete without asking". Why isn't that enough, and what makes it safe now?**
 

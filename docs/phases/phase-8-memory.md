@@ -9,7 +9,7 @@
 module, and the recent ones are sent with every new message so follow-ups like *"actually it was 300"* work.
 `GET /threads/{id}` shows a conversation.
 
-## Concepts
+## Design
 
 **Why the model forgets without this.** A model has no memory between requests. Each call to Gemini is complete on
 its own: the model sees exactly what's in that request and nothing else. Phase 7's agent *looked* like it
@@ -84,7 +84,7 @@ steps are stored (they're part of the history that gets resent) but left out of 
 From the project folder: `.\run.ps1`. No new packages. The `chatmessage` table is created automatically at startup
 (existing tables and data are untouched).
 
-## Test it by hand
+## Verify it by hand
 
 In `/docs`:
 
@@ -112,7 +112,7 @@ building this phase. What was checked:
 - **With the real server on a throwaway database:** it starts, creates the `chatmessage` table next to the existing
   ones, lists `/chat` and `/threads/{thread_id}`, and returns 404 for an unknown thread.
 
-## Check your understanding
+## Design questions
 
 **1. Phase 7's agent remembered things across the steps of one message, but not across two `/chat` calls. Why?**
 

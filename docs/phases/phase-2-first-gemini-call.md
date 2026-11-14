@@ -12,7 +12,7 @@
 > The model is now `gemini-3.8-flash`. After Phase 4, the project moved from `spendwise/` to the repo root,
 > so `spendwise/.env` below is now `.env` in the project folder.
 
-## Concepts
+## Design
 
 - **Model:** a program trained on huge amounts of text that predicts a good reply to what you send it.
   Different models trade speed, cost and quality. Each has an ID such as `gemini-3.8-flash`. SpendWise reads
@@ -79,7 +79,7 @@ def ask(body: AskRequest) -> AskResponse:
 1. Paste your key into `spendwise\.env` after `GEMINI_API_KEY=`.
 2. Restart the server (`.env` is only read at startup): Ctrl+C, then `.\run.ps1`.
 
-## Test it by hand
+## Verify it by hand
 
 In `/docs`, open **POST /ask** → **Try it out**, or from PowerShell:
 
@@ -94,7 +94,7 @@ Invoke-RestMethod -Method Post -Uri http://127.0.0.1:8000/ask -ContentType "appl
 | Key missing | `500`; the terminal shows `GEMINI_API_KEY is not set. Add it to spendwise/.env ...` |
 | Wrong key | `502`, with Google's "API key not valid" in `detail` |
 
-## Check your understanding
+## Design questions
 
 **1. A wrong key gives 502 but a missing key gives 500. What's different, and why keep them apart?**
 

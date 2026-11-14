@@ -28,7 +28,7 @@ pause. A new endpoint, `POST /agent`, accepts an **AG-UI** run input (`threadId`
 > **Found while testing:** the chat hung forever. Live probes showed the free-tier quota was used up (Gemini answered
 > 429), and the SDK silently slept before retrying. Fixed by never retrying a 429 ([decisions.md](../decisions.md) D108).
 
-## Concept 1: normal HTTP vs Server-Sent Events
+## Design 1: normal HTTP vs Server-Sent Events
 
 **Normal HTTP (`POST /chat`):** the browser sends a request and the server works out the **whole** answer. That
 includes every Gemini step and tool call, often 5 to 20 seconds. Then it sends one complete response, and the
@@ -69,7 +69,7 @@ Things that follow from this:
   (compression, some proxies) would hide the streaming. FastAPI sends `Cache-Control: no-cache` and
   `X-Accel-Buffering: no` for this reason.
 
-## Concept 2: AG-UI and what each event means
+## Design 2: AG-UI and what each event means
 
 **AG-UI** (Agent–User Interaction protocol) is an open standard for how an **agent backend** talks to a **user
 interface**. It fixes the request shape (`RunAgentInput`) and a vocabulary of event types, so any AG-UI frontend can
@@ -98,7 +98,7 @@ The Python types come from the official **`ag-ui-protocol`** package (`from ag_u
 They're Pydantic models with camelCase JSON names. The JSON is the same as the package's own `EventEncoder`
 produces.
 
-## Concept 3: streaming from Gemini, with tools in the loop
+## Design 3: streaming from Gemini, with tools in the loop
 
 The agent still runs the Phase 7 loop: ask Gemini, run the tools it asks for, ask again, until it answers in text.
 The difference is that every Gemini step is now requested with `stream=True`. The Interactions API then sends a
@@ -173,7 +173,7 @@ succeeds, as with `/chat`.
 `.\run.ps1` from the project folder (it installs the new `ag-ui-protocol` requirement automatically), and
 `cd web; npm run dev`. Open http://localhost:5173. Needs your Gemini key in `.env`.
 
-## Test it by hand
+## Verify it by hand
 
 **1. See the raw stream.** In a second PowerShell window, from the project folder:
 
@@ -222,7 +222,7 @@ event (the panel keeps any text already shown and adds a red bubble).
 **6. `/chat` is unchanged.** In `/docs`, `POST /chat` returns the same JSON as before. (Swagger UI can call
 `/agent` too, but it shows the stream only after the run has ended. Use curl to watch it live.)
 
-## Check your understanding
+## Design questions
 
 **1. Gemini fails halfway through a reply. `/chat` answers 502 for that; why does `/agent` send a `RUN_ERROR` event
 with status 200 instead?**

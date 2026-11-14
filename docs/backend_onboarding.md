@@ -268,8 +268,10 @@ For example, budgets:
 | anything else | a bug | 500 problem with a generic message; details in the log |
 
 Raise them with a catalogued text, so the detail comes out in the request's language:
-`raise NotFoundError(translatable(ExpenseText.NOT_FOUND, expense_id=expense_id))`. A plain string is shown as it is
-(an outside service's own words). `str(error)` is the English text, for logs and MCP clients.
+`raise NotFoundError(translatable(ExpenseText.NOT_FOUND, expense_id=expense_id))`. A plain string (an outside
+service's own words, as the Gemini adapter raises) is never shown to a person (D180): it goes to the server log, and the
+client gets a generic text for the kind of error. `str(error)` is the English text, for logs and MCP clients. Never
+pass internals into a text's placeholders either (an exception's message, a URL, a tool's output): log them.
 
 Never catch exceptions in a route: `web/problems.py` turns them into problem responses in one place.
 

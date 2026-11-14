@@ -13,6 +13,7 @@ which would be held open (a pooled connection kept busy) the whole time. Here th
 """
 
 import copy
+import logging
 from dataclasses import dataclass
 from datetime import date
 from decimal import Decimal
@@ -28,6 +29,8 @@ from app.core.llm import LlmError, StructuredOutputModel
 from app.modules import categories
 from app.modules.assistant.i18n import ChatText
 from app.modules.expenses import PaymentMethod
+
+logger = logging.getLogger(__name__)
 
 
 # ParsedExpense's JSON schema is sent to the model as the shape its answer must have, so the docstring
@@ -132,8 +135,11 @@ class ExpenseParser:
         try:
             parsed = ParsedExpense.model_validate_json(raw)
         except ValidationError as exc:
-            # A 502, in the request's language; {error} is Pydantic's explanation (English).
-            raise LlmError(translatable(ChatText.WRONG_SHAPE, error=str(exc))) from exc
+            # A 502, in the request's language. Pydantic's explanation is for developers (D180), and it quotes the
+            # answer, which holds the user's note: so only the count is logged at WARNING, the rest at DEBUG.
+            logger.warning("the model's answer didn't match ParsedExpense (%d errors)", exc.error_count())
+            logger.debug("  why: %s", exc)
+            raise LlmError(translatable(ChatText.WRONG_SHAPE)) from exc
         # Model output is data to check, not trust. The enum should already prevent this; verify anyway.
         if parsed.category is not None and parsed.category not in names:
             parsed = parsed.model_copy(update={CATEGORY_FIELD: None})

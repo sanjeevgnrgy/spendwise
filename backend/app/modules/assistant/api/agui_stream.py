@@ -4,12 +4,14 @@ Adapter layer. routes.py's /agent route calls stream() with a run already checke
 and sends each event it yields as one Server-Sent Event:
 
 RUN_STARTED; then, as they happen, the reply's text as TEXT_MESSAGE_START / _CONTENT / _END, each tool
-call as TOOL_CALL_START (with its chip labels) / _ARGS / _END / _RESULT, a STATE_SNAPSHOT after a tool
-changed data, and a CUSTOM "a2ui" event for each card or form; then RUN_FINISHED. Once the stream has
-started, the HTTP status (200) has been sent and can't change, so a failure becomes a RUN_ERROR event.
+call as TOOL_CALL_START (with its chip labels) / _ARGS / _END / _RESULT (its outcome, not its text), a
+STATE_SNAPSHOT after a tool changed data, and a CUSTOM "a2ui" event for each card or form; then RUN_FINISHED.
+Once the stream has started, the HTTP status (200) has been sent and can't change, so a failure becomes a
+RUN_ERROR event.
 
 Everything a person reads here (chip labels, cards, a RUN_ERROR's message) is written in the request's language,
-which routes.py passes in.
+which routes.py passes in. Nothing else's words reach the browser: a tool's text and an outside service's error stay
+on the server (D180).
 """
 
 import json
@@ -35,7 +37,7 @@ from ag_ui.core import (
     ToolCallStartEvent,
 )
 
-from app.core.errors import AppError
+from app.core.errors import AppError, ExternalServiceError
 from app.core.i18n import Language, text
 from app.modules.assistant import a2ui
 from app.modules.assistant.agent.events import (
@@ -57,9 +59,10 @@ from app.modules.assistant.i18n import ChatText
 logger = logging.getLogger(__name__)
 
 ASSISTANT_ROLE = "assistant"
-# RUN_ERROR's code for an unexpected failure (its message is ChatText.RUN_FAILED: the details stay in the
-# server log, not in the browser).
-INTERNAL_ERROR = "InternalError"
+# What TOOL_CALL_RESULT carries as the tool's content: nothing. The tool's text is written for the model (and, when
+# the tool failed, it's the tool's error), so it stays on the server (D180); the chip shows the outcome
+# (metadata.ok), and the reply explains it in the user's language.
+NO_TOOL_CONTENT = ""
 
 
 def _events_for(
@@ -131,11 +134,11 @@ class _Writer:
 
     def _tool_finished(self, event: ToolFinished) -> Iterator[BaseEvent]:
         """A tool's result; then a raised data version if it changed data, and its card if it has one."""
-        # What the tool returned. The event has no error field, so success goes in `metadata`.
+        # That the tool has run. The event has no error field, so success goes in `metadata`.
         yield ToolCallResultEvent(
             message_id=uuid4().hex,
             tool_call_id=event.call_id,
-            content=event.output,
+            content=NO_TOOL_CONTENT,
             metadata={MetadataKey.OK: event.ok},
         )
         if event.changed_data:
@@ -146,6 +149,18 @@ class _Writer:
             card = a2ui.card_for(event.name, event.data, self.language)
             if card is not None:
                 yield CustomEvent(name=CustomEventName.A2UI, value=card.to_json())
+
+
+def _message_for_people(error: AppError, language: Language) -> str:
+    """A RUN_ERROR's message: the error's text for people, or a generic one if it has none (D180).
+
+    An error whose message is a plain string (an outside service's own words, e.g. Gemini's) isn't shown: the
+    person is told the assistant's service failed, or that something went wrong. The words are in the log.
+    """
+    message = error.message_in(language)
+    if message is not None:
+        return message
+    return text(language, ChatText.SERVICE_FAILED if isinstance(error, ExternalServiceError) else ChatText.RUN_FAILED)
 
 
 def stream(request: AgentRequest, assistant: Assistant, today: date, language: Language) -> Iterator[BaseEvent]:
@@ -159,16 +174,17 @@ def stream(request: AgentRequest, assistant: Assistant, today: date, language: L
     try:
         for event in _events_for(request, assistant, today, language):
             yield from writer.write(event)
-    # RUN_ERROR ends the run. The client keeps whatever text already arrived and shows the error.
+    # RUN_ERROR ends the run. The client keeps whatever text already arrived and shows the error. Its code is the
+    # problem kind (AppError.slug, as in a problem's "type"), never a class name.
     except AppError as exc:
-        # Expected problems (e.g. the model's "high demand") carry a message meant for the user.
+        # An expected problem; its words are logged, and the browser gets only a text written for people.
         logger.warning("agent run %s failed: %s", request.run_id, exc)
-        yield RunErrorEvent(message=exc.message_in(language), code=type(exc).__name__)
+        yield RunErrorEvent(message=_message_for_people(exc, language), code=exc.slug)
         return
     except Exception:
         # A bug or a setup problem: the details go to the server log, not to the browser.
         logger.exception("agent run %s failed", request.run_id)
-        yield RunErrorEvent(message=text(language, ChatText.RUN_FAILED), code=INTERNAL_ERROR)
+        yield RunErrorEvent(message=text(language, ChatText.RUN_FAILED), code=AppError.slug)
         return
     yield from writer.close_text()
     yield RunFinishedEvent(thread_id=request.thread_id, run_id=request.run_id)

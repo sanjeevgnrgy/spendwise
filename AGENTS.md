@@ -2,7 +2,7 @@
 
 Rules for AI coding agents, and anyone else, changing SpendWise. They describe how this codebase is built: a change
 that doesn't follow them isn't finished. The reasoning behind each rule is in [docs/](docs/README.md). Read the linked
-doc before working in an area, and check [decisions.md](docs/decisions.md) (D1–D179) before changing a settled choice.
+doc before working in an area, and check [decisions.md](docs/decisions.md) (D1–D180) before changing a settled choice.
 
 | Before you change… | Read |
 |---|---|
@@ -93,6 +93,11 @@ An error a person may read carries a catalogued text: `BusinessRuleError(transla
 only MCP clients and the model see (the MCP tools' own) stays an English string. Never catch them in routes:
 `web/problems.py` turns every error into an RFC 9457 problem, its detail in the request's language.
 
+**Nothing but texts for people reaches the client (D180).** Never put an outside service's words, an exception's
+text, a URL, a class name or a tool's output into a detail, a `RUN_ERROR`, a reply or any other text a person reads,
+not even as a placeholder value. Log them (user data only at DEBUG) and send a catalogued text. A plain-string
+`AppError` is never shown: people get a generic text for its kind.
+
 **Texts for people, in the request's language (D179).**
 - What a person reads (error details, the assistant's cards, chips and fixed replies, payment labels) lives in the
   module's `i18n/` catalog: `define_catalog` refuses, at startup, a language missing a key or using a placeholder
@@ -173,6 +178,9 @@ files, not new branches in shared code.
   - Error boundaries wrap the app, the page area, the chat panel and every A2UI card.
   - A page keeps its data when a refresh fails (`RefreshNotice`).
   - Code that fails to load can be retried.
+- **Errors show only texts for people (D180).** Show an error with `messageOf`: only a `UserFacingError`'s message
+  (`ApiError`, `AgentRunError`, our own texts) is shown, anything else as a generic text. Throw `UserFacingError` with
+  a text from a namespace, never a raw `Error` meant to be read.
 - **Accessibility.**
   - Every control has a label.
   - Sortable headers set `aria-sort`.

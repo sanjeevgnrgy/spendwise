@@ -3,7 +3,8 @@
 Handlers raise core/errors.py's AppError subclasses without knowing anything about HTTP; this file turns them,
 FastAPI's validation errors and its own 404/405 into problem responses. Validation errors (422) add
 "errors": [{"location": "body", "field": "amount", "message": "..."}]. Anything else is a bug, and
-UnexpectedErrorMiddleware answers it with a generic 500.
+UnexpectedErrorMiddleware answers it with a generic 500. A "detail" is always a text written for people, in the
+request's language (D180): an error's own words that aren't (an outside service's) go to the server log instead.
 
 Web layer. main.py installs register_error_handlers and UnexpectedErrorMiddleware, the MCP HTTP endpoint
 (modules/mcp/http.py) answers its 401 with problem_response, and the export script hands PROBLEM_JSON to the web app.
@@ -19,8 +20,8 @@ from starlette.datastructures import Headers
 from starlette.exceptions import HTTPException
 from starlette.types import ASGIApp, Message, Receive, Scope, Send
 
-from app.core.errors import AppError
-from app.core.i18n import text
+from app.core.errors import AppError, ExternalServiceError
+from app.core.i18n import Language, text
 from app.web.dependencies import get_language, language_of
 from app.web.i18n import WebText
 
@@ -51,6 +52,21 @@ def problem_response(
         "type": PROBLEM_TYPE_PREFIX + slug, "title": title, "status": status, "detail": detail, "instance": instance
     }
     return JSONResponse(status_code=status, content={**body, **extra}, media_type=PROBLEM_JSON, headers=headers)
+
+
+def detail_for_people(error: AppError, language: Language) -> str:
+    """The problem's detail: the error's own text in `language`, or, if it isn't written for people, a generic one.
+
+    The rule (D180): a person only reads catalogued texts. A plain-string message (an outside service's own words, such
+    as Gemini's error) can carry internals, so it goes to the server log, and the client is told only what kind of
+    thing failed: a service we depend on (502), or something unexpected.
+    """
+    detail = error.message_in(language)
+    if detail is not None:
+        return detail
+    logger.warning("%s error, not shown to the client: %s", error.slug, error)
+    generic = WebText.SERVICE_FAILED if isinstance(error, ExternalServiceError) else WebText.UNEXPECTED
+    return text(language, generic)
 
 
 class UnexpectedErrorMiddleware:
@@ -95,7 +111,7 @@ class UnexpectedErrorMiddleware:
 def register_error_handlers(app: FastAPI) -> None:
     """Install the handlers that turn errors into problem details. Called once, by main.create_app.
 
-    - an AppError a handler raised -> its own status, type and title, with its message as the detail;
+    - an AppError a handler raised -> its own status, type and title, with its message for people as the detail;
     - RequestValidationError (FastAPI refused the body, query or path) -> a 422 listing every problem;
     - Starlette's HTTPException (FastAPI's own 404 and 405, or one a route raises) -> its status and headers.
 
@@ -103,22 +119,23 @@ def register_error_handlers(app: FastAPI) -> None:
     """
 
     async def app_error(request: Request, exc: Exception) -> JSONResponse:
-        """An AppError -> its problem response; the error's message, in the request's language, is the detail."""
+        """An AppError -> its problem response; the detail is its text for people, in the request's language."""
         # FastAPI only calls this for an AppError; the fallback just narrows the type for the type checker.
         error = exc if isinstance(exc, AppError) else AppError()
-        detail = error.message_in(get_language(request))
+        detail = detail_for_people(error, get_language(request))
         return problem_response(error.status, error.slug, error.title, detail, request.url.path)
 
     async def invalid_request(request: Request, exc: Exception) -> JSONResponse:
-        """A 422 with every invalid value under "errors", and a one-line summary of them as the detail."""
+        """A 422 with every invalid value under "errors", for the client's developer; the detail is for people."""
         assert isinstance(exc, RequestValidationError)
         errors = [
-            # loc is ("body", "amount") or ("query", "month"): where the bad value was, then which one.
+            # loc is ("body", "amount") or ("query", "month"): where the bad value was, then which one. The message
+            # is Pydantic's (English), about the request itself; Pydantic's "input" (the value sent) is left out.
             {"location": str(e["loc"][0]), "field": ".".join(str(part) for part in e["loc"][1:]), "message": e["msg"]}
             for e in exc.errors()
         ]
-        summary = "; ".join(f"{e['field'] or e['location']}: {e['message']}" for e in errors)
-        return problem_response(422, VALIDATION_SLUG, "Invalid request", summary, request.url.path, errors=errors)
+        detail = text(get_language(request), WebText.INVALID_REQUEST)
+        return problem_response(422, VALIDATION_SLUG, "Invalid request", detail, request.url.path, errors=errors)
 
     async def http_error(request: Request, exc: Exception) -> JSONResponse:
         """An HTTP error as a problem; its short message ("Method Not Allowed") is both title and detail."""

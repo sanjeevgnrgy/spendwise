@@ -1,5 +1,12 @@
 # Phase 20: Languages (the server)
 
+> **Later changes (D180, after Phase 20):** people only read texts written for them. An outside service's own words
+> (Gemini's errors), Pydantic's explanation, the tools server's URL and a tool's output no longer reach the client:
+> they go to the server log, and a person gets a catalogued text ("A service the app depends on didn't answer
+> properly…"). A 422's `detail` is a catalogued text too (`errors` still lists each field), `RUN_ERROR.code` is the
+> problem kind, `TOOL_CALL_RESULT.content` is empty, and in the browser a crash shows "Something went wrong" (its
+> details go to the console). See [decisions.md](../decisions.md) D180.
+
 **Goal:** finish what Phase 19 started. The web app spoke Hindi, but much of what a Hindi user read still came from
 the server in English: the assistant's cards, its progress chips and fixed replies, error messages, payment labels.
 Now the server writes every text meant for a person in the request's language, and the assistant's model replies in

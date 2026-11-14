@@ -4,12 +4,13 @@
 // or the assistant's onDataChanged) and this file decides what that makes out of date.
 // Used by providers.tsx (QueryClientProvider, and the assistant's refresh).
 
-import { MutationCache, QueryClient, type QueryKey } from "@tanstack/react-query"
+import { MutationCache, QueryCache, QueryClient, type QueryKey } from "@tanstack/react-query"
 
 import { dashboardKeys } from "@/features/dashboard"
 import { expenseKeys } from "@/features/expenses"
 import { ApiError } from "@/shared/api/http"
 import { DATA_SCOPES, type DataScope } from "@/shared/config/data-scopes"
+import { reportUnexpected } from "@/shared/lib/errors"
 
 // A failed query is asked again once (two tries in all) before its error is shown, and only if asking again
 // might help. Client errors (4xx) won't succeed by asking again; a dropped connection or a 5xx might.
@@ -47,11 +48,14 @@ export function refreshAfter(client: QueryClient, scope: DataScope): void {
  * a query reloads when a page that uses it is shown again or the window regains focus.
  */
 export const queryClient: QueryClient = new QueryClient({
+  // A failure people are only shown a generic text for (a bug, not an API error) goes to the console in full.
+  queryCache: new QueryCache({ onError: reportUnexpected }),
   // A mutation says what kind of data it changed (`meta.changes`); refreshAfter decides what that makes stale.
   // onSettled, not onSuccess: refresh after a failure too, because a request can fail after the backend already
   // made the change (the answer was lost on the way back), and reloading shows what's really stored.
   // (Deleting several expenses doesn't rely on this: that mutation succeeds even when some deletes fail.)
   mutationCache: new MutationCache({
+    onError: reportUnexpected,
     onSettled: (_data, _error, _variables, _context, mutation) => {
       const scope = mutation.meta?.changes
       if (scope) refreshAfter(queryClient, scope)

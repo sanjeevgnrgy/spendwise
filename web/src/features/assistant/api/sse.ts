@@ -3,7 +3,7 @@
 // parses what comes out. Also defines the "connection lost" message, since this is where a break shows up.
 
 import { i18n } from "@/shared/i18n"
-import { isAbort } from "@/shared/lib/errors"
+import { isAbort, UserFacingError } from "@/shared/lib/errors"
 
 import { assistantTexts } from "../i18n"
 
@@ -39,13 +39,13 @@ export function dataOf(block: string): string {
 }
 
 // One read. Stopped on purpose (Stop, or the page closed) stays an AbortError; a network drop mid-reply
-// becomes an Error with connectionLostMessage().
+// becomes a UserFacingError with connectionLostMessage().
 async function read(reader: ReadableStreamDefaultReader<string>): Promise<ReadableStreamReadResult<string>> {
   try {
     return await reader.read()
   } catch (error) {
     if (isAbort(error)) throw error
-    throw new Error(connectionLostMessage())
+    throw new UserFacingError(connectionLostMessage())
   }
 }
 

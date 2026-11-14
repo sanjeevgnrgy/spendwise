@@ -9,7 +9,7 @@ import type { components, paths } from "@/shared/api/schema.gen"
 import { APP_NAME } from "@/shared/config/app"
 import { API_ORIGIN } from "@/shared/config/env"
 import { i18n, languageHeaders, type CommonTexts } from "@/shared/i18n"
-import { isAbort } from "@/shared/lib/errors"
+import { isAbort, UserFacingError } from "@/shared/lib/errors"
 import { isObject } from "@/shared/lib/guards"
 
 /** The API's data shapes, by their backend names: Schemas["ExpenseRead"], Schemas["CategoryRead"]... */
@@ -33,11 +33,11 @@ api.use({
 type ClientMessage = keyof CommonTexts["errors"]
 
 /**
- * A failed API call. `message` is for people (the backend's own `detail`, or one of the client's own messages),
- * `status` is the HTTP status (0 when no answer came back), and `problemType` is the problem's `type`, when it had
- * one.
+ * A failed API call. `message` is for people (the backend's own `detail`, which the server writes for people, or one
+ * of the client's own messages), `status` is the HTTP status (0 when no answer came back), and `problemType` is the
+ * problem's `type`, when it had one.
  */
-export class ApiError extends Error {
+export class ApiError extends UserFacingError {
   /** The HTTP status; 0 when the backend couldn't be reached or its answer couldn't be read. */
   readonly status: number
   /** The RFC 9457 problem's `type` (which kind of failure), when the backend sent one. */
@@ -75,9 +75,12 @@ export class ApiError extends Error {
   }
 }
 
-/** The error when no answer came back at all: the backend is down, unreachable, or blocked by CORS. */
+/**
+ * The error when no answer came back at all: the backend is down, unreachable, or blocked by CORS. It doesn't name
+ * the API's address (the browser console's failed request does, for developers).
+ */
 export function unreachableError(): ApiError {
-  return ApiError.ofText("unreachable", 0, { app: APP_NAME, origin: API_ORIGIN })
+  return ApiError.ofText("unreachable", 0, { app: APP_NAME })
 }
 
 // What an openapi-fetch call resolves to: the data (on success) or the problem (on error).

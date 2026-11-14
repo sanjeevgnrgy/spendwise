@@ -87,14 +87,12 @@ HI: dict[ChatText, TextValue] = {
         "वह अभी जैसा है, वैसा देखने के लिए मुझसे फिर से कहें।"
     ),
     ChatText.DELETED: "हो गया: खर्च {ref} हटा दिया गया है।",
-    ChatText.DELETE_FAILED: (
-        "मैं अभी {ref} नहीं हटा सका ({error})। कुछ भी नहीं हटाया गया; थोड़ी देर में मुझसे फिर से कहें।"
-    ),
+    ChatText.DELETE_FAILED: "मैं अभी {ref} नहीं हटा सका। कुछ भी नहीं हटाया गया; थोड़ी देर में मुझसे फिर से कहें।",
     ChatText.RUN_FAILED: "सर्वर पर कुछ गड़बड़ हो गई। पूरी जानकारी सर्वर लॉग में है।",
-    ChatText.EMPTY_ANSWER: "मॉडल ने न कोई टेक्स्ट लौटाया, न कोई टूल कॉल।",
-    ChatText.WRONG_SHAPE: "मॉडल का जवाब अपेक्षित ढाँचे से मेल नहीं खाता: {error}",
-    ChatText.TOOLS_UNREACHABLE_IN_PROCESS: "खर्च के टूल तक नहीं पहुँचा जा सका (इस ऐप का MCP सर्वर)",
-    ChatText.TOOLS_UNREACHABLE_AT: "खर्च के टूल तक नहीं पहुँचा जा सका ({url})",
+    ChatText.SERVICE_FAILED: "सहायक की सेवा ने ठीक से जवाब नहीं दिया। थोड़ी देर में फिर से कोशिश करें।",
+    ChatText.EMPTY_ANSWER: "सहायक कोई जवाब नहीं दे सका। फिर से पूछकर देखें।",
+    ChatText.WRONG_SHAPE: "सहायक का जवाब ऐसे रूप में आया जिसे ऐप इस्तेमाल नहीं कर सकता। फिर से कोशिश करें।",
+    ChatText.TOOLS_UNREACHABLE: "खर्च के टूल तक अभी नहीं पहुँचा जा सकता। थोड़ी देर में फिर से कोशिश करें।",
     ChatText.NO_USER_MESSAGE: "इस रन में जवाब देने के लिए उपयोगकर्ता का कोई संदेश नहीं है।",
     ChatText.MESSAGE_LENGTH: "संदेश 1 से {max} अक्षरों तक का होना चाहिए।",
     ChatText.INVALID_ACTION: "बटन की कार्रवाई मान्य नहीं है।",

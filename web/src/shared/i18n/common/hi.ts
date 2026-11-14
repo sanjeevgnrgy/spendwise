@@ -7,7 +7,8 @@ import type en from "./en"
 /** The shared texts, in Hindi. Same keys as en.ts; {{name}} placeholders stay as they are. */
 const hi: Translation<typeof en> = {
   errors: {
-    unreachable: "{{app}} API ({{origin}}) से संपर्क नहीं हो पा रहा है। क्या बैकएंड चल रहा है?",
+    unexpected: "कुछ गड़बड़ हो गई। फिर से कोशिश करें; अगर बार-बार हो, तो पेज दोबारा लोड करें।",
+    unreachable: "अभी {{app}} से संपर्क नहीं हो पा रहा है। अपना कनेक्शन जाँचें और फिर से कोशिश करें।",
     unreadable: "API ने ऐसा जवाब भेजा जिसे यह ऐप पढ़ नहीं सका।",
     requestFailed: "अनुरोध विफल रहा ({{status}})",
     emptyAnswer: "API ने खाली जवाब भेजा ({{status}})",

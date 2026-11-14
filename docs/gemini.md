@@ -126,11 +126,15 @@ in `infrastructure/llm/gemini.py`):
 - Google's quick "high demand" errors still fail fast; only a hung connection takes up to about 2 minutes.
 - **Never retry 429 (quota used up).** The SDK retries 429 by default, and before retrying it sleeps for as long as
   Google's `retry-after-ms` header asks, with no upper limit and no timeout. With an exhausted quota that looked like a
-  request hanging forever (found in Phase 14; D108). Now a 429 fails at once with Google's quota message.
+  request hanging forever (found in Phase 14; D108). Now a 429 fails at once, and Google's quota message is logged.
 
 ## When something goes wrong
 
-| What you see from `POST /api/v1/parse` (or `/chat`) | Meaning | Where to look |
+A failed Gemini call is a `502` whose `detail` only says a service the app depends on failed: Google's own message
+never reaches the client (D180). The backend terminal (the server log) has it, in a WARNING line; the quotes below
+are what to look for there.
+
+| What you see from `POST /api/v1/parse` (or `/chat`), and in the server log | Meaning | Where to look |
 |---|---|---|
 | `422` | The request body is invalid, e.g. empty text or too long | The problem's `detail` and `errors` say which rule failed |
 | `500 Internal Server Error` | Our setup is wrong: `GEMINI_API_KEY` or `GEMINI_MODEL` isn't set | The server terminal says which setting is missing |
@@ -138,7 +142,7 @@ in `infrastructure/llm/gemini.py`):
 | `502` with a quota or rate-limit message | Free-tier limit reached | AI Studio rate-limit page; wait for the reset |
 | `502` mentioning the model | The model isn't available to your key | Pick a free-tier model from the table above |
 | `502` "experiencing high demand" (Google's 503) | The model is temporarily overloaded | Wait a few minutes, or switch `GEMINI_MODEL` (e.g. `gemini-4-hydrogen`) and restart |
-| `502` "didn't match the expected shape" | Gemini's JSON didn't fit `ParsedExpense` | Rare with structured output; retry. If it repeats, the schema or descriptions need a look |
+| `502` "came back in a form the app can't use"; the log says "didn't match ParsedExpense" | Gemini's JSON didn't fit `ParsedExpense` | Rare with structured output; retry. If it repeats, Pydantic's explanation is logged at `DEBUG` (it quotes the answer): lower `app`'s level in `infrastructure/logging.py` while you look |
 | `422` "There are no categories yet" (`/parse` only) | Nothing to pick a category from | Run `backend\seed.py` or add categories |
 
 **500 vs 502:** a 500 means *our* server has a problem; a 502 means a service we depend on (Gemini) failed.

@@ -19,11 +19,13 @@ from app.core.i18n import Language, Translatable
 class AppError(Exception):
     """An expected problem. Subclasses say which HTTP status and problem type it becomes.
 
-    Raise one with a message for the user: it becomes the problem's "detail". A Translatable (a catalogued text and
-    its values) is written in the language of whoever reads it (web/problems.py: the request's); a plain string is shown
-    as it is (an outside service's own words). str(error) is the English text, for logs and for MCP clients. `slug`
-    is the end of the problem's "type" URI, and `title` a short summary that's the same for every error of the kind.
-    AppError itself stands for an internal error (500): UnexpectedErrorMiddleware reports a bug with its slug and title.
+    Raise one with a Translatable (a catalogued text and its values) when a person may read it: it becomes the
+    problem's "detail", written in the reader's language (web/problems.py: the request's). A plain string is never
+    shown to a person (D180): it's an outside service's own words or a note for developers, which can carry internals,
+    so it goes to the server log and the person gets a generic text for the kind of error. str(error) is the English
+    text, for logs and for MCP clients. `slug` is the end of the problem's "type" URI (and a run error's code), and
+    `title` a short summary that's the same for every error of the kind. AppError itself stands for an internal error
+    (500): UnexpectedErrorMiddleware reports a bug with its slug and title.
     """
 
     status: ClassVar[int] = 500
@@ -35,9 +37,9 @@ class AppError(Exception):
         super().__init__(str(message))
         self.text = message
 
-    def message_in(self, language: Language) -> str:
-        """The detail in `language` (a plain-string message is the same in every language)."""
-        return self.text.in_language(language) if isinstance(self.text, Translatable) else self.text
+    def message_in(self, language: Language) -> str | None:
+        """The detail for a person, in `language`; None if the message isn't written for people (a plain string)."""
+        return self.text.in_language(language) if isinstance(self.text, Translatable) else None
 
 
 class NotFoundError(AppError):

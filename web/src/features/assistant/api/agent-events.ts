@@ -1,6 +1,6 @@
-// Reads the parts of AG-UI events that @ag-ui/core leaves open (`metadata`, `content`, `snapshot`): the chip
-// labels, whether a tool worked, a tool's result text, and the shared data version. Pure functions over network
-// data, which is checked rather than trusted. Used by the transcript (model/transcript.ts) and the run hook
+// Reads the parts of AG-UI events that @ag-ui/core leaves open (`metadata`, `snapshot`): the chip labels, whether
+// a tool worked, and the shared data version. (A tool's result text stays on the server, D180.) Pure functions over
+// network data, which is checked rather than trusted. Used by the transcript (model/transcript.ts) and the run hook
 // (model/use-agent-run.ts).
 
 import { AGUI } from "@/shared/api/contracts.gen"
@@ -13,9 +13,6 @@ export interface ToolLabels {
   done: string
   failed: string
 }
-
-// The type of a content part that carries text (AG-UI 1.0 tool results can be a list of parts).
-const TEXT_PART = "text"
 
 /**
  * The chip labels the backend sends in TOOL_CALL_START's metadata. It always sends them; the tool's own name
@@ -37,15 +34,6 @@ export function toolLabelsOf(metadata: unknown, name: string): ToolLabels {
 /** Whether a tool call worked, from TOOL_CALL_RESULT's metadata. Only an explicit `ok: false` means it failed. */
 export function toolSucceeded(metadata: unknown): boolean {
   return !(isObject(metadata) && metadata[AGUI.metadata.ok] === false)
-}
-
-/** A tool result's content as text: plain text, or (in AG-UI 1.0) a list of parts, of which the text is kept. */
-export function toolResultText(content: unknown): string {
-  if (typeof content === "string") return content
-  if (!Array.isArray(content)) return ""
-  return content
-    .map((part) => (isObject(part) && part.type === TEXT_PART && typeof part.text === "string" ? part.text : ""))
-    .join("")
 }
 
 /** The data version in a STATE_SNAPSHOT, or undefined if it doesn't carry a number. */

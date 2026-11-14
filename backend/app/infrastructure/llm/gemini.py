@@ -5,6 +5,9 @@ SDK failure into LlmError, and reads streamed answers. The wire format itself (s
 putting streamed pieces back together) lives in gemini_wire.py. Swapping providers means writing another
 adapter like this one.
 
+An LlmError raised here carries Google's own words, a plain string: they reach the server log, never a person
+(D180: web/problems.py and the AG-UI stream send a generic text instead).
+
 The composition root (bootstrap.py) builds one GeminiModel with the API key and model name from the settings
 and injects it; nothing else imports this file.
 """
@@ -28,7 +31,7 @@ TIMEOUT_MS = 60_000
 ATTEMPTS = 2
 # Retry only when Google's side failed (5xx), e.g. "high demand". Never on 429 (quota used up): the SDK then
 # sleeps for as long as Google's retry-after-ms header asks, with no upper limit and no timeout, so the request
-# looked hung. Failing at once shows the quota message.
+# looked hung. Failing at once logs the quota message (a person is told the service failed: D180).
 RETRY_STATUS_CODES = (500, 502, 503, 504)
 JSON_MIME_TYPE = "application/json"
 

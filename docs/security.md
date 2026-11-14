@@ -25,8 +25,11 @@ deployment would need.
 - **Input validation everywhere:** unknown fields and query parameters are rejected, text has length limits, ids are
   bounded (no driver overflow), months are limited to 1900–2099, amounts to 2 decimals and > 0. See
   [api_endpoints.md](api_endpoints.md).
-- **No internals in errors:** an unexpected error becomes a generic 500 problem; the traceback goes only to the server
-  log.
+- **No internals in errors (D180):** a client is only ever sent texts written for people. An unexpected error becomes
+  a generic 500 problem; the traceback goes only to the server log. An outside service's own words (Gemini's error,
+  a quota message), Pydantic's explanation of the model's answer, the tools server's URL and a tool's output stay in
+  the server log too; a `RUN_ERROR`'s `code` is the problem kind, not a class name. In the browser, an error that
+  isn't written for people (a crash) shows a generic text; its details go to the browser console.
 
 ## MCP
 

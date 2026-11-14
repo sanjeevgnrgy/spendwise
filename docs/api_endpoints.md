@@ -41,12 +41,17 @@ Every error, from any route, has one shape and the media type `application/probl
 | 500 | `internal` | a bug; the details go to the server log only |
 | 502 | `external-service` | Gemini (or a remote MCP server) failed: bad key, quota, overload |
 
-Validation example:
+The `detail` is always a text written for people, in the request's language. Nothing else's words reach the client
+(D180): a bug's traceback, Gemini's own error message (a 502 says only that a service the app depends on failed),
+a server's URL. Those are in the server log.
+
+Validation example (`errors` says which values were wrong, for the client's developer; Pydantic's message, never the
+value sent):
 
 ```json
 {
   "type": "urn:spendwise:problem:validation", "title": "Invalid request", "status": 422,
-  "detail": "merchant: Field required; merchnat: Extra inputs are not permitted",
+  "detail": "Some of the values sent aren't valid.",
   "instance": "/api/v1/expenses",
   "errors": [
     {"location": "body", "field": "merchant", "message": "Field required"},
@@ -256,10 +261,10 @@ The answer is `text/event-stream`, one AG-UI event per `data:` line, plus a `: p
 | `TEXT_MESSAGE_START` / `_CONTENT` / `_END` | the reply, piece by piece |
 | `TOOL_CALL_START` | the tool's name, and `metadata.labels` (`running` / `done` / `failed`) for its status chip |
 | `TOOL_CALL_ARGS` / `TOOL_CALL_END` | the arguments' JSON; END means "complete", not "run" |
-| `TOOL_CALL_RESULT` | what the tool returned, and `metadata.ok` |
+| `TOOL_CALL_RESULT` | that the tool ran, and `metadata.ok`; `content` is empty (the tool's text is for the model) |
 | `STATE_SNAPSHOT` | `{"dataVersion": n}` after a tool changed data: the pages reload |
 | `CUSTOM` named `a2ui` | an A2UI message: a card, a form (with `metadata.source`: `model` or `fallback`), or an Approve/Cancel card |
-| `RUN_ERROR` | `message` (meant for people) and `code` |
+| `RUN_ERROR` | `message` (written for people, in the request's language) and `code`, the problem kind as in a problem's `type` (`external-service`, `not-found`, `business-rule`, `internal`) |
 
 To watch it raw:
 

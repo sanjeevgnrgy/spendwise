@@ -11,7 +11,7 @@ import { ApiError, unreachableError } from "@/shared/api/http"
 import type { paths } from "@/shared/api/schema.gen"
 import { API_ORIGIN } from "@/shared/config/env"
 import { i18n, languageHeaders } from "@/shared/i18n"
-import { isAbort } from "@/shared/lib/errors"
+import { isAbort, UserFacingError } from "@/shared/lib/errors"
 import { newId } from "@/shared/lib/ids"
 
 import type { A2uiAction } from "../a2ui/protocol"
@@ -33,8 +33,8 @@ function notUnderstoodMessage(): string {
   return i18n.t("stream.notUnderstood", { ns: assistantTexts.name })
 }
 
-/** The run itself failed on the server (RUN_ERROR): its message is meant for the user. */
-export class AgentRunError extends Error {
+/** The run itself failed on the server (RUN_ERROR): its message is written for people; its code is the kind. */
+export class AgentRunError extends UserFacingError {
   readonly code?: string
 
   constructor(message: string, code?: string) {
@@ -63,17 +63,17 @@ export function runInput(threadId: string, prompt: AgentPrompt, dataVersion: num
   }
 }
 
-/** One event's data, as a valid AG-UI event. Throws a plain Error if it isn't JSON or isn't a valid event. */
+/** One event's data, as a valid AG-UI event. Throws a UserFacingError if it isn't JSON or isn't a valid event. */
 export function parseEvent(data: string): AgentEvent {
   let json: unknown
   try {
     json = JSON.parse(data)
   } catch {
-    throw new Error(notUnderstoodMessage())
+    throw new UserFacingError(notUnderstoodMessage())
   }
   // Network data is checked, not trusted: AG-UI's own schemas say what a valid event looks like.
   const parsed = EventSchemas.safeParse(json)
-  if (!parsed.success) throw new Error(notUnderstoodMessage())
+  if (!parsed.success) throw new UserFacingError(notUnderstoodMessage())
   return parsed.data
 }
 
@@ -110,7 +110,7 @@ async function startRun(
 /**
  * Runs the assistant once, calling `onEvent` for each event as soon as it arrives. Resolves on RUN_FINISHED.
  * Throws AgentRunError on RUN_ERROR, ApiError if the request itself fails, an AbortError if `signal` stops it,
- * or an Error if an event can't be read or the connection ends before the run does.
+ * or a UserFacingError if an event can't be read or the connection ends before the run does.
  */
 export async function runAgent(
   threadId: string,
@@ -127,7 +127,7 @@ export async function runAgent(
     onEvent(event)
     if (event.type === EventType.RUN_FINISHED) return
   }
-  throw new Error(connectionLostMessage())
+  throw new UserFacingError(connectionLostMessage())
 }
 
 /** The shape of `runAgent`, so a test (or another transport) can be passed to useChat in its place. */

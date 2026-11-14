@@ -5,6 +5,8 @@
 import { EventType } from "@ag-ui/core"
 import { useCallback, useMemo, useRef, useState } from "react"
 
+import { reportUnexpected } from "@/shared/lib/errors"
+
 import type { A2uiAction } from "../a2ui/protocol"
 import { runAgent, type AgentPrompt, type RunAgent } from "../api/agent-stream"
 import type { ChatMessage, ChatState } from "./chat-types"
@@ -39,6 +41,8 @@ export function useChat(onDataChanged: () => void, runAgentFn: RunAgent = runAge
           setMessages((current) => transcript.applyAgentEvent(current, replyId, event))
         },
         onFailed: (error) => {
+          // The bubble shows only a generic text for a bug, so its details go to the console.
+          reportUnexpected(error)
           // A tool was running when the run broke off (or Stop was pressed): its chip says "?", and the pages
           // reload to show what happened.
           const unfinished = progress.running

@@ -672,6 +672,8 @@ is natural. It's still a soft, model-judged guard.
 - A failed run isn't saved, as with `/chat`. **Known limitation:** if a tool had already changed data before the failure,
   the change stays, but the thread doesn't record it and the page isn't refreshed. **Revisit when:** partial turns can be
   stored, or tools report their effects separately.
+- **Updated by D180:** `code` is the problem kind (`AppError.slug`: `external-service`, `internal`...), not a class name;
+  an error whose own text isn't written for people (Gemini's words) gets a generic `message`.
 
 ### D105. Tool calls ride in `RUN_FINISHED.result`, not `TOOL_CALL_*` events
 - This phase streams text only. The tool calls the badges and the page refresh need (D95) are sent once, as
@@ -721,6 +723,8 @@ is natural. It's still a soft, model-judged guard.
   `content` is the tool's text (its error message when it failed), so a failed chip can show why.
 - The arguments are sent whole, not as Gemini's fragments: they're only known once `GeminiStream` has the complete call.
 - `RUN_FINISHED` no longer carries `result.toolCalls` (D105). `/chat` still returns `tool_calls`.
+- **Updated by D180:** `content` is empty: the tool's text is written for the model, so it stays on the server. A failed
+  chip shows only that it failed; the reply explains why.
 
 ### D110. A text message is closed before a tool call
 - If Gemini wrote text before calling a tool ("Let me check."), `TEXT_MESSAGE_END` is sent before `TOOL_CALL_START`, and
@@ -1700,3 +1704,49 @@ is natural. It's still a soft, model-judged guard.
   `UNKNOWN_CATEGORY` ("Unknown", a category that's gone) is data in summaries and MCP views, so a card would show it in
   English (categories can't be deleted today); if REST ever exposes `expected_version` on DELETE, its conflict is
   already catalogued.
+- **Updated by D180:** an outside service's own words (Gemini's errors, Pydantic's explanation) are no longer shown:
+  they go to the server log, and a person gets a catalogued text. The failed chip's tooltip is gone (the tool's text
+  isn't sent to the browser any more), which settles the first "Revisit" item.
+
+### D180. People only read texts written for them; everything else stays on the server
+- **What:**
+  - **The rule:** whatever a person reads (a problem's `detail`, a `RUN_ERROR`'s `message`, a reply, a chip, an error
+    card) is a catalogued text in their language. Anything else (an outside service's own words such as Gemini's
+    quota message, a library's such as Pydantic's explanation, a server's URL, a class name, a tool's text written for
+    the model, a JavaScript error's message) goes to a log, never to a person.
+  - **Server:** `AppError.message_in` returns `None` for a plain-string message. `web/problems.py`
+    (`detail_for_people`) then sends `WebText.SERVICE_FAILED` for a 502 (else `WebText.UNEXPECTED`) and logs the words
+    at WARNING; the AG-UI stream does the same with `ChatText.SERVICE_FAILED` / `RUN_FAILED`. A 422's `detail` is
+    `WebText.INVALID_REQUEST`; its `errors` list (the field and Pydantic's message, never the value sent) stays, for the
+    client's developer. `RUN_ERROR.code` is the problem kind (`AppError.slug`), not a Python class name.
+    `TOOL_CALL_RESULT.content` is empty. Texts that quoted internals don't any more: "the model's answer didn't match"
+    (Pydantic's explanation quoted the answer, so it's logged at DEBUG, with its error count at WARNING), "could not
+    reach the expense tools (URL)" (one text; the connector names the server in the log), "couldn't delete … (the
+    tool's error)" (logged). "The model returned neither text nor a tool call" became "The assistant didn't come up
+    with an answer".
+  - **Web:** `messageOf` shows only a `UserFacingError`'s message (`ApiError`, `AgentRunError`, and the app's own
+    texts about the stream). Anything else, such as a crash ("Cannot read properties of undefined"), shows the common
+    `errors.unexpected` text, and `reportUnexpected` logs it to the browser console (from the query and mutation
+    caches and the assistant's runs; the error boundaries already log what they catch). A failed tool chip has no
+    tooltip. "Can't reach the SpendWise API at <origin>. Is the backend running?" became "Can't reach SpendWise right
+    now. Check your connection and try again."
+- **Why:** an error card showed "Cannot read properties of undefined (reading 'upi')", and the owner asked that the
+  app never expose server details or errors to the client. Raw messages are for developers: they can carry internals
+  (hosts, project ids, the model's answer, user data), they're in English on a Hindi screen, and they don't tell a
+  person what to do.
+- **Chosen with the owner:** "Make sure we do not do" (expose server details or errors), 2026-11-14.
+- **Trade-offs:** a person no longer sees why Gemini failed ("high demand" or "quota"): both read "try again in a
+  moment", and the server log has Google's words (troubleshooting.md and gemini.md say so). An API client's developer
+  finds a 422's reasons in `errors`, not in `detail`.
+- **Stays as it is:** a 422's `errors` list (about the request, for its developer); FastAPI's own 404/405 details
+  (HTTP's reason phrases); MCP tool errors for MCP clients (expected ones are texts written for the client's model;
+  unexpected ones are masked by the SDK, D69); `GET /threads/{id}`, which shows a stored conversation with its tool
+  results (a developer's view of the user's own data; the web app doesn't call it).
+- **How it was verified:**
+  - recorded behaviour before and after (38 English and 17 Hindi scenarios, fake model): only the intended responses
+    changed (four 422 details, the two `/parse` 502 details, `TOOL_CALL_RESULT.content` in the six agent runs); every
+    model call and the MCP tool listing are identical;
+  - the failure paths, in English and Hindi (Gemini failing mid-run, a bug mid-run, `/parse` with Gemini failing, a
+    failed tool, unreachable tools on a refused port): the client gets only catalogued texts, and Gemini's words, the
+    bug's traceback and the tools' URL are in the server log;
+  - `tsc -b`, `oxlint` and `npm run build` pass; the generated web contract is unchanged.

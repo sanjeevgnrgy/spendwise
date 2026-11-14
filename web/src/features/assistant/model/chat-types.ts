@@ -19,8 +19,6 @@ export interface ToolActivity {
   args: string
   labels: ToolLabels
   status: ToolStatus
-  /** What the tool returned (for a failed call, why). */
-  result?: string
 }
 
 /** One bubble in the conversation: yours, or the assistant's. */

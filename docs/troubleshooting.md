@@ -48,17 +48,18 @@ the project folder (the repo root, where `run.ps1` is) unless noted.
 
 See the error table in [gemini.md](gemini.md#when-something-goes-wrong). In short: `500` means a setting
 is missing (the terminal says which); `502` means Gemini refused or failed (bad key, quota, model not available
-on your tier, or temporarily overloaded).
+on your tier, or temporarily overloaded). The app only says the service didn't answer properly; Google's own message
+is in the backend terminal (D180).
 
-### `502` "... is currently experiencing high demand ... Please try again later."
+### Server log: "... is currently experiencing high demand ... Please try again later." (a `502`)
 - **Cause:** Google returned `503 Service Unavailable`: that model is overloaded right now. Not a problem in our code.
 - **Fix:** wait a few minutes and retry, or set `GEMINI_MODEL=gemini-4-hydrogen` (also free tier) in `.env` and restart.
 
 ### The assistant shows "Thinking…" forever / `/chat` never answers
 - **Cause (fixed in Phase 14, D108):** the free-tier quota was used up, so Gemini answered **429**, and the SDK quietly
   slept for as long as Google asked before retrying, with no upper limit. Nothing reported an error.
-- **Now:** the reply is a red bubble (or a `502` from `/chat`) with "Error code: 429 ... RESOURCE_EXHAUSTED" and Google's
-  quota message.
+- **Now:** the reply is a red bubble (or a `502` from `/chat`) saying the service didn't answer properly; the backend
+  terminal logs "Error code: 429 ... RESOURCE_EXHAUSTED" with Google's quota message.
 - **Fix:** wait for the quota to reset (per-minute limits clear within a minute; daily limits reset at midnight Pacific, see
   [gemini.md](gemini.md)), or set another free-tier model in `GEMINI_MODEL` and restart. Every agent step is one Gemini
   request, so a single chat message can use 2–5 of them.
@@ -67,7 +68,7 @@ on your tier, or temporarily overloaded).
 - **Cause (fixed in Phase 6):** the SDK used to retry up to 5 times, up to 60 s apart, while Gemini was down.
 - **Now:** each attempt gives up after 60 s and there are at most 2. If it still hangs much longer, check your network.
 
-### `/chat` returns 502 "Request timed out. This is a client-side timeout."
+### `/chat` returns 502; the server log says "Request timed out. This is a client-side timeout."
 - **Cause:** one Gemini step took longer than 60 s, usually because the model was "thinking" for a long time.
 - **Fix:** already mitigated: the agent uses `thinking_level="low"` (`agent.THINKING_LEVEL`). If it keeps happening,
   Gemini may be slow right now; retry later, or try another model in `GEMINI_MODEL`.
@@ -97,10 +98,18 @@ on your tier, or temporarily overloaded).
 
 ## Web app
 
-### Red toast "Can't reach the SpendWise API at http://localhost:8000"
-- **Cause:** the backend isn't running, runs on another port, or the browser blocked the response (CORS).
+### Red toast "Can't reach SpendWise right now"
+- **Cause:** the backend isn't running, runs on another port, or the browser blocked the response (CORS). The toast
+  doesn't name the address (D180); the failed request in the browser's Network tab does.
 - **Fix:** start it with `.\run.ps1`. On another port, set `VITE_API_URL` in `web/.env` and restart `npm run dev`.
   If the backend *is* running, check the browser console for a CORS error (next entry).
+
+### A page or the app says "Something went wrong. Try again; if it keeps happening, reload the page."
+- **Cause:** something in the browser crashed while drawing (a bug, not a server error). Its message is for developers,
+  so it's not shown (D180); the browser console has it, with the stack. While developing, a common cause is a tab left
+  open while files changed under the running `npm run dev`: the tab can end up mixing new code with an old module
+  (for example "Cannot read properties of undefined (reading 'upi')" right after the generated contract changed).
+- **Fix:** reload the page. If it comes back after a reload, read the console's error and fix the code.
 
 ### Browser console: "blocked by CORS policy: No 'Access-Control-Allow-Origin' header"
 - **Cause:** the page's address isn't in the backend's allowed origins (default `http://localhost:5173` and
@@ -120,9 +129,10 @@ on your tier, or temporarily overloaded).
 - **Fix:** already removed from SpendWise (decisions D87). Put scripts in `index.html` instead.
 
 ### Assistant panel: the reply bubble is red
-- **Cause:** the run (`POST /agent`) failed. The text says why: backend not running ("Can't reach the SpendWise API"), or
-  Gemini overloaded or the key invalid (Gemini's own message, sent as a `RUN_ERROR` event). "Sorry, I can't reach the
-  expense tools" is a normal (grey) reply, not a red bubble.
+- **Cause:** the run (`POST /agent`) failed. The text says what failed: the backend isn't running ("Can't reach SpendWise
+  right now"), or Gemini failed ("The assistant's service didn't answer properly", a `RUN_ERROR` event). Why Gemini
+  failed (overloaded, quota, bad key) is in the backend terminal only (D180). "Sorry, I can't reach the expense tools" is
+  a normal (grey) reply, not a red bubble.
 - **Fix:** see the Gemini and MCP sections below for each message.
 
 ### Assistant panel: a red bubble right under half a reply
@@ -241,7 +251,8 @@ on your tier, or temporarily overloaded).
 
 ### Dashboard shows "Couldn't load the dashboard"
 - **Cause:** one of its requests failed, most often because the backend isn't running.
-- **Fix:** start the backend (`.\run.ps1`) and click **Try again**. The message under the title is the actual error.
+- **Fix:** start the backend (`.\run.ps1`) and click **Try again**. The message under the title says what failed; if it
+  says "Something went wrong", the browser console has the details.
 
 ### Dashboard charts say "No spending…" but I have expenses
 - **Cause:** the charts show the **current** month and the last 6 months, in **INR** only. Expenses dated outside

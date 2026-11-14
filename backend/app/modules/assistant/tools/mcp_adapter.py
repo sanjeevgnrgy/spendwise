@@ -21,7 +21,7 @@ from mcp.server.mcpserver import MCPServer
 from mcp.types import Tool
 from pydantic import BaseModel, TypeAdapter
 
-from app.core.i18n import Translatable, translatable
+from app.core.i18n import translatable
 from app.core.llm import ToolSpec
 from app.modules.assistant.i18n import ChatText
 from app.modules.assistant.tools.port import ToolOutput, ToolsUnavailableError
@@ -35,6 +35,8 @@ T = TypeVar("T")
 TIMEOUT_SECONDS = 15
 # A resource read with no text (it shouldn't happen) counts as no categories.
 EMPTY_LIST_JSON = "[]"
+# How the log names the in-process server, which has no URL.
+IN_PROCESS_SERVER = "this app's MCP server (in-process)"
 
 
 # Just the part of a category the assistant reads from the categories resource: its name (the rest is ignored).
@@ -46,10 +48,10 @@ _CATEGORIES = TypeAdapter(list[_CategoryName])
 
 
 class _Connector(Protocol):
-    """How to reach an MCP server: open one client session, and say it couldn't be reached."""
+    """How to reach an MCP server: open one client session, and name the server for the log."""
 
-    def unreachable(self) -> Translatable:
-        """The error message saying this server couldn't be reached (written in its reader's language)."""
+    def describe(self) -> str:
+        """Which server this is, for the server log only: a person is never shown it (D180)."""
         ...
 
     def open(self) -> AbstractAsyncContextManager[Client]:
@@ -63,9 +65,9 @@ class _InProcess:
 
     server: MCPServer
 
-    def unreachable(self) -> Translatable:
+    def describe(self) -> str:
         """The in-process server isn't at a URL, so it's named in words."""
-        return translatable(ChatText.TOOLS_UNREACHABLE_IN_PROCESS)
+        return IN_PROCESS_SERVER
 
     def open(self) -> AbstractAsyncContextManager[Client]:
         """A client connected straight to the server object."""
@@ -79,9 +81,9 @@ class _Remote:
     url: str
     token: str | None
 
-    def unreachable(self) -> Translatable:
-        """The error names the server's URL."""
-        return translatable(ChatText.TOOLS_UNREACHABLE_AT, url=self.url)
+    def describe(self) -> str:
+        """The server's URL (never the token)."""
+        return self.url
 
     @asynccontextmanager
     async def open(self) -> AsyncIterator[Client]:
@@ -116,7 +118,9 @@ class McpExpenseTools:
         try:
             return asyncio.run(asyncio.wait_for(self._with_client(operation), TIMEOUT_SECONDS))
         except Exception as exc:  # connection refused, timeout, protocol errors (often wrapped in an ExceptionGroup)
-            raise ToolsUnavailableError(self._connector.unreachable()) from exc
+            # Which server, and why, are for the log; a person is told only that the tools can't be reached (D180).
+            logger.warning("expense tools unreachable (%s): %r", self._connector.describe(), exc)
+            raise ToolsUnavailableError(translatable(ChatText.TOOLS_UNREACHABLE)) from exc
 
     def _list(self) -> list[Tool]:
         """The server's tools, asked for once and then cached."""

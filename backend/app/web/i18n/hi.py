@@ -5,4 +5,6 @@ from app.web.i18n.en import WebText
 
 HI: dict[WebText, TextValue] = {
     WebText.UNEXPECTED: "सर्वर पर कुछ गड़बड़ हो गई।",
+    WebText.SERVICE_FAILED: "ऐप जिस सेवा पर निर्भर है, उसने ठीक से जवाब नहीं दिया। थोड़ी देर में फिर से कोशिश करें।",
+    WebText.INVALID_REQUEST: "भेजे गए कुछ मान मान्य नहीं हैं।",
 }

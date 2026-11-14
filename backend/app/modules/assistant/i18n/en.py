@@ -85,10 +85,10 @@ class ChatText(StrEnum):
     DELETE_FAILED = "replies.deleteFailed"
     # Errors a person is shown
     RUN_FAILED = "errors.runFailed"
+    SERVICE_FAILED = "errors.serviceFailed"
     EMPTY_ANSWER = "errors.emptyAnswer"
     WRONG_SHAPE = "errors.wrongShape"
-    TOOLS_UNREACHABLE_IN_PROCESS = "errors.toolsUnreachableInProcess"
-    TOOLS_UNREACHABLE_AT = "errors.toolsUnreachableAt"
+    TOOLS_UNREACHABLE = "errors.toolsUnreachable"
     NO_USER_MESSAGE = "errors.noUserMessage"
     MESSAGE_LENGTH = "errors.messageLength"
     INVALID_ACTION = "errors.invalidAction"
@@ -180,17 +180,17 @@ EN: dict[ChatText, TextValue] = {
         "or the tools are unreachable), so I didn't delete it. Ask me again to see it as it is now."
     ),
     ChatText.DELETED: "Done: expense {ref} is deleted.",
-    # {error} is the tool's own message (English, from the MCP server), e.g. a version conflict.
-    ChatText.DELETE_FAILED: (
-        "I couldn't delete {ref} just now ({error}). Nothing was deleted; ask me again in a moment."
-    ),
+    # The tool's own message (why the delete failed) goes to the server log only (D180).
+    ChatText.DELETE_FAILED: "I couldn't delete {ref} just now. Nothing was deleted; ask me again in a moment.",
     # All a person is told about a bug in a run: the details go to the server log only.
     ChatText.RUN_FAILED: "Something went wrong on the server. The server log has the details.",
-    ChatText.EMPTY_ANSWER: "The model returned neither text nor a tool call.",
-    # {error} is Pydantic's explanation, in English.
-    ChatText.WRONG_SHAPE: "The model's answer didn't match the expected shape: {error}",
-    ChatText.TOOLS_UNREACHABLE_IN_PROCESS: "Could not reach the expense tools (this app's MCP server)",
-    ChatText.TOOLS_UNREACHABLE_AT: "Could not reach the expense tools ({url})",
+    # The model (or a remote tools server) failed; its own words go to the server log only (D180).
+    ChatText.SERVICE_FAILED: "The assistant's service didn't answer properly. Try again in a moment.",
+    ChatText.EMPTY_ANSWER: "The assistant didn't come up with an answer. Try asking again.",
+    # Pydantic's explanation of the mismatch goes to the server log (at DEBUG: it quotes the answer).
+    ChatText.WRONG_SHAPE: "The assistant's answer came back in a form the app can't use. Try again.",
+    # Which server (its URL) goes to the server log only.
+    ChatText.TOOLS_UNREACHABLE: "The expense tools can't be reached right now. Try again in a moment.",
     ChatText.NO_USER_MESSAGE: "The run has no user message to answer.",
     ChatText.MESSAGE_LENGTH: "The message must be 1 to {max} characters long.",
     ChatText.INVALID_ACTION: "The button's action isn't valid.",

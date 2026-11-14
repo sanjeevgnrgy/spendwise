@@ -148,6 +148,10 @@ Never fetch in a `useEffect` by hand: use a query.
 | data on screen, a reload failed | keep the data, add `<RefreshNotice>` ("Couldn't refresh, so this may be out of date") |
 | a mutation failed | a toast with the problem's message (`messageOf(error)`); keep the user's input |
 
+`messageOf` shows only a message written for people: an `ApiError` (the server's `detail`), an `AgentRunError`, or a
+`UserFacingError` with one of our texts. Anything else (a crash) shows the common "Something went wrong" text, and
+`reportUnexpected` logs it to the console (D180). So throw `UserFacingError` for a message a person should read.
+
 ## The generated contract
 
 | File | Holds | Use it for |

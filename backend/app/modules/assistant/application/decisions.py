@@ -97,8 +97,10 @@ def _approved(
     if output.ok:
         reply = text(language, ChatText.DELETED, ref=ref)
     else:
-        # The tool's own message (English, from the MCP server), e.g. a version conflict or "unreachable".
-        reply = text(language, ChatText.DELETE_FAILED, ref=ref, error=output.text)
+        # The tool's own message (e.g. a version conflict, or "unreachable") is written for the model, so it goes to
+        # the log; the person is told the delete didn't happen (D180).
+        logger.warning("approved delete of expense %s failed: %s", expense.id, output.text)
+        reply = text(language, ChatText.DELETE_FAILED, ref=ref)
     return _Outcome(said=said, reply=reply, tool_calls=[summary])
 
 

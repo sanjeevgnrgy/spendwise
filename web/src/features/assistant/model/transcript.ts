@@ -11,7 +11,7 @@ import { i18n } from "@/shared/i18n"
 import { isAbort, messageOf } from "@/shared/lib/errors"
 
 import { applyA2uiMessage, createsSurface, setAt, type A2uiAction, type A2uiSurface } from "../a2ui/protocol"
-import { toolLabelsOf, toolResultText, toolSucceeded } from "../api/agent-events"
+import { toolLabelsOf, toolSucceeded } from "../api/agent-events"
 import type { AgentEvent } from "../api/agent-stream"
 import { connectionLostMessage } from "../api/sse"
 import { assistantTexts } from "../i18n"
@@ -122,8 +122,7 @@ export function applyAgentEvent(messages: ChatMessage[], replyId: number, event:
     // TOOL_CALL_END only says the arguments are complete; the chip keeps spinning while the tool runs.
     case EventType.TOOL_CALL_RESULT: {
       const status = toolSucceeded(event.metadata) ? "done" : "failed"
-      const result = toolResultText(event.content)
-      return updateTool(messages, replyId, event.toolCallId, (tool) => ({ ...tool, status, result }))
+      return updateTool(messages, replyId, event.toolCallId, (tool) => ({ ...tool, status }))
     }
     case EventType.CUSTOM:
       return event.name === AGUI.customEvents.a2ui ? applyA2ui(messages, replyId, event.value) : messages
@@ -158,8 +157,9 @@ export function sentText(action: A2uiAction): string {
 
 /**
  * The bubble a run that ended early adds below whatever already arrived: "Stopped." if it was stopped, else
- * what went wrong. Errors carry messages meant for people (a RUN_ERROR, an API problem, our own); anything
- * thrown that isn't even an Error gets a plain explanation. Our own texts are in the language on now.
+ * what went wrong. An error written for people (a RUN_ERROR, an API problem, our own) shows its message; any other
+ * Error (a bug) only a generic text (messageOf); anything thrown that isn't even an Error, the connection-lost
+ * text. Our own texts are in the language on now.
  */
 export function endedEarlyMessage(id: number, error: unknown): ChatMessage {
   if (isAbort(error)) {

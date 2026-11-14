@@ -34,12 +34,11 @@ export function ToolChip({ tool }: { tool: ToolActivity }) {
     )
   }
   if (tool.status === "failed") {
-    // Hover to see why (e.g. "Unknown category"); the reply usually explains too. The reason is also in a
-    // screen-reader-only span, because a title alone isn't read reliably.
+    // Only that it failed: the tool's own reason is written for the model and stays on the server (D180). The
+    // reply explains what went wrong, in the user's language.
     return (
-      <Badge variant="destructive" title={tool.result}>
+      <Badge variant="destructive">
         <X /> {failed}
-        {tool.result && <span className="sr-only">: {tool.result}</span>}
       </Badge>
     )
   }

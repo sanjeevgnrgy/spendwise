@@ -5,7 +5,8 @@
 /** The shared texts, in English. {{name}} marks a value filled in when the text is shown. */
 const en = {
   errors: {
-    unreachable: "Can't reach the {{app}} API at {{origin}}. Is the backend running?",
+    unexpected: "Something went wrong. Try again; if it keeps happening, reload the page.",
+    unreachable: "Can't reach {{app}} right now. Check your connection and try again.",
     unreadable: "The API sent an answer this app couldn't read.",
     requestFailed: "Request failed ({{status}})",
     emptyAnswer: "The API sent an empty answer ({{status}})",

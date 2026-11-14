@@ -132,7 +132,7 @@ server.
 | (start) | `RUN_STARTED` |
 | `TextDelta` | `TEXT_MESSAGE_START` (if none is open), `TEXT_MESSAGE_CONTENT` |
 | `ToolStarted` | `TEXT_MESSAGE_END` (if open), `TOOL_CALL_START` with `metadata.labels`, `TOOL_CALL_ARGS`, `TOOL_CALL_END` |
-| `ToolFinished` | `TOOL_CALL_RESULT` with `metadata.ok`; if data changed, `STATE_SNAPSHOT {dataVersion: n+1}`; if the tool has a card, `CUSTOM "a2ui"` |
+| `ToolFinished` | `TOOL_CALL_RESULT` with `metadata.ok` and empty `content` (the tool's text is for the model); if data changed, `STATE_SNAPSHOT {dataVersion: n+1}`; if the tool has a card, `CUSTOM "a2ui"` |
 | `ApprovalRequested` | `CUSTOM "a2ui"`: the Approve/Cancel card |
 | `FormRequested` | `CUSTOM "a2ui"` with `metadata.source` (`model` or `fallback`) |
 | (end) | `TEXT_MESSAGE_END`, `RUN_FINISHED`, or `RUN_ERROR` on any failure |
@@ -159,7 +159,9 @@ sequenceDiagram
 
 - **Before streaming**, `read_request` (`api/agui_request.py`) checks the run (thread id, a message or a valid button
   click): problems are ordinary 422 responses. After the first byte, the status is 200 and failures are `RUN_ERROR`
-  events.
+  events: a `message` written for people (an error's catalogued text, or a generic one when its own words aren't for
+  people, such as Gemini's) and a `code`, the problem kind (`external-service`, `internal`...). What failed, in the
+  words of whoever failed, is in the server log only (D180).
 - **Chip labels** come from the backend (`TOOL_CHIPS` in `api/chip_labels.py`), in the run's language, so the
   browser knows no tool names. A delete in the web panel gets its own: "Checking the expense…" → "Waiting for your
   OK".

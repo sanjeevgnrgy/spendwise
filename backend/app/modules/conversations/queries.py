@@ -1,4 +1,8 @@
-"""Query handlers: read conversations. They never change anything."""
+"""Query handlers: read conversations. They never change anything.
+
+Part of the conversations module's read side. module.py registers each handler with the bus; callers send
+the query (bus.ask(GetHistory(...))) and get neutral messages or readable copies, never table rows.
+"""
 
 import json
 
@@ -8,16 +12,26 @@ from sqlmodel import col, select
 from app.core.cqrs import Context
 from app.core.errors import NotFoundError
 from app.core.llm import AssistantText, Message, Reasoning, ToolCall, ToolResult, UserText, messages_adapter
-from app.modules.conversations.contracts import GetHistory, GetLastTurn, GetThread, ThreadMessage, ThreadRead
+from app.modules.conversations.contracts import (
+    THREAD_NOT_FOUND,
+    GetHistory,
+    GetLastTurn,
+    GetThread,
+    ThreadMessage,
+    ThreadRead,
+)
 from app.modules.conversations.tables import ConversationMessage
 
 
 def last_turn(ctx: Context, query: GetLastTurn) -> int | None:
+    """The highest turn number stored for the thread, or None if the thread has no messages (unknown)."""
+    # MAX() in the database: one number comes back, not the thread's rows.
     statement = select(func.max(ConversationMessage.turn)).where(ConversationMessage.thread_id == query.thread_id)
     return ctx.session.exec(statement).one()
 
 
 def _rows(ctx: Context, thread_id: str, from_turn: int = 1) -> list[ConversationMessage]:
+    """The thread's rows from turn `from_turn` on, in the order they were stored (id order)."""
     statement = (
         select(ConversationMessage)
         .where(ConversationMessage.thread_id == thread_id, ConversationMessage.turn >= from_turn)
@@ -27,6 +41,10 @@ def _rows(ctx: Context, thread_id: str, from_turn: int = 1) -> list[Conversation
 
 
 def history(ctx: Context, query: GetHistory) -> list[Message]:
+    """The thread's messages from `from_turn` on, oldest first, as neutral messages for the model.
+
+    An unknown thread gives an empty list: a new conversation simply has no history yet.
+    """
     return messages_adapter.validate_python([row.content for row in _rows(ctx, query.thread_id, query.from_turn)])
 
 
@@ -44,9 +62,13 @@ def _readable(message: Message) -> str | None:
 
 
 def thread(ctx: Context, query: GetThread) -> ThreadRead:
+    """The whole thread, readable: each message as text, oldest first, without the model's reasoning.
+
+    Raises NotFoundError if the thread has no messages (an unknown id).
+    """
     rows = _rows(ctx, query.thread_id)
     if not rows:
-        raise NotFoundError(f"Thread {query.thread_id} not found")
+        raise NotFoundError(THREAD_NOT_FOUND.format(thread_id=query.thread_id))
     shown = []
     for row, message in zip(rows, messages_adapter.validate_python([row.content for row in rows]), strict=True):
         text = _readable(message)

@@ -2,6 +2,19 @@
 
 Schemas check the *shape* of data (types, lengths, at most 2 decimal places). Business rules
 (amount > 0, the category must exist) live in domain.py and the command handlers.
+
+What's here: the limits, PaymentMethod and its labels, the data handed out (ExpenseRead, ExpenseList,
+the summary and trend totals), three commands (CreateExpense, UpdateExpense, DeleteExpense) and four
+queries (GetExpense, ListExpenses, GetMonthlySummary, GetMonthlyTrend). Many of these are also REST
+bodies, query parameters or responses (api.py), and the MCP server's results build on them, so their
+docstrings and field descriptions are part of the published schemas. Notes for people reading the code
+are `#` comments instead.
+
+Money: callers send and get rupees as a Decimal (`amount`, `total`); the table keeps whole paise
+(`amount_minor`, `total_minor`), never a float.
+
+Used by: the MCP server (every command and query), the assistant (PaymentMethod and its labels),
+seed.py, and scripts/export_contracts.py (the labels and limits, for the web app).
 """
 
 from datetime import date, datetime
@@ -12,11 +25,12 @@ from typing import Annotated, Self
 from pydantic import BaseModel, ConfigDict, Field, computed_field, model_validator
 
 from app.core.cqrs import Command, Query
-from app.core.db import RecordId
+from app.core.ids import RecordId
 from app.core.money import DEFAULT_CURRENCY, CurrencyCode, paise_to_rupees
 from app.core.months import YearMonth
 from app.modules.categories import CategoryId
 
+# Text limits. The merchant and note limits are also the table's column lengths (tables.py).
 MAX_MERCHANT_LENGTH = 100
 MAX_NOTE_LENGTH = 500
 MAX_SEARCH_LENGTH = 100
@@ -28,6 +42,7 @@ DEFAULT_TREND_MONTHS = 6
 MAX_TREND_MONTHS = 24
 
 
+# How an expense was paid. The value ("upi") is what's stored, sent in JSON and accepted from callers.
 class PaymentMethod(StrEnum):
     # A fixed list, so reports can group by it and typos like "UPI " can't sneak in.
     CASH = "cash"
@@ -53,6 +68,8 @@ ExpenseId = RecordId
 # Every change raises it by one, so "the expense as I saw it" can be checked (optimistic concurrency).
 Version = Annotated[int, Field(ge=1)]
 # Rupees, as people type them (450.50). The handlers convert to paise for storage.
+# At most 12 digits, 2 of them after the point: a fraction of a paisa (450.505) is refused, never rounded
+# away.
 Amount = Annotated[Decimal, Field(max_digits=12, decimal_places=2, examples=["450.50"])]
 Merchant = Annotated[str, Field(min_length=1, max_length=MAX_MERCHANT_LENGTH)]
 Note = Annotated[str, Field(max_length=MAX_NOTE_LENGTH)]
@@ -65,6 +82,8 @@ _STRIPPED = ConfigDict(str_strip_whitespace=True)
 # ---------- data handed out ----------
 
 
+# What GetExpense and ListExpenses return, and the REST API's expense object. Built straight from a table
+# row (from_attributes); frozen, so nobody can change stored data through it.
 class ExpenseRead(BaseModel):
     """An expense as callers see it: everything stored, plus the amount in rupees for display."""
 
@@ -82,6 +101,8 @@ class ExpenseRead(BaseModel):
     created_at: datetime
     version: int
 
+    # A computed field: sent in the JSON (and listed in the schema) as "amount", never stored. No
+    # docstring on it: Pydantic would publish that as the field's description.
     @computed_field
     @property
     def amount(self) -> Decimal:
@@ -89,29 +110,38 @@ class ExpenseRead(BaseModel):
         return paise_to_rupees(self.amount_minor)
 
 
+# ListExpenses's answer: one page of expenses, plus how many match in all, so a caller can page through
+# them or say "showing 50 of 120".
 class ExpenseList(BaseModel):
     items: list[ExpenseRead]
     # How many match the filters in total; `items` may hold fewer (see ListExpenses.limit).
     total: int
 
 
+# The shared base of every total below. Private to this file (the leading underscore).
 class _Totalled(BaseModel):
     """A total in paise, plus the same total in rupees, worked out from it."""
 
     total_minor: int
 
+    # Rupees for display, computed from total_minor so the two never disagree. (A comment, not a
+    # docstring: a computed field's docstring becomes its description in the schema.)
     @computed_field
     @property
     def total(self) -> Decimal:
         return paise_to_rupees(self.total_minor)
 
 
+# One category's share of a month, in MonthlySummary.by_category. category_name is "Unknown"
+# (categories.UNKNOWN_CATEGORY) if the category no longer exists.
 class CategoryTotal(_Totalled):
     category_id: int
     category_name: str
     expense_count: int
 
 
+# GetMonthlySummary's answer (GET /summary): one month's total in one currency, and the total for each
+# category that had spending. The month is written as "YYYY-MM" text.
 class MonthlySummary(_Totalled):
     month: str = Field(pattern=YearMonth.PATTERN, examples=["2026-11"])
     currency: str
@@ -120,11 +150,14 @@ class MonthlySummary(_Totalled):
     by_category: list[CategoryTotal]
 
 
+# One month of a trend: its total and how many expenses it had. MCP's get_summary also uses it for the
+# previous month.
 class MonthTotal(_Totalled):
     month: str = Field(pattern=YearMonth.PATTERN)
     expense_count: int
 
 
+# GetMonthlyTrend's answer (GET /summary/trend), for the Dashboard's chart.
 class MonthlyTrend(BaseModel):
     currency: str
     # Oldest month first, one entry per month, including months with no spending (total 0),
@@ -135,6 +168,9 @@ class MonthlyTrend(BaseModel):
 # ---------- commands ----------
 
 
+# Sent by POST /expenses, MCP's add_expense and seed.py. Beyond the shape checked here, the handler
+# refuses an amount <= 0 or a category that doesn't exist, with a BusinessRuleError
+# (commands.create_expense).
 class CreateExpense(Command[int]):
     """Record an expense. Returns its id. Also the body of POST /expenses."""
 
@@ -149,6 +185,9 @@ class CreateExpense(Command[int]):
     payment_method: PaymentMethod
 
 
+# What to change in an expense: UpdateExpense carries it, and PATCH /expenses/{id} takes it as the body.
+# Only a part of a command, not a Message itself, so it sets frozen and extra="forbid" on its own. Every
+# field defaults to None, so the validator below tells "left out" apart from "sent as null".
 class ExpenseChanges(BaseModel):
     """The body of PATCH /expenses/{id}: send only the fields you want to change."""
 
@@ -163,6 +202,9 @@ class ExpenseChanges(BaseModel):
     # The one field that can be cleared: send "note": null to remove it.
     note: Note | None = None
 
+    # Refuses null for any field but the note. The ValueError becomes a validation error that names the
+    # fields (a 422 on REST). model_fields_set holds only the fields the caller actually sent, so fields
+    # left out (None by default) pass.
     @model_validator(mode="after")
     def only_note_can_be_cleared(self) -> Self:
         # Leaving a field out means "don't change it"; sending null for it would mean "erase it",
@@ -173,11 +215,18 @@ class ExpenseChanges(BaseModel):
         return self
 
 
+# Change some fields of one expense (PATCH /expenses/{id}, MCP's update_expense). The handler raises
+# NotFoundError for a missing expense and BusinessRuleError for an amount <= 0 or an unknown category,
+# and raises the version by one. There's no expected_version: an update applies to whatever is stored
+# (last write wins); only deletes check the version.
 class UpdateExpense(Command[None]):
     expense_id: ExpenseId
     changes: ExpenseChanges
 
 
+# Remove one expense for good. Raises NotFoundError if it doesn't exist, and BusinessRuleError if
+# expected_version was given and no longer matches (repository.remove). The REST route deletes without
+# a version; the assistant's Approve button passes the version its card showed.
 class DeleteExpense(Command[None]):
     expense_id: ExpenseId
     # If given, delete only if the expense is still at this version: what the caller saw and agreed to
@@ -188,12 +237,15 @@ class DeleteExpense(Command[None]):
 # ---------- queries ----------
 
 
+# Routes ask it after a command to answer with the saved expense; the MCP tools ask it to show one.
 class GetExpense(Query[ExpenseRead]):
     """One expense. Raises NotFoundError if there's no such expense."""
 
     expense_id: ExpenseId
 
 
+# Asked by GET /expenses (the web app's lists), MCP's list_expenses and its "recent" resource, and seed.py.
+# Filters are combined with AND; the handler turns each one given into a WHERE condition.
 class ListExpenses(Query[ExpenseList]):
     """Expenses, newest first. All filters are optional; combine as many as you like.
 
@@ -214,6 +266,8 @@ class ListExpenses(Query[ExpenseList]):
     limit: int = Field(default=DEFAULT_LIST_LIMIT, ge=1, le=MAX_LIST_LIMIT, description="At most this many, newest first")
     offset: int = Field(default=0, ge=0, description="Skip this many first (for the next page)")
 
+    # A start after the end can match nothing, which is almost certainly a mistake: refuse it (a
+    # validation error) rather than quietly answer with an empty list.
     @model_validator(mode="after")
     def check_date_range(self) -> Self:
         if self.start_date and self.end_date and self.start_date > self.end_date:
@@ -221,6 +275,8 @@ class ListExpenses(Query[ExpenseList]):
         return self
 
 
+# Asked by GET /summary and by MCP's get_summary (for the month asked about and the one before). The
+# month is a YearMonth value, so the handler can work out where it ends.
 class GetMonthlySummary(Query[MonthlySummary]):
     """One month's total, and the total per category (one currency at a time: totals can't mix them)."""
 
@@ -228,6 +284,7 @@ class GetMonthlySummary(Query[MonthlySummary]):
     currency: CurrencyCode = DEFAULT_CURRENCY
 
 
+# Asked by GET /summary/trend, with `until` set to the clock's today.
 class GetMonthlyTrend(Query[MonthlyTrend]):
     """Totals for the last `months` months, ending with the month that contains `until`."""
 

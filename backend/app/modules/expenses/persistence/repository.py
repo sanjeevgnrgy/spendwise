@@ -1,9 +1,9 @@
 """The write side's access to the expenses table: load a row to change it, add one, remove one.
 
 Changes are only staged in the session; the bus commits them when the command succeeds, so one
-command's changes are saved together or not at all. Reads for display are queries (queries.py).
+command's changes are saved together or not at all. Reads for display are the query slices (queries/).
 
-Part of the expenses module, used only by its command handlers (commands.py). Each function takes the
+Part of the expenses module, used only by its command handlers (the slices in commands/). Each function takes the
 session from the handler's Context, so it works inside the command's unit of work.
 """
 
@@ -11,7 +11,7 @@ from sqlalchemy import delete
 from sqlmodel import Session, col
 
 from app.core.errors import BusinessRuleError, NotFoundError
-from app.modules.expenses.tables import Expense
+from app.modules.expenses.persistence.tables import Expense
 
 
 def add(session: Session, expense: Expense) -> int:

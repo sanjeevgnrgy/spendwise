@@ -12,8 +12,8 @@ a handler (through ctx.bus) join that same session, so a command and the checks 
 transaction; a nested command runs in a SAVEPOINT, so if it fails, only its own changes are undone.
 Repositories never commit; only the bus does.
 
-Core infrastructure. Each module defines its messages in contracts.py and their handlers in commands.py and
-queries.py, and its module.py registers them. The composition root (bootstrap.py) builds the one bus that
+Core infrastructure. Each module keeps every command and query with its handler in one slice file (commands/,
+queries/), and its module.py registers them. The composition root (bootstrap.py) builds the one bus that
 routes, the MCP server, the assistant and seed.py all send their messages through.
 """
 

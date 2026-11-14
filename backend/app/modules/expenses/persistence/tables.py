@@ -1,8 +1,8 @@
 """The expenses module's table: `expense`.
 
-Private to this module: only its handlers (commands.py through repository.py, and queries.py) read or
-write it. Other modules ask through the contract (contracts.py), and the composition root hands TABLES
-to the migrations. The table itself is created and changed by Alembic migrations, never by the app.
+Private to this module: only its handlers (the command slices through repository.py, and the query slices) read
+or write it. Other modules ask through the contract (the package's __init__.py), and the composition root hands
+TABLES to the migrations. The table itself is created and changed by Alembic migrations, never by the app.
 """
 
 from datetime import date, datetime
@@ -11,7 +11,7 @@ from sqlalchemy import DateTime
 from sqlmodel import Field, SQLModel
 
 from app.core.money import DEFAULT_CURRENCY
-from app.modules.expenses.contracts import MAX_MERCHANT_LENGTH, MAX_NOTE_LENGTH
+from app.modules.expenses.values import MAX_MERCHANT_LENGTH, MAX_NOTE_LENGTH
 
 # Column lengths. An ISO 4217 currency code is three letters; the longest payment method today
 # ("netbanking") is 10 characters.

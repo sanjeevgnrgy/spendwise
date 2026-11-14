@@ -15,22 +15,15 @@ from fastapi import APIRouter, Query, Request, Response
 from app.core.dependencies import BusDep, ClockDep, IdPath
 from app.core.money import DEFAULT_CURRENCY, CurrencyCode
 from app.core.months import YearMonth
-from app.modules.expenses.contracts import (
-    DEFAULT_TREND_MONTHS,
-    MAX_TREND_MONTHS,
-    CreateExpense,
-    DeleteExpense,
-    ExpenseChanges,
-    ExpenseList,
-    ExpenseRead,
-    GetExpense,
-    GetMonthlySummary,
-    GetMonthlyTrend,
-    ListExpenses,
-    MonthlySummary,
-    MonthlyTrend,
-    UpdateExpense,
-)
+from app.modules.expenses.commands.create_expense import CreateExpense
+from app.modules.expenses.commands.delete_expense import DeleteExpense
+from app.modules.expenses.commands.update_expense import ExpenseChanges, UpdateExpense
+from app.modules.expenses.models import ExpenseList, ExpenseRead
+from app.modules.expenses.queries.get_expense import GetExpense
+from app.modules.expenses.queries.get_monthly_summary import GetMonthlySummary, MonthlySummary
+from app.modules.expenses.queries.get_monthly_trend import GetMonthlyTrend, MonthlyTrend
+from app.modules.expenses.queries.list_expenses import ListExpenses
+from app.modules.expenses.values import DEFAULT_TREND_MONTHS, MAX_TREND_MONTHS
 
 router = APIRouter(tags=["expenses"])
 

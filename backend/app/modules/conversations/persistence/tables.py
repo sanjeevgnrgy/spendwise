@@ -1,9 +1,9 @@
 """The conversations module's table: `conversation_message`, one row per message of a chat thread.
 
-Private to this module: only its handlers read or write it (commands.py appends a finished turn, queries.py
-reads a thread back, whole or from a given turn). Other modules use the contract (contracts.py), and the
-composition root hands TABLES to the migrations. The table itself is created and changed by Alembic
-migrations, never by the app.
+Private to this module: only its handlers read or write it (commands/append_turn.py appends a finished turn, the
+query slices in queries/ read a thread back, whole or from a given turn). Other modules use the contract (the
+package's __init__.py), and the composition root hands TABLES to the migrations. The table itself is created and
+changed by Alembic migrations, never by the app.
 """
 
 from datetime import datetime
@@ -12,7 +12,7 @@ from typing import Any
 from sqlalchemy import JSON, DateTime, Index
 from sqlmodel import Field, SQLModel
 
-from app.modules.conversations.contracts import THREAD_ID_MAX_LENGTH
+from app.modules.conversations.values import THREAD_ID_MAX_LENGTH
 
 # The longest message kind that fits; the longest today, "assistant_text", is 14 characters.
 KIND_LENGTH = 30

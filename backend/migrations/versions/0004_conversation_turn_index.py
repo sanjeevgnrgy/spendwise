@@ -19,8 +19,8 @@ down_revision: str | Sequence[str] | None = "0003"
 branch_labels: str | Sequence[str] | None = None
 depends_on: str | Sequence[str] | None = None
 
-# Written out here, not imported from the app (conversations/tables.py declares the same index): a migration
-# must keep doing exactly what it did, even after the app's code changes.
+# Written out here, not imported from the app (conversations/persistence/tables.py declares the same index): a
+# migration must keep doing exactly what it did, even after the app's code changes.
 TABLE = "conversation_message"
 INDEX = "ix_conversation_message_thread_id_turn"
 # The old one-column index on thread_id: the new index starts with thread_id, so it serves those lookups too.

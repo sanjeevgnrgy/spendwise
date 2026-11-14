@@ -5,7 +5,7 @@ Server data goes through TanStack Query, and the API client is typed from the ba
 
 ```powershell
 npm install        # once, and after package.json changes
-npm run dev        # http://localhost:5173 (needs the backend on http://localhost:8000)
+npm run dev        # http://localhost:5173 (forwards /api/v1 to the backend on http://127.0.0.1:8000)
 npm run build      # type-check (tsc -b) and build into dist/
 npm run lint       # oxlint, including the feature-slice import rules and jsx-a11y
 npm run gen:api    # regenerate src/shared/api/schema.gen.ts from openapi.json
@@ -27,7 +27,8 @@ src/
   change, run `..\.venv\Scripts\python.exe ..\backend\scripts\export_contracts.py`, then `npm run gen:api`.
 - `src/shared/ui/` is shadcn/ui source code copied into the project; edit it freely. Add more with
   `npx shadcn@latest add <name>` (`components.json` points it there).
-- Set `VITE_API_URL` in `web/.env` if the backend isn't on port 8000.
+- The app calls the API on its own origin (`/api/v1/...`); the dev server forwards it (`vite.config.ts`). Set
+  `API_PROXY_TARGET` in `web/.env` if the backend isn't on `http://127.0.0.1:8000`.
 
 The full guide: [docs/frontend_onboarding.md](../docs/frontend_onboarding.md). The rules and why:
 [docs/architecture.md](../docs/architecture.md#the-web-app-feature-slices).

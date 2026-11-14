@@ -149,8 +149,8 @@ flowchart TD
 | **Contracts, Schema & Security** | [**API Endpoints**](./docs/api_endpoints.md) | Every REST route, the AG-UI stream, MCP tools and resources, the error format, with examples. |
 | | [**Database Schema**](./docs/database_schema.md) | Tables, columns, indexes, which module owns what, and the migrations. |
 | | [**Configuration**](./docs/configuration.md) | Every setting (backend `.env`, web `.env`), defaults, and the generated contract. |
-| | [**Security**](./docs/security.md) | What protects what (CORS, MCP token, approvals, prompt injection, the renderer), and known gaps. |
-| **Engineering Record** | [**Phase notes**](./docs/README.md#phase-notes) | Phases 1–18 and the refactors: design, what was built, how to verify it, design questions. |
+| | [**Security**](./docs/security.md) | What protects what (one origin, MCP token, approvals, prompt injection, the renderer), and known gaps. |
+| **Engineering Record** | [**Phase notes**](./docs/README.md#phase-notes) | Phases 1–22 and the refactors: design, what was built, how to verify it, design questions. |
 | | [**Sources**](./docs/sources.md) | What the official docs, specs and library code say, with links. |
 | | [**Gemini**](./docs/gemini.md) · [**Troubleshooting**](./docs/troubleshooting.md) · [**Git**](./docs/git.md) | Models and the free tier; problems already hit; committing safely. |
 
@@ -194,8 +194,8 @@ and MCP clients: [docs/getting_started.md](docs/getting_started.md).
 
 | Service | Local URL | Purpose |
 |---|---|---|
-| **Web app (React)** | `http://localhost:5173` | Dashboard, Expenses page, the Assistant panel |
-| **Backend API (FastAPI)** | `http://127.0.0.1:8000/api/v1` | REST API (expenses, categories, summaries, the assistant) |
+| **Web app (React)** | `http://localhost:5173` | Dashboard, Expenses page, the Assistant panel; it reaches the API at its own `/api/v1` (the dev server forwards it) |
+| **Backend API (FastAPI)** | `http://127.0.0.1:8000/api/v1` | REST API (expenses, categories, summaries, the assistant), for tools and `curl` |
 | **API docs (Swagger UI)** | `http://127.0.0.1:8000/docs` | Try every route in the browser; ReDoc at `/redoc` |
 | **OpenAPI document** | `http://127.0.0.1:8000/openapi.json` | The contract the web app's types are generated from |
 | **Health check** | `http://127.0.0.1:8000/health` | `{"status": "ok"}` when the server and its database are up |
@@ -211,7 +211,7 @@ and MCP clients: [docs/getting_started.md](docs/getting_started.md).
 spendwise/
   backend/
     app/
-      main.py             the web app: routes under /api/v1, /health, /mcp/, error handling, CORS
+      main.py             the web app: routes under /api/v1, /health, /mcp/, error handling
       bootstrap.py        the composition root: modules, bus, LLM adapter, MCP server, routers
       core/               building blocks: cqrs (the bus), errors, ids, clock, months, money, llm/ (the port)
       infrastructure/     the outside world: config, db, migrations, logging, llm/ (the Gemini adapter)

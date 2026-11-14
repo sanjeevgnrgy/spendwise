@@ -8,14 +8,14 @@ are generated from it).
 
 | | |
 |---|---|
-| **Base URL** | `http://127.0.0.1:8000/api/v1` for every REST route. `/health` and `/mcp/` stay at the root. A breaking change gets `/api/v2`. |
+| **Base URL** | `http://127.0.0.1:8000/api/v1` for every REST route. `/health` and `/mcp/` stay at the root. A breaking change gets `/api/v2`. The web app reaches the same routes on its own origin (`http://localhost:5173/api/v1`, through the dev server's proxy, D184). |
 | **Format** | JSON in and out. Field names are `snake_case` (AG-UI's stream uses `camelCase`, as its spec does). |
 | **Money** | Requests take rupees as a decimal string (`"450.50"`, at most 2 decimals). Responses give both `amount_minor` (paise, an integer: exact, for arithmetic) and `amount` (rupees, a string: for display). |
 | **Dates** | `YYYY-MM-DD`; months `YYYY-MM` (years 1900–2099); timestamps ISO 8601 in UTC. |
 | **Ids** | positive integers up to 2⁶³−1; larger ones are a 422, not a crash. |
 | **Language** | send `Accept-Language` (`hi`, `hi-IN,hi;q=0.9,en;q=0.5`): error `detail`s, and `/chat`'s and `/agent`'s texts (cards, chip labels, fixed replies, the model's reply), come in the best language the server speaks (English, Hindi), else English. Data (category names, merchants, notes) is never translated; problem `title`s stay English. |
 | **Unknown fields** | rejected (422), in bodies and query strings, so a typo like `merchnat` is an error, not a silent no-op. |
-| **Auth** | none yet for REST (single-user, local; login arrives with the auth phase). `/mcp/` requires a bearer token. Browsers can only call the API from the origins in `CORS_ORIGINS`. |
+| **Auth** | none yet for REST (single-user, local; sign-in arrives with Phase 22). `/mcp/` requires a bearer token. The API sends no CORS headers: in a browser, only pages on the API's own origin can read its answers (D184). |
 
 ## Errors: RFC 9457 problem details
 

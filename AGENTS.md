@@ -2,7 +2,7 @@
 
 Rules for AI coding agents, and anyone else, changing SpendWise. They describe how this codebase is built: a change
 that doesn't follow them isn't finished. The reasoning behind each rule is in [docs/](docs/README.md). Read the linked
-doc before working in an area, and check [decisions.md](docs/decisions.md) (D1–D183) before changing a settled choice.
+doc before working in an area, and check [decisions.md](docs/decisions.md) (D1–D184) before changing a settled choice.
 
 | Before you change… | Read |
 |---|---|
@@ -156,6 +156,8 @@ files, not new branches in shared code.
 - **Mutations** only declare what they changed (`meta: { changes: DATA_SCOPES.x }`). The `STALE_AFTER` table in
   `app/query-client.ts` decides what reloads.
 - **API calls** go through `api` (openapi-fetch) with `unwrap` or `unwrapEmpty`, and types come from `Schemas[...]`.
+  - The API is on the page's own origin (D184): call relative paths (`/api/v1/...`), never an absolute API address;
+    the dev server or a reverse proxy forwards them. The backend sends no CORS headers.
   - Never hand-copy a backend type or value: use `schema.gen.ts` and `contracts.gen.ts`.
   - Never edit `*.gen.ts` or `openapi.json`.
 - **Pages** are exported from their feature's `index.ts` through `lazyWithRetry`, and listed once in `PAGES`

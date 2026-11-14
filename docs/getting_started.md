@@ -80,8 +80,9 @@ npm install        # first time, and after package.json changes
 npm run dev        # http://localhost:5173
 ```
 
-The web app expects the backend on http://localhost:8000. If it's elsewhere, create `web\.env` with
-`VITE_API_URL=http://127.0.0.1:8001` (and add the web app's address to `CORS_ORIGINS` if it isn't on port 5173).
+The web app calls the API on its own address, and the dev server forwards those calls to the backend on
+http://127.0.0.1:8000 (one origin, D184). If the backend runs elsewhere, create `web\.env` with
+`API_PROXY_TARGET=http://127.0.0.1:8001`. The web app itself can run on any port.
 
 ## 6. Check it works
 

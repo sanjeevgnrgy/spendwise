@@ -70,11 +70,11 @@ def detail_for_people(error: AppError, language: Language) -> str:
 
 
 class UnexpectedErrorMiddleware:
-    """Turns an unexpected exception (a bug) into a 500 problem response.
+    """Turns an unexpected exception (a bug) into a 500 problem response, in the request's language.
 
-    Added *inside* CORS (main.py), so even this response carries the CORS headers and the browser can
-    read it. (FastAPI's catch-all handler runs outside every middleware, where CORS can't reach it.)
-    A streaming response that has already started can't be replaced, so then the error is re-raised.
+    main.py adds it first, so it sits closest to the routes: any middleware added later wraps it and sees an ordinary
+    response. (FastAPI's catch-all handler would run outside every middleware instead.) A streaming response that has
+    already started can't be replaced, so then the error is re-raised.
     """
 
     def __init__(self, app: ASGIApp) -> None:

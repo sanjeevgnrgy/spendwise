@@ -1,23 +1,25 @@
 """The web app: FastAPI, built from the composition root (bootstrap.py) (entry point, HTTP adapter).
 
-create_app() puts together the error handling (RFC 9457 problem details), CORS, /health, every module's
-routes under API_PREFIX and, when MCP_TOKEN is set, the MCP server at MCP_PATH. uvicorn serves `app`
-(`.\\run.ps1`), and the export script reads its OpenAPI document. create_app(services) builds the same app
-around services made elsewhere, e.g. bootstrap.build() with a fake model or another database.
+create_app() puts together the error handling (RFC 9457 problem details), /health, every module's routes under
+API_PREFIX and, when MCP_TOKEN is set, the MCP server at MCP_PATH. uvicorn serves `app` (`.\\run.ps1`), and the
+export script reads its OpenAPI document. create_app(services) builds the same app around services made elsewhere,
+e.g. bootstrap.build() with a fake model or another database.
+
+There's no CORS (D184): the web app reaches the API on its own origin, through the Vite dev server's proxy or a
+reverse proxy, so no other website is ever allowed to read these responses in a browser.
 """
 
 from collections.abc import AsyncIterator, Callable
 from contextlib import AbstractAsyncContextManager, AsyncExitStack, asynccontextmanager
 
 from fastapi import FastAPI
-from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy import Engine, text
 from starlette.types import ASGIApp
 
 from app import bootstrap
 from app.bootstrap import Services
 from app.infrastructure import migrations
-from app.infrastructure.config import API_PREFIX, API_VERSION, MCP_PATH, settings
+from app.infrastructure.config import API_PREFIX, API_VERSION, MCP_PATH
 from app.infrastructure.logging import setup_logging
 from app.modules.mcp import module as mcp_module
 from app.web.problems import UnexpectedErrorMiddleware, register_error_handlers
@@ -38,7 +40,7 @@ def create_app(services: Services | None = None) -> FastAPI:
     # Shared services for routes (web/dependencies.py): one bus and one clock for the whole app.
     app.state.bus = built.bus
     app.state.clock = built.clock
-    _add_error_handling_and_cors(app)
+    _add_error_handling(app)
     # Registered before the modules' routes, so the OpenAPI document keeps /health first.
     _add_health_check(app, built.engine)
     for router in bootstrap.api_routers(built):
@@ -68,24 +70,12 @@ def _lifespan(services: Services, mcp_http_app: ASGIApp | None) -> Lifespan:
     return lifespan
 
 
-def _add_error_handling_and_cors(app: FastAPI) -> None:
-    """Turn every error into a problem-details response, and let the web app's origins read the responses."""
+def _add_error_handling(app: FastAPI) -> None:
+    """Turn every error, including a bug's, into a problem-details response."""
     register_error_handlers(app)
-    # Added before CORS, so it sits inside it: even an unexpected error's 500 carries the CORS headers,
-    # and the browser can read the problem instead of reporting a network error.
+    # The first middleware added sits closest to the routes: anything added later wraps it and sees an ordinary
+    # 500 problem, never the exception.
     app.add_middleware(UnexpectedErrorMiddleware)
-
-    # The web app (Vite, port 5173) is a different origin from this API (port 8000), so browsers
-    # block it from reading our responses unless we say it's allowed. Only the listed origins are;
-    # any other website a user visits still can't use this API through their browser.
-    app.add_middleware(
-        CORSMiddleware,
-        allow_origins=settings.cors_origins,
-        allow_methods=["GET", "POST", "PATCH", "DELETE"],
-        allow_headers=["Content-Type"],
-        # So the browser lets the web app read where a new expense lives (201 Created).
-        expose_headers=["Location"],
-    )
 
 
 def _add_health_check(app: FastAPI, engine: Engine) -> None:

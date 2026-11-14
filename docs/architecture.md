@@ -44,8 +44,8 @@ event sourcing would be overkill here (D139).
 ```
 backend/
   app/
-    main.py              the web app: create_app(services): error handlers, CORS, routes under /api/v1, /health,
-                         /mcp/ (uvicorn calls it with --factory: nothing is built at import)
+    main.py              the web app: create_app(services): error handlers, routes under /api/v1, /health, /mcp/
+                         (uvicorn calls it with --factory: nothing is built at import); no CORS (D184)
     bootstrap.py         the composition root: the one list of modules; build() makes the Services (clock, engine,
                          bus, LLM, expense tools, file store, MCP server), each replaceable; api_routers(services)
     core/                shared building blocks: no I/O, no framework, no business rules; imports nothing else
@@ -238,9 +238,9 @@ and its own 404/405 into one shape, RFC 9457 problem details:
  "detail": "Expense 14 not found", "instance": "/api/v1/expenses/14"}
 ```
 
-Anything else (a bug) becomes a generic 500 problem in `UnexpectedErrorMiddleware`, which sits **inside** CORS so the
-browser can still read it; the traceback goes only to the log. FastAPI's own errors keep their headers (`Allow` on a
-405) (D165).
+Anything else (a bug) becomes a generic 500 problem in `UnexpectedErrorMiddleware`, the middleware closest to the
+routes, so anything added around it sees an ordinary response; the traceback goes only to the log. FastAPI's own
+errors keep their headers (`Allow` on a 405) (D165, D184).
 
 ### How a request flows
 
@@ -368,7 +368,7 @@ web/src/
     dashboard/    the Dashboard page, stat cards, charts, recent list; api.ts, queries.ts
     assistant/    the chat panel; model/ (useChat, AssistantProvider); api/ (the AG-UI stream); a2ui/ (renderer)
   shared/       knows no feature: ui/ (shadcn kit), api/ (typed HTTP client, generated contract), config/ (app name,
-                env, routes, data scopes), i18n/ (the languages and their locales, the i18next setup, the language
+                routes, data scopes), i18n/ (the languages and their locales, the i18next setup, the language
                 menu, shared/'s "common" texts), lib/ (formatting, guards, errors, ids), components/ (empty state,
                 error boundary, section error, refresh notice, placeholder page), hooks/, theme/
 ```
@@ -425,6 +425,29 @@ backend  --export_contracts.py-->  web/openapi.json  --npm run gen:api-->  web/s
   method labels, limits.
 
 After changing an API or one of those values: run the export script, then `npm run gen:api`.
+
+## One origin
+
+The browser reaches the API on the web app's own address (D184). The web app calls relative URLs (`/api/v1/...`;
+`api` has no base URL, and the assistant's stream uses a relative path), and whatever serves the page forwards them
+to the backend:
+
+```
+browser --> http://localhost:5173/            Vite serves the web app
+        --> http://localhost:5173/api/v1/...  Vite's proxy (vite.config.ts) --> http://127.0.0.1:8000/api/v1/...
+production: one reverse proxy serves web/dist and forwards /api/v1/ to uvicorn, in the same way
+```
+
+- **No CORS.** The API sends no `Access-Control-*` headers, so no other website can read its answers in a browser,
+  and a cross-origin preflight fails. There's no allow-list to keep in step with the web app's address.
+- **The proxy keeps the browser's `Host`** (`changeOrigin: false`), so URLs the backend builds, such as a new
+  expense's `Location`, point at the web app's address. A production proxy must do the same.
+- **A proxy that can't reach the backend answers 502** (Vite: an empty `text/plain` body). The backend's own errors
+  are always problems, so `ApiError.fromProblem` reads a 502, 503 or 504 that isn't one as "can't reach SpendWise".
+- **Why:** the sign-in of Phase 22 keeps the session on the server and gives the browser one HttpOnly cookie. On one
+  origin that cookie can be `SameSite=Strict` with the `__Host-` prefix, and needs no CORS credentials (the Duende BFF
+  pattern).
+- MCP clients, Swagger UI (`/docs`) and `curl` still talk to `http://127.0.0.1:8000` directly.
 
 ## Checking the rules
 

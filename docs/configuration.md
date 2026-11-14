@@ -21,7 +21,6 @@ All backend settings are one Pydantic `Settings` class in `backend/app/infrastru
 | `GEMINI_API_KEY` | not set | The assistant (`/chat`, `/agent`) and `/parse`. Without it, those routes fail with a message saying the key is missing; everything else works. Get one at https://aistudio.google.com/apikey |
 | `GEMINI_MODEL` | not set | Which Gemini model answers, e.g. `gemini-3.5-flash-lite`. Model ids and free-tier limits: [gemini.md](gemini.md) |
 | `DATABASE_URL` | `sqlite:///<project>/backend/spendwise.db` | Any SQLAlchemy URL. Point it at a copy to experiment safely |
-| `CORS_ORIGINS` | `["http://localhost:5173","http://127.0.0.1:5173"]` | Web pages allowed to call the API from a browser (a JSON list). Add your web app's address if it runs elsewhere |
 | `MCP_TOKEN` | not set | Turns on MCP over HTTP at `/mcp/`, guarded by this shared secret (`Authorization: Bearer <token>`). Not set: no `/mcp/` over HTTP. Make one: `python -c "import secrets; print(secrets.token_urlsafe(32))"` |
 | `MCP_URL` | not set | Only if the expense tools run as a **separate** MCP server: its URL (keep the trailing slash). Not set: the assistant calls this app's own MCP server in-process. When set, `MCP_TOKEN` is sent to it |
 | `UPLOADS_DIR` | `<project>/backend/uploads` | The folder uploaded receipts are kept in, by random names (created on the first upload; git-ignored). It goes with the database: a copy of one needs a copy of the other |
@@ -58,12 +57,15 @@ These are deliberate design values, each defined once, next to the code it gover
 
 ## Web settings (`web/.env`)
 
+The browser code reads no settings: it calls the API on its own origin (`/api/v1/...`, D184). The dev server has one:
+
 | Setting | Default | Used for |
 |---|---|---|
-| `VITE_API_URL` | `http://localhost:8000` | Where the backend runs. Typed in `src/vite-env.d.ts`, read once in `src/shared/config/env.ts` |
+| `API_PROXY_TARGET` | `http://127.0.0.1:8000` | Where the dev server (`npm run dev`, also `npm run preview`) forwards `/api/v1/...`: the backend. Read by `vite.config.ts`, in Node; never shipped to the browser |
 
-Vite only exposes variables that start with `VITE_`, and bakes them in at build time: restart `npm run dev` after a
-change. Never put a secret in a `VITE_` variable: it ends up in the JavaScript every visitor downloads.
+`vite.config.ts` reads `web/.env` when the dev server starts (a real environment variable wins): restart
+`npm run dev` after a change. Anything in a `VITE_` variable would be baked into the JavaScript every visitor
+downloads, so none is used, and a secret never goes in one.
 
 App-wide constants, each defined once:
 
@@ -92,5 +94,5 @@ regeneration shows up as a TypeScript error, or a value that doesn't match.
 
 | | |
 |---|---|
-| `.\run.ps1 --port 8001` | extra arguments go to uvicorn (then set `VITE_API_URL` in `web/.env`) |
-| `npm run dev -- --port 5175` | the web dev server on another port (then add it to `CORS_ORIGINS`) |
+| `.\run.ps1 --port 8001` | extra arguments go to uvicorn (then set `API_PROXY_TARGET=http://127.0.0.1:8001` in `web/.env`) |
+| `npm run dev -- --port 5175` | the web dev server on another port; nothing else to change (the API is reached through it) |

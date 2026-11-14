@@ -17,11 +17,14 @@ deployment would need.
 
 ## The browser and the API
 
-- **CORS allow-list:** only the origins in `CORS_ORIGINS` (the Vite dev server by default) may read API responses
-  from a browser. Any other website you visit can't use the API through your browser. Allowed methods and headers are
-  listed explicitly. Even an unexpected error's 500 response carries the CORS headers (the error middleware sits
-  inside CORS), so the web app reads the problem instead of guessing.
-- **No cookies, no sessions:** there's nothing for cross-site request forgery to ride on.
+- **One origin, no CORS (D184):** the web app reaches the API on its own address (Vite's proxy in development, a
+  reverse proxy in production), and the API sends no CORS headers. So the browser's same-origin policy keeps every
+  other website from reading the API's answers, and refuses another site's requests that need a preflight (a JSON
+  body, `PATCH`, `DELETE`) before they're sent. There's no allow-list to keep in step.
+- **No cookies, no sessions yet:** a request from another site carries no credentials. Such a site can still *send*
+  a "simple" request, as it always could (CORS only ever governed reading). JSON routes refuse it (`text/plain` or a
+  form body is a 422), but a multipart upload to `POST /receipts` is accepted. Phase 22's sign-in closes this: every
+  API call will need an `X-CSRF` header, which another site can't add without a preflight.
 - **Input validation everywhere:** unknown fields and query parameters are rejected, text has length limits, ids are
   bounded (no driver overflow), months are limited to 1900–2099, amounts to 2 decimals and > 0. See
   [api_endpoints.md](api_endpoints.md).
@@ -103,7 +106,8 @@ Every backend and web dependency is pinned to an exact version (`requirements.tx
 
 | Gap | Why it matters | What to add |
 |---|---|---|
-| **No login** for the REST API and the web app | anyone who can reach the port can read and change everything | user accounts and authentication (the planned auth phase); then per-user data |
+| **No login** for the REST API and the web app | anyone who can reach the port can read and change everything | sign-in through an OpenID Connect provider with a server-side session (Phase 22, in progress); then per-user data (Phase 23) |
+| **Cross-site uploads** | another website can make your browser upload a file to `POST /receipts` (a multipart form needs no preflight) | the `X-CSRF` header on every API call (Phase 22) |
 | **No HTTPS** | traffic, including any future tokens, would be readable | TLS at a reverse proxy |
 | **No security headers** | no Content-Security-Policy, HSTS, `X-Content-Type-Options`, `frame-ancestors` | set them at the proxy or in a middleware; a CSP also limits the damage of any future injection |
 | **No rate limiting** | the model-backed routes (`/chat`, `/agent`, `/parse`, `/receipts/{id}/extraction`) spend your Gemini quota | per-user/IP limits on those routes |

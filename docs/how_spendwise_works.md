@@ -126,7 +126,7 @@ only says "data changed", and the app decides, in one place, what that makes out
 
 ```mermaid
 flowchart TD
-    HTTP["HTTP request"] --> MW["middleware: CORS → unexpected-error safety net"]
+    HTTP["HTTP request"] --> MW["middleware: unexpected-error safety net"]
     MW --> ROUTE["module api.py<br/>validates input, translates to a message"]
     ROUTE -->|"execute(command)"| BUS["MessageBus<br/>opens the unit of work"]
     ROUTE -->|"ask(query)"| BUS

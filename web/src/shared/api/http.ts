@@ -7,7 +7,6 @@ import createClient from "openapi-fetch"
 
 import type { components, paths } from "@/shared/api/schema.gen"
 import { APP_NAME } from "@/shared/config/app"
-import { API_ORIGIN } from "@/shared/config/env"
 import { i18n, languageHeaders, type CommonTexts } from "@/shared/i18n"
 import { isAbort, UserFacingError } from "@/shared/lib/errors"
 import { isObject } from "@/shared/lib/guards"
@@ -18,8 +17,10 @@ export type Schemas = components["schemas"]
 /**
  * The typed client (openapi-fetch): api.GET("/api/v1/expenses", { params, signal }) and so on. A path, parameter or
  * body the API doesn't accept is a compile error. Wrap each call in unwrap() or unwrapEmpty().
+ * No base URL: every call goes to the page's own origin (/api/v1/...), where the dev server or a reverse proxy
+ * forwards it to the backend (D184).
  */
-export const api = createClient<paths>({ baseUrl: API_ORIGIN })
+export const api = createClient<paths>()
 
 // Every call asks for the language on now, so the server writes its texts (an error's detail) in it.
 api.use({
@@ -31,6 +32,10 @@ api.use({
 
 /** One of the client's own error messages: a key of the common "errors" texts. */
 type ClientMessage = keyof CommonTexts["errors"]
+
+// What a proxy in front of the backend answers when it can't reach it (Vite's dev server sends 502). The backend's
+// own 502s (a service it depends on failed) are always problems, so they're never mistaken for these.
+const GATEWAY_FAILURES: ReadonlySet<number> = new Set([502, 503, 504])
 
 /**
  * A failed API call. `message` is for people (the backend's own `detail`, which the server writes for people, or one
@@ -64,20 +69,23 @@ export class ApiError extends UserFacingError {
 
   /**
    * An ApiError from an error answer's body. Every backend error is an RFC 9457 problem:
-   * {"type", "title", "status", "detail", ...}; its `detail` becomes the message. A body that isn't one gives a
-   * plain "Request failed (status)".
+   * {"type", "title", "status", "detail", ...}; its `detail` becomes the message. A gateway failure that isn't one
+   * came from the proxy in front of the backend, so it's unreachableError(); any other body gives a plain "Request
+   * failed (status)".
    */
   static fromProblem(body: unknown, status: number): ApiError {
     if (isObject(body) && typeof body.detail === "string") {
       return new ApiError(body.detail, status, typeof body.type === "string" ? body.type : undefined)
     }
+    if (GATEWAY_FAILURES.has(status)) return unreachableError()
     return ApiError.ofText("requestFailed", status, { status })
   }
 }
 
 /**
- * The error when no answer came back at all: the backend is down, unreachable, or blocked by CORS. It doesn't name
- * the API's address (the browser console's failed request does, for developers).
+ * The error when no answer came from the backend: the page's server can't be reached, or the proxy in front of the
+ * backend answered for it (502/503/504). Its status is 0, "no answer", so queries still retry it. It doesn't name an
+ * address (the browser console's failed request, or the dev server's terminal, does, for developers).
  */
 export function unreachableError(): ApiError {
   return ApiError.ofText("unreachable", 0, { app: APP_NAME })
@@ -98,7 +106,7 @@ async function settle<T>(pending: Promise<Outcome<T>>): Promise<Outcome<T>> {
   } catch (error) {
     // Cancelled on purpose: let the caller (TanStack Query, the Stop button) see that as it is.
     if (isAbort(error)) throw error
-    // fetch throws a TypeError when there's no response at all: the backend is down, or CORS blocked it.
+    // fetch throws a TypeError when there's no response at all: the page's server is down or the network is.
     // Anything else (a body that isn't valid JSON) means the backend answered, but unreadably.
     throw error instanceof TypeError ? unreachableError() : ApiError.ofText("unreadable", 0)
   }

@@ -532,6 +532,7 @@ is natural. It's still a soft, model-judged guard.
   GET/POST/PATCH/DELETE, header `Content-Type`, no credentials. `CORS_ORIGINS` in `.env` changes the list.
 - Not authentication: it only governs what browsers let other pages read.
 - **Revisit when:** the frontend is served from another address, or in production (then maybe serve both from one origin).
+- **Superseded by D184:** the web app and the API share one origin, through a proxy; there's no CORS.
 
 ### D85. Deleting always asks first
 - An AlertDialog confirms single and bulk deletes, naming the expense for single ones (project safety rule).
@@ -1325,6 +1326,8 @@ is natural. It's still a soft, model-judged guard.
 - FastAPI's own errors keep their headers (`Allow` on a 405).
 - The MCP bearer scheme is matched case-insensitively (RFC 9110).
 - Only SQLite lock errors are reported to MCP clients as "busy"; other database errors aren't disguised.
+- **Updated by D184:** CORS is gone. The middleware stays, closest to the routes, still turning a bug into a 500
+  problem in the request's language.
 
 ### D166. The LLM port is injected; the mcp package is its contract
 - `core/llm/port.py`: `LanguageModel` and `LlmStream` protocols and `LlmError`. `GeminiModel` (`gemini.py`) implements
@@ -1871,3 +1874,50 @@ is natural. It's still a soft, model-judged guard.
     its values, as designed (D125). Over Phase 21, 4 of the 5 live calls the owner allowed were used.
 - **Revisit:** if the model's own forms fail more often now that they're longer, give it the form's fields only and
   let the server build the form; several receipts in one message; showing the receipt image next to the form.
+
+---
+
+## Sign-in (Phase 22)
+
+> Only people you allow will use SpendWise. They sign in through an OpenID Connect provider (ZITADEL first, with
+> Google and GitHub) on its hosted page; the backend keeps the session and gives the browser one HttpOnly cookie (a
+> backend-for-frontend, as Duende's BFF does for ASP.NET Core). The provider is configuration, so it can be replaced.
+> Built in four parts; the first puts the web app and the API on one origin. Phase note:
+> [phases/phase-22-sign-in.md](phases/phase-22-sign-in.md).
+
+### D184. One origin for the web app and the API; no CORS
+- **What:**
+  - **The browser calls the API on the web app's own origin.** `api` (openapi-fetch) has no base URL and the
+    assistant's stream posts to `/api/v1/agent`, so every call is a relative `/api/v1/...` URL.
+  - **Whatever serves the page forwards them.** In development, Vite's proxy (`vite.config.ts`, also used by
+    `npm run preview`) sends `API_PREFIX`, from the generated contract, to `API_PROXY_TARGET` (`web/.env`, default
+    `http://127.0.0.1:8000`; no `VITE_` prefix, because only Node reads it). In production, one reverse proxy serves
+    `web/dist` and forwards `/api/v1/` the same way.
+  - **The proxy keeps the browser's `Host`** (`changeOrigin: false`), so the URLs the backend builds (a new expense's
+    or receipt's `Location`) point at the web app's address.
+  - **No CORS:** `CORSMiddleware` and the `CORS_ORIGINS` setting are removed. `VITE_API_URL` and
+    `shared/config/env.ts` are removed: the browser code reads no settings.
+  - **A proxy's gateway error means "can't reach":** a 502, 503 or 504 without a problem body comes from the proxy,
+    not the backend (whose errors are always problems), so `ApiError.fromProblem` turns it into `unreachableError()`.
+- **Why:**
+  - Part 2 keeps the session on the server and gives the browser one cookie. On one origin it can be
+    `SameSite=Strict` with the `__Host-` prefix, and the browser needs no credentialed CORS to send it.
+  - With no CORS headers at all, the same-origin policy refuses every other site, and there's no allow-list to keep in
+    step with the web app's port (D84's "Revisit when": serve both from one origin).
+- **Chosen with the owner:** the BFF design with server-side sessions and a provider-neutral OIDC adapter; this part
+  first and alone, superseding D84.
+- **Trade-offs:**
+  - The web app needs a proxy wherever it runs: the dev server, `npm run preview`, and production.
+  - Tools still call `http://127.0.0.1:8000` directly (curl, Swagger UI, MCP clients).
+  - Another site can still *send* a simple request (a multipart upload to `POST /receipts`), as it could with CORS.
+    Part 2's `X-CSRF` header closes it.
+- **How it was verified:**
+  - recorded behaviour (D173, 17 scenarios with no `Origin`, the web app's and a foreign one, plus the model calls and
+    the OpenAPI document): every status and body is identical; only the `Access-Control-*` and `Vary` headers are gone,
+    and preflights answer 405 instead of 200 or 400;
+  - through the real Vite proxy, with a fake-model backend on spare ports: REST, a Hindi problem, a multipart upload,
+    `Location` on the web app's address, the `/agent` stream unbuffered (chunks a second apart arrived a second
+    apart), and an empty 502 when the backend was stopped;
+  - the contract is byte-identical; the migrations check, the architecture scans, `tsc -b`, oxlint and the build pass.
+- **Revisit:** if the web app ever has to be served from a different site than the API, the cookie needs
+  `SameSite=None` with credentialed CORS and a CSRF token; put a thin BFF at the web app's host instead.

@@ -9,7 +9,6 @@ import { EventSchemas } from "@ag-ui/core/schemas"
 import { A2UI, AGUI } from "@/shared/api/contracts.gen"
 import { ApiError, unreachableError } from "@/shared/api/http"
 import type { paths } from "@/shared/api/schema.gen"
-import { API_ORIGIN } from "@/shared/config/env"
 import { i18n, languageHeaders } from "@/shared/i18n"
 import { isAbort, UserFacingError } from "@/shared/lib/errors"
 import { newId } from "@/shared/lib/ids"
@@ -28,7 +27,8 @@ export type { AgentEvent }
  */
 export type AgentPrompt = { text: string; file?: File } | { action: A2uiAction }
 
-// Checked against the API's paths, like every other call (a typo is a compile error).
+// Checked against the API's paths, like every other call (a typo is a compile error). Relative, like the API
+// client's: the API is on the page's own origin (D184).
 const AGENT_PATH = "/api/v1/agent" satisfies keyof paths
 const USER_ROLE = "user"
 // AG-UI's text content part (a receipt travels as a media part: receipts.ts).
@@ -111,7 +111,7 @@ async function startRun(
   let response: Response
   try {
     // fetch, not EventSource: EventSource can only send GET requests, and a run needs a POST body.
-    response = await fetch(`${API_ORIGIN}${AGENT_PATH}`, {
+    response = await fetch(AGENT_PATH, {
       method: "POST",
       // The run's language: the server writes its cards, progress labels and errors in it, and the model replies in
       // it.

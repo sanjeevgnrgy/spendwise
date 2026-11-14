@@ -145,10 +145,12 @@ is in the backend terminal (D180).
 ## Web app
 
 ### Red toast "Can't reach SpendWise right now"
-- **Cause:** the backend isn't running, runs on another port, or the browser blocked the response (CORS). The toast
-  doesn't name the address (D180); the failed request in the browser's Network tab does.
-- **Fix:** start it with `.\run.ps1`. On another port, set `VITE_API_URL` in `web/.env` and restart `npm run dev`.
-  If the backend *is* running, check the browser console for a CORS error (next entry).
+- **Cause:** the backend isn't running, or runs on another port. The web app calls the API on its own address and
+  the dev server forwards it (D184); when the backend can't be reached, the dev server answers 502 and its terminal
+  shows `http proxy error: /api/v1/... ECONNREFUSED`. The toast doesn't name an address (D180).
+- **Fix:** start it with `.\run.ps1`. On another port, set `API_PROXY_TARGET` in `web/.env` (for example
+  `http://127.0.0.1:8001`) and restart `npm run dev`.
+- **Pages load forever instead:** the backend's port is open but nothing answers. See "The server won't start" below.
 
 ### A page or the app says "Something went wrong. Try again; if it keeps happening, reload the page."
 - **Cause:** something in the browser crashed while drawing (a bug, not a server error). Its message is for developers,
@@ -158,10 +160,10 @@ is in the backend terminal (D180).
 - **Fix:** reload the page. If it comes back after a reload, read the console's error and fix the code.
 
 ### Browser console: "blocked by CORS policy: No 'Access-Control-Allow-Origin' header"
-- **Cause:** the page's address isn't in the backend's allowed origins (default `http://localhost:5173` and
-  `http://127.0.0.1:5173`). Common when Vite picks another port because 5173 is busy (it prints the URL it uses).
-- **Fix:** open the app at `http://localhost:5173`, or add its address to `CORS_ORIGINS` in `.env`
-  (a JSON list) and restart the backend.
+- **Cause:** a page calls the API at the backend's own address (`http://127.0.0.1:8000/...`) instead of its own
+  origin. Since D184 the API sends no CORS headers, so browsers refuse that on purpose.
+- **Fix:** call relative URLs (`/api/v1/...`) through `api` in `shared/api/http.ts`, never an absolute API address.
+  Tools outside the browser (`curl`, Swagger UI at `/docs`, MCP clients) can keep using `http://127.0.0.1:8000`.
 
 ### Blank page; console says "Maximum update depth exceeded"
 - **Cause:** a component keeps setting state in a loop, usually a `useEffect` that sets state and lists a value
@@ -398,6 +400,10 @@ is in the backend terminal (D180).
 - **Fix:** `.\.venv\Scripts\python.exe -m alembic -c backend\alembic.ini upgrade head`, then start again. Your data is kept.
   (After the code-review fixes, a database at `0002` needs `0003`, which adds `expense.version`: restarting
   `.\run.ps1` applies it.)
+- **The same cause, without the message:** `.\run.ps1` left running while new code with a migration arrives (a pull,
+  a commit from another session). `--reload` restarts the app, the app refuses to start, and uvicorn's reloader keeps
+  the port open with nothing behind it, so requests **hang** instead of failing, and the web app waits forever. The
+  message is in that terminal. Stop it (Ctrl+C) and run `.\run.ps1` again: it migrates first.
 
 ### A migration failed half-way: is my database half-changed?
 - **No.** An upgrade runs in one transaction, schema changes included (D163), so a failure leaves the database at the

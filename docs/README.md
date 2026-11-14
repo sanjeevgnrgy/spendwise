@@ -45,7 +45,7 @@ it's built that way.
 | [api_endpoints.md](api_endpoints.md) | Every REST route, the AG-UI stream, the MCP tools and resources, the error format, with examples |
 | [database_schema.md](database_schema.md) | Tables, columns, indexes, which module owns what, the migrations |
 | [configuration.md](configuration.md) | Every setting (backend `.env`, web `.env`), defaults, and the generated contract |
-| [security.md](security.md) | What protects what (CORS, the MCP token, approvals, prompt injection, the renderer), and the known gaps |
+| [security.md](security.md) | What protects what (one origin, the MCP token, approvals, prompt injection, the renderer), and the known gaps |
 | [gemini.md](gemini.md) | Gemini setup, models and the free tier, privacy, errors, tokens |
 | [sources.md](sources.md) | What the official docs, specs and library code say, with links, for the facts Phase 14 onwards relies on |
 | [images/](images/) | Screenshots used by the READMEs (`hero.png`: the Dashboard with sample data) |
@@ -78,6 +78,7 @@ it, and design questions with their answers (collapsed). Later changes are noted
 | [phases/phase-19-languages.md](phases/phase-19-languages.md) | Translating a web app: namespaces and keys, plurals and placeholders, loading a language on demand, numbers and dates per locale, English and Hindi |
 | [phases/phase-20-languages-server.md](phases/phase-20-languages-server.md) | The server's side of translation: Accept-Language, typed catalogs checked at startup, errors written where the response is built, CLDR money and dates, telling the model which language to reply in |
 | [phases/phase-21-receipts.md](phases/phase-21-receipts.md) | Receipt scanning: the receipts module (uploads checked by their bytes, files kept apart from the database, Gemini reading an image or a PDF into a schema, the receipt's text treated as data), and a receipt attached in the chat offered as the expense form to confirm |
+| [phases/phase-22-sign-in.md](phases/phase-22-sign-in.md) | Signing in (in progress): the backend-for-frontend pattern (the session on the server, one HttpOnly cookie in the browser), standard OpenID Connect so the identity provider can be replaced, and the first step, serving the web app and the API from one origin with no CORS |
 | [phases/refactor-solid.md](phases/refactor-solid.md) | SOLID in practice (surfaces instead of flags, tool and component registries, narrow ports), testability seams and how behaviour was recorded, scalability work and limits |
 | [phases/refactor-architecture.md](phases/refactor-architecture.md) | CQRS and the unit of work, ports and adapters, feature slices, migrations, the generated contract; then the code-review fixes (versions, transactional SQLite) |
 

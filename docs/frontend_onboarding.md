@@ -8,7 +8,7 @@ A working guide to the web app (`web/`): React 19, TypeScript 7, Vite 8, Tailwin
 ```powershell
 cd web
 npm install          # first time, and after package.json changes
-npm run dev          # http://localhost:5173 (the backend must be running on :8000)
+npm run dev          # http://localhost:5173; it forwards /api/v1 to the backend on :8000 (one origin, D184)
 npm run build        # type-check (tsc -b) and build into dist/
 npx oxlint           # lint, including the feature-slice import rules
 npm run gen:api      # regenerate API types from openapi.json (after the backend's export script)
@@ -36,7 +36,7 @@ src/
     api/                typed HTTP client (http.ts) + generated contract (*.gen.ts)
     ui/                 shadcn/ui components (generated source; edit freely)
     components/         error boundary, section error, refresh notice, empty state, placeholder page
-    config/             app name, env, routes, data scopes
+    config/             app name, routes, data scopes
     i18n/               languages and their locales, i18next setup, language menu, the "common" texts
     hooks/, lib/        use-mobile, use-debounced-value; formatting, guards, errors, ids
     theme/              theme constants, provider, toggle

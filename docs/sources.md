@@ -603,6 +603,38 @@ upload route, `domain/file_types.py`), `assistant/api/agui_request.py` (the rece
 
 ---
 
+## 26. Vite 8.3.8's proxy, openapi-fetch 0.17.0's base URL, simple requests (Phase 22)
+
+Checked on 2026-11-14.
+
+**Package:** `web/node_modules/vite/dist/node/chunks/node.js` (8.3.8)
+- `proxyMiddleware`: a proxy written as a string becomes `{ target, changeOrigin: true }`; written as an object it
+  keeps its own options, and the bundled http-proxy leaves `Host` alone unless `changeOrigin` is set. A rule matches
+  when the URL starts with its key (or, for a key starting with `^`, a regular expression).
+- On a proxy error for an HTTP request, it logs `http proxy error: <url>` with the error's stack, then answers `502`
+  with `Content-Type: text/plain` and an empty body, if nothing was sent yet.
+- `npm run preview` uses `preview.proxy ?? server.proxy`, so the dev server's proxy applies to it too.
+- `loadEnv(mode, envDir, prefixes = "VITE_")` keeps the keys that start with one of `prefixes`, from the `.env`
+  files and then from `process.env`, so with `''` every variable is loaded and a real environment variable wins.
+
+**Package:** `web/node_modules/openapi-fetch/dist/index.mjs` (0.17.0): `baseUrl` defaults to `""`, and a call's URL is
+`${baseUrl}${path}` handed to `new Request(...)`, so with no base URL a call is relative to the page's address.
+
+**Observed** (through `npm run dev` on a spare port, a backend with a fake model behind it):
+- the `/agent` stream's text chunks, written a second apart, arrived a second apart: the proxy doesn't buffer
+  Server-Sent Events;
+- with `changeOrigin: false`, a new expense's `Location` was `http://localhost:5181/api/v1/expenses/1`, built by the
+  backend from the forwarded `Host`;
+- with the backend stopped: `HTTP/1.1 502 Bad Gateway`, `Content-Type: text/plain`, a 0-byte body;
+- FastAPI 0.162.5, with no CORS: a JSON route refuses a body sent as `text/plain` or as a form (422), but
+  `POST /receipts` accepts a multipart upload sent with a foreign `Origin` (201). Those three are "simple" requests a
+  browser sends cross-site without a preflight.
+
+**Used in:** `web/vite.config.ts` (`apiProxy`, `loadEnv`), `web/src/shared/api/http.ts` (no base URL,
+`GATEWAY_FAILURES`), `docs/security.md`, D184.
+
+---
+
 ## How to re-check a package fact
 
 Library code lives in `.venv\Lib\site-packages\<package>\`. For example, to see the AG-UI event docstrings for the

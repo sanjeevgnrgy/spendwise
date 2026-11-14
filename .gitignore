@@ -11,3 +11,6 @@ __pycache__/
 # Local SQLite database: your data, recreated by the app and backend/seed.py.
 *.db
 *.db-journal
+
+# Uploaded files (receipts), kept by random names: your data, like the database (UPLOADS_DIR).
+backend/uploads/

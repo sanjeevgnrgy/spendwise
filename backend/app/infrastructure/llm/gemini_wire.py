@@ -2,19 +2,22 @@
 
 Gemini's Interactions API speaks in "steps" (user input, model output, function calls and their results,
 thoughts), sent as JSON-like dicts and streamed back in pieces. This file turns SpendWise's provider-neutral
-messages and tool specs (messages.py) into those dicts and back, and puts a streamed answer's pieces back
-together. It never imports Google's SDK, so all of it works on plain values.
+messages, tool specs and attached files (core/llm) into those dicts and back, and puts a streamed answer's pieces
+back together. It never imports Google's SDK, so all of it works on plain values.
 
 Used only by gemini.py, which keeps the SDK calls, the timeouts and retries, and the error mapping.
 """
 
+import base64
 import json
 import logging
 from collections import defaultdict
+from collections.abc import Sequence
 from enum import StrEnum
 from typing import Any
 
 from app.core.llm.messages import AssistantText, Message, Reasoning, ToolCall, ToolResult, ToolSpec, UserText
+from app.core.llm.port import Attachment
 
 logger = logging.getLogger(__name__)
 
@@ -60,6 +63,36 @@ def _text_content(text: str) -> list[dict[str, str]]:
 def _joined_text(parts: list[dict[str, Any]] | None) -> str:
     """All the text parts of Gemini content, joined; other parts (and None) give ""."""
     return "".join(part.get("text", "") for part in parts or [] if part.get("type") == TEXT_PART)
+
+
+# The content block a file travels in: an image, or a document (a PDF).
+class FileBlock(StrEnum):
+    IMAGE = "image"
+    DOCUMENT = "document"
+
+
+# Media types starting with this go in an image block; any other file (a PDF) in a document block.
+IMAGE_MEDIA_PREFIX = "image/"
+
+
+def to_input(prompt: str, attachments: Sequence[Attachment]) -> str | list[dict[str, str]]:
+    """A one-off request's input: the prompt alone, or each file followed by the prompt that asks about it.
+
+    A file travels inline: its bytes base64-encoded in `data`, with its `mime_type` (the Interactions API's image
+    and document content blocks). With no files, the input is the plain prompt, exactly as before attachments
+    existed.
+    """
+    if not attachments:
+        return prompt
+    blocks = [
+        {
+            "type": FileBlock.IMAGE if file.media_type.startswith(IMAGE_MEDIA_PREFIX) else FileBlock.DOCUMENT,
+            "data": base64.b64encode(file.data).decode("ascii"),
+            "mime_type": file.media_type,
+        }
+        for file in attachments
+    ]
+    return [*blocks, *_text_content(prompt)]
 
 
 def to_steps(messages: list[Message]) -> list[dict[str, Any]]:

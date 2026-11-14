@@ -72,6 +72,9 @@ modules/expenses/
 `categories` and `conversations` have the same shape, without what they don't need: neither has `domain/` or a
 repository, and `conversations` has no `models.py` (its one read model, `ThreadRead`, lives in
 `queries/get_thread.py`; `queries/thread_rows.py` is the row reading `GetHistory` and `GetThread` share).
+`receipts` has the same shape too, plus `application/`: its two use cases that aren't bus messages (uploading writes
+a file, reading calls the model, and a handler runs inside a database session), built by `module.py` with the
+`FileStore` and the model passed in.
 
 **Why vertical slices.** A message and its handler change together, so they live in one file: to change a use case
 you open one file, and to add one you write one file and add one `bus.register` line. Each handler is named like
@@ -330,10 +333,11 @@ client = TestClient(create_app(services))      # the real routes, bus and MCP se
 ```
 
 `build()` also takes `tools=` (any `ExpenseTools`); pass it if your `.env` sets `MCP_URL`, or the default tools talk to
-that server (and its database). Use cases take their ports directly (`Assistant(bus, tools, llm)`,
-`ExpenseParser(bus, llm)`, `Agent(llm, tools)`), and `GeminiModel(api_key, model, client_factory=...)` takes a fake SDK
-client. A fake model only needs the method its user calls: `ask_for_json` for `/parse`, `stream_with_tools` for the
-agent.
+that server (and its database). It takes `files=` (any `FileStore`: `save`, `read`, `delete`); pass one when you use a
+copy of the database, or uploads land in the real `UPLOADS_DIR`. Use cases take their ports directly
+(`Assistant(bus, tools, llm)`, `ExpenseParser(bus, llm)`, `ReceiptExtractor(bus, files, llm)`, `Agent(llm, tools)`),
+and `GeminiModel(api_key, model, client_factory=...)` takes a fake SDK client. A fake model only needs the method its
+user calls: `ask_for_json` for `/parse` and receipts (which pass `attachments=`), `stream_with_tools` for the agent.
 
 ## Conventions
 

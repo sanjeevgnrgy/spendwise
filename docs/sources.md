@@ -564,6 +564,31 @@ in", the model replied in Hindi in every turn and still sent tool arguments as t
 **Used in:** `backend/app/core/i18n/` (languages, catalogs, formatting), `web/dependencies.py` (`LanguageDep`),
 `web/src/shared/api/http.ts` (the header) and `web/src/shared/lib/format.ts` (D179).
 
+## 25. google-genai 3.3.0 files, Starlette 1.10.0 uploads, file signatures (Phase 21)
+
+Checked on 2026-11-14.
+
+**Package:** `.venv\Lib\site-packages\google\genai\_gaos\types\interactions\` (google-genai 3.3.0)
+- `interactionsinput.py`: an interaction's `input` is `ContentParam | list[StepParam] | list[ContentParam] | str`, so
+  a one-off request can be a list of content blocks.
+- `imagecontent.py`: `{"type": "image", "data": <base64 str>, "mime_type": ...}`, the types including `image/png`,
+  `image/jpeg`, `image/webp`, `image/heic`, `image/heif`. `documentcontent.py`:
+  `{"type": "document", "data", "mime_type"}`, with `application/pdf` among the types. Both also take a `uri`
+  instead of `data`.
+
+**Package:** `.venv\Lib\site-packages\starlette\formparsers.py` (Starlette 1.10.0)
+- `MultiPartParser.spool_max_size = 1024 * 1024`: an uploaded file is kept in a `SpooledTemporaryFile`, in memory up
+  to 1 MB and on disk beyond. `max_part_size` (1 MB) limits only plain form fields, not files, so nothing limits a
+  file's size before the route runs. The receipts route therefore reads at most one byte past its own limit.
+- `python-multipart` 0.0.33 is what FastAPI uses to parse `multipart/form-data`; the MCP SDK already installs it.
+
+**File signatures** (the first bytes of each kind of file): JPEG `FF D8 FF`; PNG `89 50 4E 47 0D 0A 1A 0A`; WEBP
+`RIFF`, four bytes of size, then `WEBP` (a RIFF container); PDF `%PDF-`. **Observed:** headless Edge's screenshots
+start with the PNG signature and its printed PDFs with `%PDF-`, and both were accepted.
+
+**Used in:** `backend/app/infrastructure/llm/gemini_wire.py` (`to_input`), `backend/app/modules/receipts/` (the
+upload route, `domain/file_types.py`), D181 and D182.
+
 ---
 
 ## How to re-check a package fact

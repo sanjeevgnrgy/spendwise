@@ -12,20 +12,18 @@ which would be held open (a pooled connection kept busy) the whole time. Here th
 (a short query), then the model is called with no session open.
 """
 
-import copy
 import logging
 from dataclasses import dataclass
 from datetime import date
-from decimal import Decimal
 from functools import cache
-from typing import Annotated, Any
+from typing import Any
 
-from pydantic import BaseModel, Field, ValidationError, WithJsonSchema
+from pydantic import BaseModel, Field, ValidationError
 
 from app.core.cqrs import MessageBus
 from app.core.errors import BusinessRuleError
 from app.core.i18n import translatable
-from app.core.llm import LlmError, StructuredOutputModel
+from app.core.llm import DecimalText, LlmError, StructuredOutputModel, restrict_to_choices
 from app.modules import categories
 from app.modules.assistant.i18n import ChatText
 from app.modules.expenses import PaymentMethod
@@ -40,9 +38,8 @@ logger = logging.getLogger(__name__)
 class ParsedExpense(BaseModel):
     """One expense read from a short note the user wrote. Use null for anything the note does not say."""
 
-    # The model's schema has no decimal type. A string keeps the exact digits (a JSON number could be
-    # read as a float); Pydantic then turns it into a Decimal, which the API returns as "450.50".
-    amount: Annotated[Decimal | None, WithJsonSchema({"type": ["string", "null"]})] = Field(
+    # A string the model writes (DecimalText: exact digits, never a float), returned by the API as "450.50".
+    amount: DecimalText = Field(
         description='The amount as a plain number string, e.g. "1250.50", with no currency symbol or commas. '
         "null if the text does not state an amount. Never guess an amount."
     )
@@ -93,22 +90,16 @@ def _system_instruction(today: date) -> str:
 def _base_schema() -> dict[str, Any]:
     """ParsedExpense's JSON schema, generated once: it never changes while the app runs.
 
-    Shared by every request, so callers must copy it before changing anything (see _response_schema).
+    Shared by every request, so it's never changed in place (restrict_to_choices copies it).
     """
     return ParsedExpense.model_json_schema()
 
 
 def _response_schema(category_names: list[str]) -> dict[str, Any]:
     """The schema the model must answer in, with the category limited to `category_names` (or null)."""
-    schema = copy.deepcopy(_base_schema())
-    properties = schema["properties"]
     # The categories live in the database, so they're added to the schema on each request.
     # With an enum, the model can only answer one of these names (or null), never a made-up one.
-    properties[CATEGORY_FIELD] = {
-        "anyOf": [{"type": "string", "enum": category_names}, {"type": "null"}],
-        "description": properties[CATEGORY_FIELD]["description"],
-    }
-    return schema
+    return restrict_to_choices(_base_schema(), CATEGORY_FIELD, category_names)
 
 
 @dataclass(frozen=True)

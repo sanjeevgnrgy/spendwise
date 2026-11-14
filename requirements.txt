@@ -22,3 +22,6 @@ babel==2.18.0
 sqlalchemy==2.1.8
 starlette==1.10.0
 httpx2==2.16.0
+# FastAPI reads uploaded files (multipart/form-data, POST /receipts) with it. The MCP SDK already brings it; pinned
+# because our upload route depends on it directly.
+python-multipart==0.0.33

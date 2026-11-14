@@ -24,6 +24,7 @@ All backend settings are one Pydantic `Settings` class in `backend/app/infrastru
 | `CORS_ORIGINS` | `["http://localhost:5173","http://127.0.0.1:5173"]` | Web pages allowed to call the API from a browser (a JSON list). Add your web app's address if it runs elsewhere |
 | `MCP_TOKEN` | not set | Turns on MCP over HTTP at `/mcp/`, guarded by this shared secret (`Authorization: Bearer <token>`). Not set: no `/mcp/` over HTTP. Make one: `python -c "import secrets; print(secrets.token_urlsafe(32))"` |
 | `MCP_URL` | not set | Only if the expense tools run as a **separate** MCP server: its URL (keep the trailing slash). Not set: the assistant calls this app's own MCP server in-process. When set, `MCP_TOKEN` is sent to it |
+| `UPLOADS_DIR` | `<project>/backend/uploads` | The folder uploaded receipts are kept in, by random names (created on the first upload; git-ignored). It goes with the database: a copy of one needs a copy of the other |
 
 Example `.env`:
 
@@ -50,6 +51,7 @@ These are deliberate design values, each defined once, next to the code it gover
 | `DEFAULT_LIST_LIMIT = 100`, `MAX_LIST_LIMIT = 500` | `expenses/values.py` | `GET /expenses` page size |
 | `DEFAULT_TREND_MONTHS = 6`, `MAX_TREND_MONTHS = 24` | `expenses/values.py` | the trend's length |
 | `MAX_MESSAGE_LENGTH = 2000` | `assistant/api/schemas.py` | one chat message (also the web text box's limit) |
+| `MAX_RECEIPT_MB = 5`, `ReceiptMediaType` (JPEG, PNG, WEBP, PDF), `MAX_LINE_ITEMS = 50` | `receipts/values.py` | what may be uploaded as a receipt, and how many lines the model may list |
 | `DEFAULT_CURRENCY = "INR"`, `CURRENCY_SYMBOLS` (a chart's unit) | `core/money.py` | the currency assumed; amounts are written in their currency's CLDR format (Babel) |
 | the server's languages (English, Hindi), each one's CLDR locale and English name (for the model) | `core/i18n/languages.py` | which `Accept-Language` the server answers in; the web app's table is typed against them |
 | Log level `INFO` for `app.*` | `infrastructure/logging.py` | message text and tool arguments appear only at `DEBUG` |

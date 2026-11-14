@@ -193,6 +193,52 @@ spending are included with 0, so a chart has no gaps.
 {"currency": "INR", "months": [{"month": "2026-06", "expense_count": 0, "total_minor": 0, "total": "0.00"}]}
 ```
 
+## Receipts
+
+### `POST /api/v1/receipts`
+
+Uploads one receipt: `multipart/form-data` with the file in the `file` field. **201 Created** with the receipt, and
+`Location: /api/v1/receipts/{id}`.
+
+```powershell
+curl.exe -F "file=@receipt.jpg" http://127.0.0.1:8000/api/v1/receipts
+```
+
+```json
+{"id": 1, "media_type": "image/jpeg", "size_bytes": 182344, "created_at": "2026-11-14T09:30:00Z"}
+```
+
+- **What's accepted:** JPEG, PNG and WEBP photos, and PDFs, of 5 MB at most. The type is read from the file's first
+  bytes, not its name or `Content-Type`, and `media_type` reports what was found.
+- **422 `business-rule`:** an empty file, one over 5 MB, or any other kind of file. **422 `validation`:** no `file`
+  field.
+- Nothing is read yet: the upload only keeps the file.
+
+### `GET /api/v1/receipts/{receipt_id}`
+
+What's known about an uploaded receipt (the same object as above; not its bytes). 404 if there's no such receipt.
+
+### `POST /api/v1/receipts/{receipt_id}/extraction`
+
+Reads the receipt with the model and answers what it says. **A suggestion: nothing is saved.** A POST, not a GET,
+because each call asks the model again (a few seconds, and quota).
+
+```json
+{
+  "merchant": "GREEN LEAF CAFE", "spent_on": "2026-11-12",
+  "line_items": [
+    {"description": "Masala Chai x2", "amount": "120.00"}, {"description": "Veg Sandwich", "amount": "150.00"}
+  ],
+  "tax": "13.50", "total": "283.50", "currency": "INR", "payment_method": "upi", "category": "Food"
+}
+```
+
+- Any field the receipt doesn't show is `null` (and `line_items` empty); so is anything that can't be right: a
+  `category` that isn't one of yours (it's chosen from your categories), a `currency` that isn't a three-letter code,
+  a `total` that isn't positive. Amounts are strings, like everywhere else.
+- **404** for an unknown receipt, or one whose file is missing from `UPLOADS_DIR` ("upload it again"). **502** if the
+  model fails or its answer can't be used.
+
 ## The assistant
 
 ### `POST /api/v1/parse`

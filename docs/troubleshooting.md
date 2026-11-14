@@ -96,6 +96,36 @@ is in the backend terminal (D180).
 ### `/parse` returns 422 "There are no categories yet"
 - **Fix:** run `.\.venv\Scripts\python.exe backend\seed.py`. Parsing needs the category list to choose from.
 
+## Receipts (`/receipts`)
+
+### Upload returns 422 "Only photos (JPEG, PNG or WEBP) and PDF files can be read as receipts."
+- **Cause:** the file's first bytes aren't a JPEG, PNG, WEBP or PDF, whatever its name says. Most often an iPhone
+  photo in HEIC format, renamed or sent unconverted.
+- **Fix:** export or share it as JPEG (on the iPhone: Settings → Camera → Formats → Most Compatible), or take a
+  screenshot of it. HEIC isn't accepted yet (D181).
+
+### Upload returns 422 "The file is larger than 5 MB."
+- **Fix:** a phone's "medium" or "large" size instead of the original, or a single-page PDF. The limit is
+  `MAX_RECEIPT_MB` in `receipts/values.py`.
+
+### Extraction returns 404 "The file for receipt … is missing. Upload it again."
+- **Cause:** the row exists, but its file isn't in `UPLOADS_DIR`: the folder was emptied or moved, or the database
+  was copied without it (they go together). The server log names the missing key.
+- **Fix:** upload the receipt again; or point `UPLOADS_DIR` back at the folder that has the files.
+
+### Extraction returns 502 "The receipt couldn't be read."
+- **Cause:** Gemini answered, but not in the shape asked for. The server log has a WARNING line ("didn't match
+  ReceiptExtraction"); Pydantic's explanation is logged only at DEBUG, as it quotes the receipt.
+- **Fix:** try again; if it repeats with the same receipt, try a sharper photo. Other 502s are Gemini failing: see
+  the Gemini section above.
+
+### Extraction answers, but with `null`s
+- **Cause:** a field the receipt doesn't show (or that's unreadable) is `null` on purpose, never guessed. So is a value
+  that can't be right: a category that isn't one of yours, a currency that isn't a three-letter code, a total that
+  isn't positive.
+- **Fix:** nothing is wrong; the person fills the gaps when confirming (Part 2's form). A blurred or cropped photo
+  gives more `null`s.
+
 ## Web app
 
 ### Red toast "Can't reach SpendWise right now"

@@ -2,7 +2,7 @@
 
 Rules for AI coding agents, and anyone else, changing SpendWise. They describe how this codebase is built: a change
 that doesn't follow them isn't finished. The reasoning behind each rule is in [docs/](docs/README.md). Read the linked
-doc before working in an area, and check [decisions.md](docs/decisions.md) (D1–D180) before changing a settled choice.
+doc before working in an area, and check [decisions.md](docs/decisions.md) (D1–D182) before changing a settled choice.
 
 | Before you change… | Read |
 |---|---|
@@ -34,7 +34,7 @@ doc before working in an area, and check [decisions.md](docs/decisions.md) (D1�
 ## 2. Backend: a modular monolith with CQRS (`backend/`)
 
 **Modules.** One per business domain, in `backend/app/modules/<name>/`: `categories`, `conversations`, `expenses`,
-`assistant`, `mcp`. Split by domain, never by technical layer (no app-wide `models/` or `routers/`).
+`receipts`, `assistant`, `mcp`. Split by domain, never by technical layer (no app-wide `models/` or `routers/`).
 
 **Commands and queries.** Every operation is a **command** (changes data, returns at most an id) or a **query** (reads,
 changes nothing): a frozen Pydantic message with exactly one handler. Send them through the bus (`bus.execute`,
@@ -73,8 +73,9 @@ modules need it. Recipes: [backend_onboarding.md](docs/backend_onboarding.md).
   (route dependencies, problem responses) import only `core/`. Modules never import `infrastructure/` (what it builds
   is passed in); only their HTTP adapters (`api.py`, `assistant/api/routes.py`, `mcp/http.py`) import `web/`.
 - Only `bootstrap.py` and `main.py` import a `module.py`.
-- Module dependencies stay one-way: expenses → categories; mcp → expenses, categories; assistant → the rest. A new
-  dependency must not create a cycle; if two modules need each other, redesign (an event, or a third module).
+- Module dependencies stay one-way: expenses → categories; mcp → expenses, categories; receipts → categories,
+  expenses; assistant → the rest. A new dependency must not create a cycle; if two modules need each other,
+  redesign (an event, or a third module).
 - Inside the assistant, imports run `api/` → `application/` → `agent/`, `approvals/`, `tools/`, `a2ui/`, never back.
 
 **Composition root.** `bootstrap.build(clock, llm, tools, engine)` creates everything replaceable;
@@ -82,8 +83,14 @@ modules need it. Recipes: [backend_onboarding.md](docs/backend_onboarding.md).
 
 **Ports and adapters.** The model sits behind `core/llm` ports: depend on the narrowest one you call
 (`StructuredOutputModel` or `ToolCallingModel`). Only `bootstrap.py` imports the Gemini adapter
-(`infrastructure/llm/`). The expense tools sit behind `ExpenseTools`. Time comes from the injected clock
+(`infrastructure/llm/`). The expense tools sit behind `ExpenseTools`, uploaded files' bytes behind `FileStore`
+(`core/files.py`; never a path built from a user's file name). Time comes from the injected clock
 (`ctx.clock`, `ClockDep`), never `date.today()` or `datetime.now()`.
+
+**Files the model reads are data.** A receipt (or any attachment) goes to the model through `ask_for_json(...,
+attachments=...)`, in a call without tools; its type is judged by its bytes, the instruction says its text is never
+an instruction, and the answer is checked before anyone sees it. Nothing read from a file is saved until a person
+confirms it (D182).
 
 **Money** is stored as integer paise; it's `Decimal` rupees at the edges (`rupees_to_paise`, `format_money`). Never
 `float`.

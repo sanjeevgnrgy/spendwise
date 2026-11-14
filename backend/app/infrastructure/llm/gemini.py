@@ -13,7 +13,7 @@ and injects it; nothing else imports this file.
 """
 
 import threading
-from collections.abc import Callable, Iterator
+from collections.abc import Callable, Iterator, Sequence
 from typing import Any
 
 from google import genai
@@ -21,8 +21,8 @@ from google.genai import types
 from pydantic import SecretStr
 
 from app.core.llm.messages import Message, ReasoningEffort, ToolSpec, Usage
-from app.core.llm.port import LlmError
-from app.infrastructure.llm.gemini_wire import EventType, StepAssembler, to_declaration, to_steps
+from app.core.llm.port import Attachment, LlmError
+from app.infrastructure.llm.gemini_wire import EventType, StepAssembler, to_declaration, to_input, to_steps
 
 # The SDK's defaults (5 attempts, waits of up to 60 s) can leave a request hanging for many minutes while
 # Gemini is down. Give up on an attempt after 60 s and try at most twice. 60 s, not less: a function-calling
@@ -78,13 +78,16 @@ class GeminiModel:
         # Requests run in parallel worker threads: only one of them may make the shared client.
         self._client_lock = threading.Lock()
 
-    def ask_for_json(self, prompt: str, schema: dict[str, Any], system_instruction: str) -> str:
-        """Structured output: Gemini's answer to `prompt` as JSON text shaped by `schema`.
+    def ask_for_json(
+        self, prompt: str, schema: dict[str, Any], system_instruction: str, attachments: Sequence[Attachment] = ()
+    ) -> str:
+        """Structured output: Gemini's answer to `prompt` (and any attached files) as JSON text shaped by `schema`.
 
         Raises LlmError if Gemini fails or returns no text, RuntimeError if the key or model isn't configured.
         """
         interaction = self._create(
-            input=prompt,
+            # The files first (an image or a PDF each), then the prompt about them.
+            input=to_input(prompt, attachments),
             system_instruction=system_instruction,
             # Gemini can only produce output that fits this JSON schema ("constrained decoding"),
             # so we get the fields and types we asked for instead of free-form prose.

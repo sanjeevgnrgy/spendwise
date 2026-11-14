@@ -84,6 +84,20 @@ response_format={"type": "text", "mime_type": "application/json", "schema": Some
 - **Descriptions are instructions:** Gemini reads each field's `description`.
 - Very large or deeply nested schemas can be rejected with `400 INVALID_ARGUMENT`.
 
+### Reading files (multimodal input)
+
+`ask_for_json(..., attachments=[Attachment(data, media_type)])` sends files with the prompt: the receipts module
+reads a receipt this way (Phase 21). The adapter (`gemini_wire.to_input`) turns the input into a list of content
+blocks: each file inline, base64-encoded, as an `image` block (`image/jpeg`, `image/png`, `image/webp`) or a
+`document` block (`application/pdf`), then the prompt as a `text` block. With no files the input stays the plain
+prompt string, so `/parse` is unchanged.
+
+- **Measured** (2026-11-14, the free-tier model in `.env`, a synthetic cafe receipt): a PNG and a PDF of the same
+  receipt gave the same answer in 2–4 s, with the date read as day/month (Indian order), CGST and SGST added up as the
+  tax, and "UPI (GPay)" read as `upi`. A line printed on the receipt telling the model to change the total was
+  ignored.
+- Files travel inline, so a request carries the whole file (5 MB at most here, about 6.7 MB once base64-encoded).
+
 ## Function calling
 
 `llm.stream_with_tools(history, tools, system_instruction, effort)` runs one step of a tool-using conversation,

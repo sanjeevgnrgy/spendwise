@@ -1,11 +1,12 @@
 """Settings and fixed values the whole backend reads (infrastructure).
 
 Values that differ between machines (the Gemini key and model, the database URL, CORS origins, the MCP token
-and URL) come from the environment or .env, into the one `settings` object, read once at startup. Values that
-are part of the design (the API prefix and version, the MCP path) are constants instead: they change in code,
-together with the contract, never per machine. Read by db.py (the default engine), the composition root (which
-hands the Gemini key and model to the Gemini adapter, and the MCP URL and token to the tools), main.py (CORS),
-the migrations and the export script. docs/configuration.md lists every setting.
+and URL, the uploads folder) come from the environment or .env, into the one `settings` object, read once at
+startup. Values that are part of the design (the API prefix and version, the MCP path) are constants instead: they
+change in code, together with the contract, never per machine. Read by db.py (the default engine), the composition
+root (which hands the Gemini key and model to the Gemini adapter, the MCP URL and token to the tools, and the uploads
+folder to the file store), main.py (CORS), the migrations and the export script. docs/configuration.md lists every
+setting.
 """
 
 from pathlib import Path
@@ -55,6 +56,9 @@ class Settings(BaseSettings):
     cors_origins: list[str] = ["http://localhost:5173", "http://127.0.0.1:5173"]
     # A local SQLite file by default; point DATABASE_URL at Postgres later without code changes.
     database_url: str = f"sqlite:///{(BACKEND_DIR / 'spendwise.db').as_posix()}"
+    # The folder uploaded files (receipts) are kept in, by random names. Git-ignored: it's your data, like the
+    # database.
+    uploads_dir: Path = BACKEND_DIR / "uploads"
 
 
 # Read once at startup. Real environment variables override values from .env.

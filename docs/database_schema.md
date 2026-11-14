@@ -38,6 +38,13 @@ erDiagram
         JSON expense "snapshot shown on the card"
         DATETIME created_at "indexed"
     }
+    receipt_file {
+        INTEGER id PK
+        VARCHAR_32 storage_key "unique; the file is in UPLOADS_DIR"
+        VARCHAR_15 media_type "read from the file's bytes"
+        INTEGER size_bytes
+        DATETIME created_at "UTC, with time zone"
+    }
     category ||..o{ expense : "category_id (checked in code)"
 ```
 
@@ -50,6 +57,7 @@ The dotted line is a link kept **in code**, not by the database: there are no fo
 | `expense` | expenses | every expense |
 | `conversation_message` | conversations | chat history, one row per message |
 | `pending_approval` | assistant | delete cards waiting for Approve or Cancel |
+| `receipt_file` | receipts | uploaded receipts (the files themselves are in `UPLOADS_DIR`, not the database) |
 | `alembic_version` | (migrations) | which migration the database is at |
 
 ## `category`
@@ -124,6 +132,20 @@ provider's private data (Gemini's thought signature, needed to continue after a 
 At most 200 are kept (oldest forgotten first). Taking a card removes it, so each card decides once; if the decision
 fails midway, the card is put back unchanged (same age).
 
+## `receipt_file`
+
+| Column | Type | Notes |
+|---|---|---|
+| `id` | INTEGER, primary key | the receipt's id (`POST /receipts` answers it) |
+| `storage_key` | VARCHAR(32), unique, not null | where the bytes are: a random key (a UUID's hex digits) the `FileStore` made, never a name the user sent |
+| `media_type` | VARCHAR(15), not null | `image/jpeg`, `image/png`, `image/webp` or `application/pdf`, read from the file's first bytes |
+| `size_bytes` | INTEGER, not null | at most 5 MB |
+| `created_at` | DATETIME with time zone, not null | when it was uploaded (UTC) |
+
+**The bytes aren't in the database.** A receipt can be megabytes; the database keeps the row, and the file is kept in
+`UPLOADS_DIR` under its key (D181). The upload saves the file first and deletes it again if the row can't be added,
+so there's never a file without a row. Nothing deletes receipts yet.
+
 ## Rules every table follows
 
 - **One owner.** Only the owning module's handlers touch a table. Other modules ask through the bus
@@ -146,6 +168,7 @@ The tables are created and changed only by **Alembic migrations** in `backend/mi
 | `0002_neutral_conversations` | renames `chatmessage` → `conversation_message` and converts every stored message from Gemini's format to SpendWise's own (and back, on downgrade); adds `pending_approval` |
 | `0003_expense_version` | adds `expense.version` (existing expenses start at 1) |
 | `0004_conversation_turn_index` | indexes `conversation_message` on (thread_id, turn) and drops the old thread_id index, which the new one makes redundant |
+| `0005_receipt_files` | adds `receipt_file` (Phase 21); downgrade drops it and leaves the files in `UPLOADS_DIR` |
 
 - `.\run.ps1` runs `alembic upgrade head` before starting; `seed.py` and `mcp_stdio.py` do too. The app itself only
   checks, and refuses to start on an out-of-date database with the command to fix it.

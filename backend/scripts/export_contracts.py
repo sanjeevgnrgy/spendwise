@@ -20,7 +20,7 @@ sys.path.insert(0, str(BACKEND_DIR))
 from app.core.config import API_PREFIX, PROJECT_DIR  # noqa: E402
 from app.core.errors import PROBLEM_JSON  # noqa: E402
 from app.core.money import CURRENCY_SYMBOLS, DEFAULT_CURRENCY  # noqa: E402
-from app.main import app  # noqa: E402
+from app.main import create_app  # noqa: E402
 from app.modules.assistant.a2ui import MAX_USER_MESSAGE_LENGTH, ActionName, Catalog  # noqa: E402
 from app.modules.assistant.a2ui.models import (  # noqa: E402
     A2UI_VERSION,
@@ -31,17 +31,17 @@ from app.modules.assistant.a2ui.models import (  # noqa: E402
     Component,
     Trend,
 )
-from app.modules.assistant.protocol import (  # noqa: E402
+from app.modules.assistant.api.protocol import (  # noqa: E402
     FORWARDED_A2UI_ACTION,
     STATE_DATA_VERSION,
     CustomEventName,
     MetadataKey,
 )
-from app.modules.assistant.schemas import MAX_MESSAGE_LENGTH  # noqa: E402
+from app.modules.assistant.api.schemas import MAX_MESSAGE_LENGTH  # noqa: E402
 from app.modules.categories import UNKNOWN_CATEGORY  # noqa: E402
 from app.modules.conversations import THREAD_ID_MAX_LENGTH  # noqa: E402
 from app.modules.expenses import PAYMENT_METHOD_LABELS  # noqa: E402
-from app.modules.expenses.contracts import (  # noqa: E402
+from app.modules.expenses.values import (  # noqa: E402
     DEFAULT_LIST_LIMIT,
     DEFAULT_TREND_MONTHS,
     MAX_LIST_LIMIT,
@@ -71,7 +71,9 @@ def _component_names() -> dict[str, str]:
 def main() -> None:
     """Write web/openapi.json and contracts.gen.ts from the backend's current code."""
     openapi = WEB_DIR / "openapi.json"
-    openapi.write_text(json.dumps(app.openapi(), indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
+    # Built here, not imported: app.main builds nothing at import (uvicorn calls create_app itself).
+    document = create_app().openapi()
+    openapi.write_text(json.dumps(document, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
 
     contracts = {
         "API_PREFIX": API_PREFIX,

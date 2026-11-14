@@ -1,3 +1,6 @@
+// A component of the expenses feature: the "Add expense" button and the dialog it opens, a form for the amount,
+// date, merchant, category, payment method and note. Used by the Expenses page, next to its title.
+
 import { Plus } from "lucide-react"
 import { useState, type FormEvent } from "react"
 import { toast } from "sonner"
@@ -18,36 +21,43 @@ import {
   DialogTrigger,
 } from "@/shared/ui/dialog"
 import { Input } from "@/shared/ui/input"
-import { Label } from "@/shared/ui/label"
 
-import { emptyDraft, isComplete, toNewExpense, type ExpenseDraft } from "../expense-form"
+import { emptyDraft, isComplete, toNewExpense } from "../expense-form"
 import { useCreateExpense } from "../queries"
+import { useExpenseDraft, type ExpenseDraftState } from "../use-expense-draft"
+import { LabeledField } from "./labeled-field"
 import { PaymentMethodSelect } from "./payment-method-select"
 
+// A blank draft dated today. A function, so "today" is worked out each time the form starts again, not once.
+const blankDraft = () => emptyDraft(todayIso())
+
+/**
+ * The Add expense button and its dialog. Save is enabled once the required fields are filled in (the backend
+ * checks the rest). On success the dialog closes, a toast says so, and the form starts empty again; on failure
+ * the backend's reason shows as a toast and the dialog stays open with what you typed. Cancel keeps the draft
+ * for next time. The list reloads by itself, because the mutation declares that it changed expenses.
+ */
 export function AddExpenseDialog() {
-  // Each piece of state is a value React remembers between renders; changing it re-renders the dialog.
+  // Whether the dialog is open; the draft lives in useExpenseDraft, so closing the dialog keeps it.
   const [open, setOpen] = useState(false)
-  const [draft, setDraft] = useState<ExpenseDraft>(() => emptyDraft(todayIso()))
+  const { draft, setField, reset } = useExpenseDraft(blankDraft)
   const create = useCreateExpense()
 
-  // Change one field, keep the others. A new object (not a mutation) is what tells React to re-render.
-  function setField<K extends keyof ExpenseDraft>(field: K, value: ExpenseDraft[K]) {
-    setDraft((current) => ({ ...current, [field]: value }))
-  }
-
+  // Save (the button, or Enter in a text box): send the draft as a new expense.
   function handleSubmit(event: FormEvent) {
     event.preventDefault() // stop the browser's default form submit, which would reload the page
     create.mutate(toNewExpense(draft), {
       onSuccess: () => {
         toast.success("Expense added")
         setOpen(false)
-        setDraft(emptyDraft(todayIso()))
+        reset()
       },
       // e.g. "Amount must be greater than 0", straight from the backend's rules. The dialog stays open.
       onError: (error) => toast.error(messageOf(error)),
     })
   }
 
+  // Save shows "Saving…" and waits while the request runs; Cancel only closes the dialog (the draft stays).
   return (
     <Dialog open={open} onOpenChange={setOpen}>
       <DialogTrigger asChild>
@@ -62,62 +72,7 @@ export function AddExpenseDialog() {
             <DialogDescription>Amounts are in {DEFAULT_CURRENCY}, e.g. 450.50.</DialogDescription>
           </DialogHeader>
 
-          <div className="grid grid-cols-2 gap-3">
-            <div className="grid gap-1.5">
-              <Label htmlFor="add-amount">Amount</Label>
-              <Input
-                id="add-amount"
-                inputMode="decimal"
-                placeholder="450.50"
-                value={draft.amount}
-                onChange={(event) => setField("amount", event.target.value)}
-              />
-            </div>
-            <div className="grid gap-1.5">
-              <Label htmlFor="add-date">Date</Label>
-              <Input
-                id="add-date"
-                type="date"
-                value={draft.spent_on}
-                onChange={(event) => setField("spent_on", event.target.value)}
-              />
-            </div>
-          </div>
-
-          <div className="grid gap-1.5">
-            <Label htmlFor="add-merchant">Merchant</Label>
-            <Input
-              id="add-merchant"
-              placeholder="Swiggy"
-              value={draft.merchant}
-              onChange={(event) => setField("merchant", event.target.value)}
-            />
-          </div>
-
-          <div className="grid grid-cols-2 gap-3">
-            <div className="grid gap-1.5">
-              <Label htmlFor="add-category">Category</Label>
-              <CategorySelect id="add-category" value={draft.category_id} onChange={(value) => setField("category_id", value)} />
-            </div>
-            <div className="grid gap-1.5">
-              <Label htmlFor="add-payment">Paid with</Label>
-              <PaymentMethodSelect
-                id="add-payment"
-                value={draft.payment_method}
-                onChange={(value) => setField("payment_method", value)}
-              />
-            </div>
-          </div>
-
-          <div className="grid gap-1.5">
-            <Label htmlFor="add-note">Note (optional)</Label>
-            <Input
-              id="add-note"
-              placeholder="Dinner"
-              value={draft.note}
-              onChange={(event) => setField("note", event.target.value)}
-            />
-          </div>
+          <AddExpenseFields draft={draft} setField={setField} />
 
           <DialogFooter>
             <DialogClose asChild>
@@ -132,5 +87,64 @@ export function AddExpenseDialog() {
         </form>
       </DialogContent>
     </Dialog>
+  )
+}
+
+// The form's fields, between its header and its buttons. Amount and date share a row, as do category and payment
+// method; each control's id ties it to its label.
+function AddExpenseFields({ draft, setField }: Pick<ExpenseDraftState, "draft" | "setField">) {
+  return (
+    <>
+      <div className="grid grid-cols-2 gap-3">
+        <LabeledField id="add-amount" label="Amount">
+          <Input
+            id="add-amount"
+            inputMode="decimal"
+            placeholder="450.50"
+            value={draft.amount}
+            onChange={(event) => setField("amount", event.target.value)}
+          />
+        </LabeledField>
+        <LabeledField id="add-date" label="Date">
+          <Input
+            id="add-date"
+            type="date"
+            value={draft.spent_on}
+            onChange={(event) => setField("spent_on", event.target.value)}
+          />
+        </LabeledField>
+      </div>
+
+      <LabeledField id="add-merchant" label="Merchant">
+        <Input
+          id="add-merchant"
+          placeholder="Swiggy"
+          value={draft.merchant}
+          onChange={(event) => setField("merchant", event.target.value)}
+        />
+      </LabeledField>
+
+      <div className="grid grid-cols-2 gap-3">
+        <LabeledField id="add-category" label="Category">
+          <CategorySelect id="add-category" value={draft.category_id} onChange={(value) => setField("category_id", value)} />
+        </LabeledField>
+        <LabeledField id="add-payment" label="Paid with">
+          <PaymentMethodSelect
+            id="add-payment"
+            value={draft.payment_method}
+            onChange={(value) => setField("payment_method", value)}
+          />
+        </LabeledField>
+      </div>
+
+      <LabeledField id="add-note" label="Note (optional)">
+        <Input
+          id="add-note"
+          placeholder="Dinner"
+          value={draft.note}
+          onChange={(event) => setField("note", event.target.value)}
+        />
+      </LabeledField>
+    </>
   )
 }

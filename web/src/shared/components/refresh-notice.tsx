@@ -1,18 +1,26 @@
+// A shared component: the "couldn't refresh, so this may be out of date" line shown above data that's still on
+// screen. Part of shared/. Used by the Dashboard and Expenses pages.
+
 import { RefreshCw, TriangleAlert } from "lucide-react"
 
 import { Button } from "@/shared/ui/button"
 
 interface RefreshNoticeProps {
+  /** Why the reload failed (messageOf the error). */
   message: string
+  /** Retry was pressed. */
   onRetry: () => void
+  /** A retry is in flight: the button waits and its icon spins. */
   retrying?: boolean
 }
 
-// Data is on screen, but reloading it just failed: keep showing it, and say it may be out of date.
-// (Replacing good data with an error card because one refresh failed would be worse.)
+/**
+ * Data is on screen, but reloading it just failed: keep showing it, and say it may be out of date, with Retry.
+ * (Replacing good data with an error card because one refresh failed would be worse.)
+ */
 export function RefreshNotice({ message, onRetry, retrying = false }: RefreshNoticeProps) {
+  // <output> is announced politely by screen readers (its role is "status").
   return (
-    // <output> is announced politely by screen readers (its role is "status").
     <output className="flex flex-wrap items-center gap-2 rounded-md border px-3 py-2 text-sm text-muted-foreground">
       <TriangleAlert className="size-4 shrink-0" />
       <span className="min-w-0 flex-1">Couldn't refresh, so this may be out of date: {message}</span>

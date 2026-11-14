@@ -1,9 +1,15 @@
+// A component of the dashboard feature: the row of three stat cards at the top of the Dashboard. Used by the
+// Dashboard page.
+
 import { formatMoney, formatMonth, plural } from "@/shared/lib/format"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/shared/ui/card"
 
 import type { MonthlySummary } from "../api"
 
-// Three headline numbers for the current month, all straight from the backend's summary.
+/**
+ * Three headline numbers for the current month, all straight from the backend's summary: the total spent, how many
+ * expenses (and categories used), and the top category with its total.
+ */
 export function StatCards({ summary }: { summary: MonthlySummary }) {
   const top = summary.by_category[0] // the list comes biggest first
   const monthName = formatMonth(summary.month)

@@ -1,218 +1,71 @@
-import {
-  createColumnHelper,
-  createSortedRowModel,
-  flexRender,
-  rowSelectionFeature,
-  rowSortingFeature,
-  sortFn_alphanumeric,
-  sortFn_basic,
-  tableFeatures,
-  useTable,
-  type RowSelectionState,
-  type SortDirection,
-} from "@tanstack/react-table"
-import { ArrowDown, ArrowUp, ArrowUpDown, Pencil, Trash2 } from "lucide-react"
-import { useIsMutating } from "@tanstack/react-query"
+// A component of the expenses feature: the expenses table (TanStack Table), with the count line above it, sortable
+// headers, tick boxes, Edit and Delete on each row, and the inline edit row. It puts together the parts: the
+// columns (expense-columns.tsx), the count line (expenses-toolbar.tsx), inline editing (use-expense-editor.ts) and
+// the row selection kept here. Deleting goes through the page, which asks "are you sure?" first.
+// Used by the Expenses page.
+
+import { flexRender, useTable, type Row, type RowSelectionState } from "@tanstack/react-table"
 import { useMemo, useState } from "react"
-import { toast } from "sonner"
 
 import { useCategoryName } from "@/features/categories"
-import { messageOf } from "@/shared/lib/errors"
-import { formatDate, formatMoney, plural } from "@/shared/lib/format"
-import { Badge } from "@/shared/ui/badge"
-import { Button } from "@/shared/ui/button"
-import { Checkbox } from "@/shared/ui/checkbox"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/shared/ui/table"
 
-import type { Expense, ExpenseChanges } from "../api"
-import { paymentMethodLabel } from "../payment-methods"
-import { expenseKeys, useUpdateExpense } from "../queries"
+import type { Expense } from "../api"
+import { useIsDeletingExpenses } from "../queries"
 import { EditRow } from "./edit-row"
-
-// TanStack Table v9: you opt in to each feature you use. Here: sorting (with its sorted row
-// model) and row selection. Defined once, outside the component, so it never changes.
-const features = tableFeatures({
-  rowSortingFeature,
-  rowSelectionFeature,
-  sortedRowModel: createSortedRowModel(),
-})
-const columnHelper = createColumnHelper<typeof features, Expense>()
-
-interface SortButtonProps {
-  title: string
-  sorted: false | SortDirection
-  onClick?: (event: unknown) => void
-}
-
-// What screen readers announce for a sorted column (the header cell's aria-sort).
-const ARIA_SORT = { asc: "ascending", desc: "descending" } as const
-
-// A column header you can click to sort; the arrow shows the current direction.
-function SortButton({ title, sorted, onClick }: SortButtonProps) {
-  const Icon = sorted === "asc" ? ArrowUp : sorted === "desc" ? ArrowDown : ArrowUpDown
-  return (
-    <Button variant="ghost" size="sm" className="-mx-2.5" onClick={onClick} aria-label={`Sort by ${title}`}>
-      {title}
-      <Icon className="size-3.5" />
-    </Button>
-  )
-}
-
-function pickSort(sorted: false | SortDirection) {
-  return sorted ? ARIA_SORT[sorted] : undefined
-}
+import { ariaSortOf, expenseColumns, expenseTableFeatures } from "./expense-columns"
+import { ExpensesToolbar } from "./expenses-toolbar"
+import { useExpenseEditor, type ExpenseEditor } from "./use-expense-editor"
 
 interface ExpensesTableProps {
+  /** The rows to show (the newest first, as the API sends them). */
   expenses: Expense[]
-  total: number // how many match the filters; `expenses` may hold fewer (the API's limit)
+  /** How many match the filters; `expenses` may hold fewer (the API's limit). */
+  total: number
+  /** Nothing has loaded yet: an empty table says "Loading…". */
   loading: boolean
-  // Asks the page to confirm and delete these expenses (one row, or all selected rows).
+  /** Asks the page to confirm and delete these expenses (one row, or all selected rows). */
   onDelete: (expenses: Expense[]) => void
 }
 
-export function ExpensesTable({ expenses, total, loading, onDelete }: ExpensesTableProps) {
-  const [editingId, setEditingId] = useState<number | null>(null)
-  const update = useUpdateExpense()
-  // A delete is running (the confirmation dialog started it): its rows can't be deleted twice meanwhile.
-  const deleting = useIsMutating({ mutationKey: expenseKeys.deleting }) > 0
-  const categoryName = useCategoryName()
-  // Which rows are ticked, as { "12": true, "15": true }. Kept here (not only inside the table)
-  // so this component decides when it's cleared.
+// Which rows are ticked, as { "12": true, "15": true }. Kept here (not only inside the table) so the table
+// decides when it's cleared: new data (after a filter change, add, edit or delete) clears it, so hidden or
+// already-deleted rows can't stay selected by accident. React's "reset state when a prop changes" pattern:
+// compare during render instead of in an effect.
+function useSelectionOf(expenses: Expense[]) {
   const [rowSelection, setRowSelection] = useState<RowSelectionState>({})
   const [selectionFor, setSelectionFor] = useState(expenses)
-
-  // New data (after a filter change, add, edit or delete) clears the selection, so hidden or
-  // already-deleted rows can't stay selected by accident. React's "reset state when a prop changes"
-  // pattern: compare during render instead of in an effect.
   if (selectionFor !== expenses) {
     setSelectionFor(expenses)
     setRowSelection({})
   }
+  return [rowSelection, setRowSelection] as const
+}
 
-  // Leave edit mode for this row only: another row may have been opened while this one was saving.
-  const closeEditor = (id: number) => setEditingId((open) => (open === id ? null : open))
+/**
+ * The expenses as a table: a count line ("140 expenses · showing the newest 100 · 2 selected"), then one row per
+ * expense. Clicking a header sorts by id, date, merchant, category or amount; sorting happens in the browser,
+ * within the rows already loaded. The row being edited is drawn as an EditRow. While a delete runs, every
+ * delete button is disabled.
+ */
+export function ExpensesTable({ expenses, total, loading, onDelete }: ExpensesTableProps) {
+  const editor = useExpenseEditor()
+  // A delete is running (the confirmation dialog started it): its rows can't be deleted twice meanwhile.
+  const deleting = useIsDeletingExpenses()
+  const categoryName = useCategoryName()
+  const [rowSelection, setRowSelection] = useSelectionOf(expenses)
+  // The same function on every render (React's state setter), so it never makes the columns rebuild.
+  const onEdit = editor.start
 
-  function save(id: number, changes: ExpenseChanges) {
-    if (Object.keys(changes).length === 0) return closeEditor(id) // nothing changed: just leave edit mode
-    update.mutate(
-      { id, changes },
-      {
-        onSuccess: () => {
-          toast.success("Expense updated")
-          closeEditor(id)
-        },
-        onError: (error) => toast.error(messageOf(error)),
-      },
-    )
-  }
-
-  // The column definitions: what each column shows, and how it sorts. useMemo keeps the same
-  // array between renders (rebuilding it only when its inputs change), as TanStack recommends.
+  // useMemo keeps the same columns between renders, rebuilding them only when their inputs change, as TanStack
+  // recommends. onDelete is the page's state setter, so it's stable too.
   const columns = useMemo(
-    () =>
-      columnHelper.columns([
-        columnHelper.display({
-          id: "select",
-          header: ({ table }) => (
-            <Checkbox
-              aria-label="Select all"
-              checked={table.getIsAllRowsSelected() || (table.getIsSomeRowsSelected() && "indeterminate")}
-              onCheckedChange={(value) => table.toggleAllRowsSelected(value === true)}
-            />
-          ),
-          cell: ({ row }) => (
-            <Checkbox
-              aria-label={`Select #${row.original.id}`}
-              checked={row.getIsSelected()}
-              onCheckedChange={(value) => row.toggleSelected(value === true)}
-            />
-          ),
-          enableSorting: false,
-        }),
-        // The id as "#14": the assistant shows ids the same way, so you can say "delete #14".
-        columnHelper.accessor("id", {
-          header: ({ column }) => (
-            <SortButton title="ID" sorted={column.getIsSorted()} onClick={column.getToggleSortingHandler()} />
-          ),
-          cell: ({ getValue }) => <span className="text-muted-foreground tabular-nums">#{getValue()}</span>,
-          sortFn: sortFn_basic,
-        }),
-        columnHelper.accessor("spent_on", {
-          header: ({ column }) => (
-            <SortButton title="Date" sorted={column.getIsSorted()} onClick={column.getToggleSortingHandler()} />
-          ),
-          cell: ({ getValue }) => formatDate(getValue()),
-          // "YYYY-MM-DD" strings sort correctly as plain text.
-          sortFn: sortFn_alphanumeric,
-        }),
-        columnHelper.accessor("merchant", {
-          header: ({ column }) => (
-            <SortButton title="Merchant" sorted={column.getIsSorted()} onClick={column.getToggleSortingHandler()} />
-          ),
-          cell: ({ getValue }) => <span className="font-medium">{getValue()}</span>,
-          sortFn: sortFn_alphanumeric,
-        }),
-        columnHelper.accessor((expense) => categoryName(expense.category_id), {
-          id: "category",
-          header: ({ column }) => (
-            <SortButton title="Category" sorted={column.getIsSorted()} onClick={column.getToggleSortingHandler()} />
-          ),
-          sortFn: sortFn_alphanumeric,
-        }),
-        // Sort by the paise value (a whole number), but display the rupee string.
-        columnHelper.accessor("amount_minor", {
-          id: "amount",
-          header: ({ column }) => (
-            <div className="flex justify-end">
-              <SortButton title="Amount" sorted={column.getIsSorted()} onClick={column.getToggleSortingHandler()} />
-            </div>
-          ),
-          cell: ({ row }) => (
-            <div className="text-right tabular-nums">{formatMoney(row.original.amount, row.original.currency)}</div>
-          ),
-          sortFn: sortFn_basic,
-        }),
-        columnHelper.accessor("payment_method", {
-          header: "Paid with",
-          cell: ({ getValue }) => <Badge variant="secondary">{paymentMethodLabel(getValue())}</Badge>,
-          enableSorting: false,
-        }),
-        columnHelper.accessor("note", {
-          header: "Note",
-          cell: ({ getValue }) => <span className="text-muted-foreground">{getValue() ?? ""}</span>,
-          enableSorting: false,
-        }),
-        columnHelper.display({
-          id: "actions",
-          header: () => <span className="sr-only">Actions</span>,
-          cell: ({ row }) => (
-            <div className="flex justify-end gap-1">
-              <Button
-                size="icon-sm"
-                variant="ghost"
-                aria-label={`Edit #${row.original.id}`}
-                onClick={() => setEditingId(row.original.id)}
-              >
-                <Pencil />
-              </Button>
-              <Button
-                size="icon-sm"
-                variant="ghost"
-                aria-label={`Delete #${row.original.id}`}
-                disabled={deleting}
-                onClick={() => onDelete([row.original])}
-              >
-                <Trash2 className="text-destructive" />
-              </Button>
-            </div>
-          ),
-        }),
-      ]),
-    [categoryName, deleting, onDelete],
+    () => expenseColumns({ categoryName, deleting, onEdit, onDelete }),
+    [categoryName, deleting, onEdit, onDelete],
   )
 
   const table = useTable({
-    features,
+    features: expenseTableFeatures,
     columns,
     data: expenses,
     // Use the expense id as the row id, so selection and editing follow the expense, not its position.
@@ -223,23 +76,19 @@ export function ExpensesTable({ expenses, total, loading, onDelete }: ExpensesTa
     onRowSelectionChange: setRowSelection,
   })
 
-  const rows = table.getRowModel().rows
+  // The ticked expenses, for the count and Delete selected.
   const selected = table.getSelectedRowModel().rows.map((row) => row.original)
 
+  // Each header cell says how it's sorted (aria-sort).
   return (
     <div className="flex flex-col gap-2">
-      <div className="flex min-h-8 items-center justify-between gap-2 text-sm text-muted-foreground">
-        <span>
-          {plural(total, "expense")}
-          {total > expenses.length && ` · showing the newest ${expenses.length}`}
-          {selected.length > 0 && ` · ${selected.length} selected`}
-        </span>
-        {selected.length > 0 && (
-          <Button size="sm" variant="destructive" disabled={deleting} onClick={() => onDelete(selected)}>
-            <Trash2 /> Delete selected
-          </Button>
-        )}
-      </div>
+      <ExpensesToolbar
+        total={total}
+        shown={expenses.length}
+        selected={selected.length}
+        deleting={deleting}
+        onDeleteSelected={() => onDelete(selected)}
+      />
 
       <div className="rounded-lg border">
         <Table>
@@ -247,43 +96,60 @@ export function ExpensesTable({ expenses, total, loading, onDelete }: ExpensesTa
             {table.getHeaderGroups().map((headerGroup) => (
               <TableRow key={headerGroup.id}>
                 {headerGroup.headers.map((header) => (
-                  <TableHead key={header.id} aria-sort={pickSort(header.column.getIsSorted())}>
+                  <TableHead key={header.id} aria-sort={ariaSortOf(header.column.getIsSorted())}>
                     {header.isPlaceholder ? null : flexRender(header.column.columnDef.header, header.getContext())}
                   </TableHead>
                 ))}
               </TableRow>
             ))}
           </TableHeader>
-          <TableBody>
-            {rows.length === 0 ? (
-              <TableRow>
-                <TableCell colSpan={columns.length} className="h-24 text-center text-muted-foreground">
-                  {loading ? "Loading…" : "No expenses match these filters."}
-                </TableCell>
-              </TableRow>
-            ) : (
-              rows.map((row) =>
-                row.original.id === editingId ? (
-                  <EditRow
-                    key={row.id}
-                    expense={row.original}
-                    saving={update.isPending && update.variables?.id === row.original.id}
-                    onCancel={() => setEditingId(null)}
-                    onSave={(changes) => save(row.original.id, changes)}
-                  />
-                ) : (
-                  <TableRow key={row.id} data-state={row.getIsSelected() ? "selected" : undefined}>
-                    {/* getAllCells: v9 only has getVisibleCells with the column-visibility feature, which we don't use. */}
-                    {row.getAllCells().map((cell) => (
-                      <TableCell key={cell.id}>{flexRender(cell.column.columnDef.cell, cell.getContext())}</TableCell>
-                    ))}
-                  </TableRow>
-                ),
-              )
-            )}
-          </TableBody>
+          <ExpenseRows rows={table.getRowModel().rows} columnCount={columns.length} loading={loading} editor={editor} />
         </Table>
       </div>
     </div>
+  )
+}
+
+interface ExpenseRowsProps {
+  // The rows in their current (sorted) order.
+  rows: Row<typeof expenseTableFeatures, Expense>[]
+  // How many columns the "nothing here" cell spans.
+  columnCount: number
+  loading: boolean
+  editor: ExpenseEditor
+}
+
+// The table's body: one row per expense, the one being edited drawn as an EditRow. With no rows, one wide cell
+// says "Loading…" or that nothing matches the filters. getAllCells, not getVisibleCells: v9 only has
+// getVisibleCells with the column-visibility feature, which this table doesn't use.
+function ExpenseRows({ rows, columnCount, loading, editor }: ExpenseRowsProps) {
+  return (
+    <TableBody>
+      {rows.length === 0 ? (
+        <TableRow>
+          <TableCell colSpan={columnCount} className="h-24 text-center text-muted-foreground">
+            {loading ? "Loading…" : "No expenses match these filters."}
+          </TableCell>
+        </TableRow>
+      ) : (
+        rows.map((row) =>
+          row.original.id === editor.editingId ? (
+            <EditRow
+              key={row.id}
+              expense={row.original}
+              saving={editor.isSaving(row.original.id)}
+              onCancel={editor.cancel}
+              onSave={(changes) => editor.save(row.original.id, changes)}
+            />
+          ) : (
+            <TableRow key={row.id} data-state={row.getIsSelected() ? "selected" : undefined}>
+              {row.getAllCells().map((cell) => (
+                <TableCell key={cell.id}>{flexRender(cell.column.columnDef.cell, cell.getContext())}</TableCell>
+              ))}
+            </TableRow>
+          ),
+        )
+      )}
+    </TableBody>
   )
 }

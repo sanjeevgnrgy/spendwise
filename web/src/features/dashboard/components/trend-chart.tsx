@@ -1,3 +1,6 @@
+// A component of the dashboard feature: the "Monthly trend" card, a line chart of the last few months' spending
+// (shadcn charts over Recharts). Used by the Dashboard page.
+
 import { CartesianGrid, Line, LineChart, XAxis, YAxis } from "recharts"
 
 import { EmptyState } from "@/shared/components/empty-state"
@@ -9,8 +12,13 @@ import { ChartContainer, ChartTooltip, ChartTooltipContent } from "@/shared/ui/c
 import type { MonthlyTrend } from "../api"
 import { SPENT_CONFIG } from "./chart-config"
 
+// Room for the money labels beside the chart ("₹1.3L"), in pixels.
 const MONEY_AXIS_WIDTH = 56
 
+/**
+ * "Monthly trend": the total spent in each of the last few months as a line, short month names on the axis and the
+ * full month and amount on hover. If nothing was spent in any of them, it says so and offers a link to add one.
+ */
 export function TrendChart({ trend }: { trend: MonthlyTrend }) {
   // The backend already filled empty months with 0, so the line has a point for every month.
   const rows = trend.months.map((m) => ({

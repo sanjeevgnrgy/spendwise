@@ -1,3 +1,6 @@
+// A component of the dashboard feature: the "Recent expenses" card. Used by the Dashboard page, which loads the
+// newest few through the expenses feature's useExpenses.
+
 import { Link } from "react-router"
 
 import { useCategoryName } from "@/features/categories"
@@ -8,7 +11,11 @@ import { formatDate, formatMoney } from "@/shared/lib/format"
 import { Button } from "@/shared/ui/button"
 import { Card, CardAction, CardContent, CardDescription, CardHeader, CardTitle } from "@/shared/ui/card"
 
-// Already only the latest few: the backend applied the limit.
+/**
+ * "Recent expenses": the newest few, each with its merchant, category, date and amount, and a "View all" link to the
+ * Expenses page. `expenses` is already only the latest few (the backend applied the limit). With none, it says so
+ * and offers a link to add one.
+ */
 export function RecentExpenses({ expenses }: { expenses: Expense[] }) {
   const categoryName = useCategoryName()
 

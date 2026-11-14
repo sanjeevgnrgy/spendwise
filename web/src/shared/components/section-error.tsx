@@ -1,17 +1,26 @@
+// A shared component: the error card that takes the place of a part that couldn't load or crashed. Part of shared/.
+// Used by the pages (nothing loaded) and by app/ as the error boundaries' fallback (main.tsx, the layout).
+
 import { RefreshCw } from "lucide-react"
 
 import { Button } from "@/shared/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/shared/ui/card"
 
 interface SectionErrorProps {
+  /** What couldn't be shown ("Couldn't load the dashboard"). */
   title: string
+  /** Why (messageOf the error). */
   message: string
+  /** Try again was pressed. */
   onRetry: () => void
-  retrying?: boolean // a retry is in flight: the button says so and waits
+  /** A retry is in flight: the button says so and waits. */
+  retrying?: boolean
 }
 
-// A part of a page that couldn't load (or crashed): say what happened and offer to try again,
-// instead of showing misleading zeros or a blank page.
+/**
+ * A part of a page that couldn't load (or crashed): say what happened and offer to try again, instead of showing
+ * misleading zeros or a blank page. It's an alert, so screen readers announce it at once.
+ */
 export function SectionError({ title, message, onRetry, retrying = false }: SectionErrorProps) {
   return (
     <Card role="alert">

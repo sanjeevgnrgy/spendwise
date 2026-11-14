@@ -1,3 +1,9 @@
+/*
+ * The app's global stylesheet: Tailwind 4, the animation and shadcn/ui base layers, the Geist font, and the colour
+ * tokens (CSS variables) for light and dark mode. Part of the app composition (app/); loaded once, by main.tsx.
+ * shadcn's CLI writes here (components.json points at it). Dark mode is the "dark" class on <html> (see
+ * shared/theme/theme-constants.ts, DARK_CLASS), which the `dark` variant below matches.
+ */
 @import "tailwindcss";
 @import "tw-animate-css";
 @import "shadcn/tailwind.css";

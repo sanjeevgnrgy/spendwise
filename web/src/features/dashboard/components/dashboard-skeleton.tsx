@@ -1,8 +1,13 @@
+// A component of the dashboard feature: the Dashboard's loading state. Used by the Dashboard page until all of its
+// data has arrived.
+
 import { Card, CardContent, CardHeader } from "@/shared/ui/card"
 import { Skeleton } from "@/shared/ui/skeleton"
 
-// Grey placeholder shapes in the same layout as the real dashboard, shown while data loads,
-// so the page doesn't jump around when the numbers arrive.
+/**
+ * Grey placeholder shapes in the same layout as the real dashboard (three stat cards, two charts, five recent rows),
+ * shown while data loads, so the page doesn't jump around when the numbers arrive.
+ */
 export function DashboardSkeleton() {
   return (
     <div className="flex flex-col gap-4">

@@ -1,9 +1,15 @@
+// The theme's provider: it holds the chosen theme, saves changes, and applies it to the page. Part of shared/theme.
+// Used once, by app/providers.tsx, around the whole app.
+
 import { useEffect, useMemo, useState, type ReactNode } from "react"
 
 import { DARK_CLASS, PREFERS_DARK_QUERY, THEME_STORAGE_KEY } from "./theme-constants"
 import { readSavedTheme, ThemeContext, type Theme } from "./theme-context"
 
-// Holds the current theme and keeps the "dark" class on <html> in sync with it.
+/**
+ * Holds the current theme (starting from the saved one) and keeps the "dark" class on <html> in sync with it; on
+ * "system" it follows the operating system live. setTheme saves the choice when storage allows.
+ */
 export function ThemeProvider({ children }: { children: ReactNode }) {
   const [theme, setThemeState] = useState<Theme>(readSavedTheme)
 
@@ -21,6 +27,7 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
     return () => prefersDark.removeEventListener("change", apply)
   }, [theme])
 
+  // The same object until the theme changes, so components that read the context don't re-render for nothing.
   const value = useMemo(
     () => ({
       theme,

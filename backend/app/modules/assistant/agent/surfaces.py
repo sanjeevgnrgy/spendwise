@@ -8,7 +8,8 @@ agent loop is the same):
 
 TextChat shows only text: details and delete confirmations go by words. WebPanel can show forms, cards and
 Approve buttons, so there a delete is never run: the expense is looked up and the user is asked
-(human in the loop). turns.py picks the surface per use case; agent.py only talks to the protocol.
+(human in the loop). application/assistant.py picks the surface per use case; agent.py only talks to the
+protocol.
 """
 
 from collections.abc import Callable, Generator, Mapping
@@ -18,7 +19,7 @@ from typing import Protocol
 
 from app.core.llm import ToolCall, ToolResult, ToolSpec
 from app.modules.assistant import a2ui
-from app.modules.assistant.events import (
+from app.modules.assistant.agent.events import (
     AgentEvent,
     ApprovalRequested,
     ToolCallSummary,
@@ -26,7 +27,7 @@ from app.modules.assistant.events import (
     ToolIntent,
     ToolStarted,
 )
-from app.modules.assistant.prompts import (
+from app.modules.assistant.agent.prompts import (
     ASK_FOR_MISSING,
     CARDS_SHOW_DETAILS,
     CONFIRM_DELETE_IN_WORDS,
@@ -35,8 +36,8 @@ from app.modules.assistant.prompts import (
     NO_CARDS,
     PromptRules,
 )
-from app.modules.assistant.tool_runs import expense_in, look_up
-from app.modules.assistant.tools import ExpenseTools, ToolOutput
+from app.modules.assistant.agent.tool_runs import expense_in, look_up
+from app.modules.assistant.tools.port import ExpenseTools, ToolOutput
 from app.modules.mcp import EXPENSE_ID_ARGUMENT, ExpenseView, ToolName
 
 # Added to a delete check's result for the model, so it doesn't think the delete simply failed and retry it.
@@ -47,7 +48,7 @@ AWAITING_APPROVAL = (
 # The model's result when the looked-up expense isn't in the expected shape: no card can be shown for it.
 UNREADABLE_EXPENSE = "The expense couldn't be read, so it can't be deleted here."
 
-# Records a delete card for the expense shown and returns the card's id (turns.Assistant provides it).
+# Records a delete card for the expense shown and returns the card's id (the Assistant provides it).
 RequestApprovalFn = Callable[[ExpenseView], str]
 
 

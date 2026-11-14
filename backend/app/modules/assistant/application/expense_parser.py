@@ -1,8 +1,11 @@
 """POST /parse: turn a free-text note ("paid 450 at Swiggy yesterday") into a ParsedExpense.
 
-A use case (application layer), used by api.py's /parse route; module.create_router builds it. It saves
-nothing: saving is a separate, deliberate step (POST /expenses), so a misread note never lands in your
-data on its own.
+A vertical slice: the use case and its own models (ParsedExpense, the shape the model answers in, and
+ParseResponse, what the route returns) live together here.
+
+A use case (application layer), used by the /parse route (api/routes.py); module.create_router builds it.
+It saves nothing: saving is a separate, deliberate step (POST /expenses), so a misread note never lands in
+your data on its own.
 
 Not a query handler: the model call can take a minute, and a query handler runs inside a database session,
 which would be held open (a pooled connection kept busy) the whole time. Here the categories are read first
@@ -12,16 +15,54 @@ which would be held open (a pooled connection kept busy) the whole time. Here th
 import copy
 from dataclasses import dataclass
 from datetime import date
+from decimal import Decimal
 from functools import cache
-from typing import Any
+from typing import Annotated, Any
 
-from pydantic import ValidationError
+from pydantic import BaseModel, Field, ValidationError, WithJsonSchema
 
 from app.core.cqrs import MessageBus
 from app.core.errors import BusinessRuleError
 from app.core.llm import LlmError, StructuredOutputModel
 from app.modules import categories
-from app.modules.assistant.schemas import ParsedExpense, ParseResponse
+from app.modules.expenses import PaymentMethod
+
+
+# ParsedExpense's JSON schema is sent to the model as the shape its answer must have, so the docstring
+# and field descriptions below are instructions it reads. Every field is required, but most may be
+# null: the model must answer every field, and null is how it says "the text doesn't say".
+# Without null, it would have to invent something.
+class ParsedExpense(BaseModel):
+    """One expense read from a short note the user wrote. Use null for anything the note does not say."""
+
+    # The model's schema has no decimal type. A string keeps the exact digits (a JSON number could be
+    # read as a float); Pydantic then turns it into a Decimal, which the API returns as "450.50".
+    amount: Annotated[Decimal | None, WithJsonSchema({"type": ["string", "null"]})] = Field(
+        description='The amount as a plain number string, e.g. "1250.50", with no currency symbol or commas. '
+        "null if the text does not state an amount. Never guess an amount."
+    )
+    currency: str = Field(
+        description="ISO 4217 code such as INR, USD or EUR. INR unless another currency is clearly stated."
+    )
+    # The allowed category names are added to the schema per request (see _response_schema below).
+    category: str | None = Field(description="The best matching category from the allowed list, or null if none fits.")
+    merchant: str | None = Field(description="The shop, company or person paid, or null if not mentioned.")
+    spent_on: date = Field(
+        description="The date of the expense. Work out words like 'yesterday' or 'last Friday' from today's date; "
+        "use today if no date is mentioned."
+    )
+    payment_method: PaymentMethod | None = Field(
+        description="Only if the text says how it was paid (GPay, PhonePe and Paytm UPI are upi); otherwise null."
+    )
+    note: str | None = Field(description="A few words on what was bought, or null.")
+
+
+# POST /parse's answer: a suggestion only (nothing is saved), plus what it still lacks.
+class ParseResponse(BaseModel):
+    expense: ParsedExpense
+    # Fields POST /expenses needs that the text didn't give. Empty means it's ready to save.
+    missing_fields: list[str]
+
 
 # What POST /expenses needs that a note might not mention. currency and spent_on always get a
 # value (INR and today are safe defaults), so they're never missing.

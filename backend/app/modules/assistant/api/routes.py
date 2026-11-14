@@ -1,10 +1,11 @@
 """HTTP routes for the assistant. They translate HTTP (and AG-UI) into the use cases.
 
 The adapter layer, with no rules of its own:
-- POST /parse reads an expense out of a short note and saves nothing (parse.ExpenseParser);
-- POST /chat answers a message in one JSON reply (turns.Assistant.chat);
+- POST /parse reads an expense out of a short note and saves nothing (application/expense_parser.py's
+  ExpenseParser);
+- POST /chat answers a message in one JSON reply (application/assistant.py's Assistant.chat);
 - POST /agent runs the same agent, streamed as AG-UI events over Server-Sent Events (agui_request.py reads
-  the run, agui.py writes the events). The web app's chat panel uses this one.
+  the run, agui_stream.py writes the events). The web app's chat panel uses this one.
 
 module.create_router builds the router at startup, and main.py mounts it under /api/v1.
 """
@@ -16,11 +17,11 @@ from fastapi import APIRouter, Depends
 from fastapi.sse import EventSourceResponse, ServerSentEvent
 
 from app.core.dependencies import ClockDep
-from app.modules.assistant import agui
-from app.modules.assistant.agui_request import AgentRequest, read_request
-from app.modules.assistant.parse import ExpenseParser
-from app.modules.assistant.schemas import ChatRequest, ChatResponse, ParseRequest, ParseResponse
-from app.modules.assistant.turns import Assistant
+from app.modules.assistant.api import agui_stream
+from app.modules.assistant.api.agui_request import AgentRequest, read_request
+from app.modules.assistant.api.schemas import ChatRequest, ChatResponse, ParseRequest
+from app.modules.assistant.application.assistant import Assistant
+from app.modules.assistant.application.expense_parser import ExpenseParser, ParseResponse
 
 # The tag that groups this module's routes under one heading in /docs.
 TAG = "assistant"
@@ -46,7 +47,7 @@ def create_router(assistant: Assistant, parser: ExpenseParser) -> APIRouter:
     @router.post("/chat")
     def chat(body: ChatRequest, clock: ClockDep) -> ChatResponse:
         # Unlike /parse, this can change data: the agent may add, update or delete expenses through its tools.
-        # There are no buttons here, so a delete needs the user's "yes" in words (see prompts.py, text chat).
+        # There are no buttons here, so a delete needs the user's "yes" in words (see agent/prompts.py, text chat).
         # A thread_id the server doesn't know is a 404 rather than a silent new conversation.
         thread_id, finished = assistant.chat(body.message, body.thread_id, clock.today())
         return ChatResponse(thread_id=thread_id, reply=finished.reply, tool_calls=finished.tool_calls)
@@ -61,7 +62,7 @@ def create_router(assistant: Assistant, parser: ExpenseParser) -> APIRouter:
     ) -> Iterator[ServerSentEvent]:
         # A plain (sync) generator: FastAPI runs it in a worker thread, and adds a ": ping" comment every
         # 15 s while the agent is quiet (e.g. running tools), so proxies don't close the connection.
-        for event in agui.stream(request, assistant, clock.today()):
+        for event in agui_stream.stream(request, assistant, clock.today()):
             # AG-UI's JSON (camelCase field names) as the event's `data:` line.
             yield ServerSentEvent(raw_data=event.model_dump_json(by_alias=True, exclude_none=True))
 

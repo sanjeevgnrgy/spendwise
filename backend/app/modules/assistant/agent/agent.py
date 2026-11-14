@@ -1,11 +1,12 @@
 """The agent loop: the model decides which tools to call, we run them, and repeat until it answers.
 
-Application layer. The agent has no tools of its own: it gets them from an ExpenseTools port (tools.py),
-shows them to the model, and runs every call through it. It speaks only provider-neutral messages
-(core/llm) through the ToolCallingModel port, and yields AgentEvents (events.py); how those reach a user
-is someone else's job. What differs between text chat and the web panel (prompt rules, tool specs, calls
-handled in place) comes from the Surface it's given (surfaces.py). turns.Assistant runs it, one turn at a
-time; the Approve/Cancel decision, which never asks the model, is decisions.py.
+Application layer. The agent has no tools of its own: it gets them from an ExpenseTools port
+(tools/port.py), shows them to the model, and runs every call through it. It speaks only provider-neutral
+messages (core/llm) through the ToolCallingModel port, and yields AgentEvents (events.py); how those reach
+a user is someone else's job. What differs between text chat and the web panel (prompt rules, tool specs,
+calls handled in place) comes from the Surface it's given (surfaces.py). The Assistant use case
+(application/assistant.py) runs it, one turn at a time; the Approve/Cancel decision, which never asks the
+model, is application/decisions.py.
 """
 
 import logging
@@ -27,11 +28,11 @@ from app.core.llm import (
     UserText,
 )
 from app.modules.assistant import a2ui
-from app.modules.assistant.events import AgentEvent, FormRequested, TextDelta, ToolCallSummary, TurnFinished
-from app.modules.assistant.prompts import system_instruction
-from app.modules.assistant.surfaces import CallHandler, CallOutcome, Surface
-from app.modules.assistant.tool_runs import run_and_report
-from app.modules.assistant.tools import ExpenseTools, ToolsUnavailableError
+from app.modules.assistant.agent.events import AgentEvent, FormRequested, TextDelta, ToolCallSummary, TurnFinished
+from app.modules.assistant.agent.prompts import system_instruction
+from app.modules.assistant.agent.surfaces import CallHandler, CallOutcome, Surface
+from app.modules.assistant.agent.tool_runs import run_and_report
+from app.modules.assistant.tools.port import ExpenseTools, ToolsUnavailableError
 
 logger = logging.getLogger(__name__)
 
@@ -95,7 +96,7 @@ class _Turn:
 
 @dataclass(frozen=True)
 class Agent:
-    """Answers messages with a model and the expense tools. Cheap to build: turns.Assistant makes one per turn."""
+    """Answers messages with a model and the expense tools. Cheap to build: the Assistant makes one per turn."""
 
     llm: ToolCallingModel
     tools: ExpenseTools

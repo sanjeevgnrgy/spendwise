@@ -1,7 +1,7 @@
-"""The assistant's expense tools: a port (what the agent needs) and its MCP adapter (how it's done).
+"""The expense tools over MCP: McpExpenseTools, the adapter behind the ExpenseTools port (port.py).
 
-Port and adapter. The agent (agent.py, tool_runs.py, surfaces.py, decisions.py) only knows ExpenseTools.
-The composition root (bootstrap.py) decides what's behind it, through module.py:
+Adapter. The agent only knows the port; the composition root (bootstrap.py) creates this adapter, through
+module.py, and decides which server it reaches:
 - by default, this app's own MCP server, called **in-process**: same tools, same protocol, no network
   hop and no request to our own HTTP port;
 - with MCP_URL set, a remote MCP server over Streamable HTTP, sending MCP_TOKEN as a bearer token.
@@ -21,8 +21,8 @@ from mcp.server.mcpserver import MCPServer
 from mcp.types import Tool
 from pydantic import BaseModel, TypeAdapter
 
-from app.core.errors import ExternalServiceError
 from app.core.llm import ToolSpec
+from app.modules.assistant.tools.port import ToolOutput, ToolsUnavailableError
 from app.modules.mcp import AUTHORIZATION_HEADER, BEARER_SCHEME, ResourceUri
 
 logger = logging.getLogger(__name__)
@@ -36,39 +36,6 @@ IN_PROCESS_SERVER = "this app's MCP server"
 UNREACHABLE_TOOLS = "Could not reach the expense tools ({where})"
 # A resource read with no text (it shouldn't happen) counts as no categories.
 EMPTY_LIST_JSON = "[]"
-
-
-class ToolsUnavailableError(ExternalServiceError):
-    """The expense tools couldn't be reached, or didn't answer in time."""
-
-
-@dataclass(frozen=True)
-class ToolOutput:
-    """What one tool call returned: the text for the model, whether it worked, and the typed result."""
-
-    text: str  # what the model reads: the result, or the error message
-    ok: bool  # False: the tool ran and reported a problem (e.g. "Unknown category"), useful to the model
-    data: dict[str, Any] | None = None  # the typed result (MCP structuredContent), for cards
-
-
-class ExpenseTools(Protocol):
-    """What the agent needs from the expense tools. Every method raises ToolsUnavailableError if unreachable."""
-
-    def specs(self) -> list[ToolSpec]:
-        """Every tool, described for the model."""
-        ...
-
-    def call(self, name: str, arguments: dict[str, Any]) -> ToolOutput:
-        """Run one tool. A tool that reports a problem returns ok=False rather than raising."""
-        ...
-
-    def changes_data(self, name: str) -> bool:
-        """Whether a tool may change data, so the pages know to reload."""
-        ...
-
-    def category_names(self) -> list[str]:
-        """The names of the expense categories, for the model's instructions and the form's choices."""
-        ...
 
 
 # Just the part of a category the assistant reads from the categories resource: its name (the rest is ignored).

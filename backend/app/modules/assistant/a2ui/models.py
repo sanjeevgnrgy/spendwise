@@ -5,7 +5,7 @@ the one with id "root". The browser draws each one with its own trusted componen
 never sends HTML or code. Spec facts and links: docs/sources.md, section 8.
 
 Presentation layer, a declarative copy of the spec's schema: cards.py and forms.py build messages from these
-models, forms.py checks the model's own forms against them, and agui_request.py reads button clicks
+models, forms.py checks the model's own forms against them, and api/agui_request.py reads button clicks
 (ActionMessage). Only the messages SpendWise sends are modelled: createSurface (agent to renderer) and
 action (renderer to agent). backend/scripts/export_contracts.py shares the names and limits with the web app.
 

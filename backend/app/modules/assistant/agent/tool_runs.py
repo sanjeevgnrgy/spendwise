@@ -2,8 +2,8 @@
 
 Application layer, with no rules of its own about which tool runs when. Used by the agent loop (agent.py)
 for the model's ordinary calls, by the web panel's delete check (surfaces.py) to look an expense up, and by
-the Approve decision (decisions.py) for its check and its delete. Everything goes through the ExpenseTools
-port (tools.py), so these work with any adapter behind it.
+the Approve decision (application/decisions.py) for its check and its delete. Everything goes through the
+ExpenseTools port (tools/port.py), so these work with any adapter behind it.
 """
 
 import json
@@ -13,8 +13,8 @@ from typing import Any
 
 from pydantic import ValidationError
 
-from app.modules.assistant.events import AgentEvent, ToolFinished, ToolStarted
-from app.modules.assistant.tools import ExpenseTools, ToolOutput, ToolsUnavailableError
+from app.modules.assistant.agent.events import AgentEvent, ToolFinished, ToolStarted
+from app.modules.assistant.tools.port import ExpenseTools, ToolOutput, ToolsUnavailableError
 from app.modules.mcp import EXPENSE_ID_ARGUMENT, ExpenseFound, ExpenseView, ToolName
 
 logger = logging.getLogger(__name__)

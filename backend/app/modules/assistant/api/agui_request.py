@@ -1,9 +1,9 @@
 """The AG-UI adapter's input side: POST /agent's RunAgentInput, checked and read into an AgentRequest.
 
-Adapter layer. api.py uses read_request as a FastAPI dependency, so a bad run is refused with an ordinary
-422 problem before anything is streamed; agui.stream then gets the checked AgentRequest. A run is either a
-decision on a delete card (Approve or Cancel, carried in forwardedProps) or a message for the agent (typed,
-or a form's Save written out as one).
+Adapter layer. routes.py uses read_request as a FastAPI dependency, so a bad run is refused with an
+ordinary 422 problem before anything is streamed; agui_stream.stream then gets the checked AgentRequest.
+A run is either a decision on a delete card (Approve or Cancel, carried in forwardedProps) or a message for
+the agent (typed, or a form's Save written out as one).
 """
 
 from dataclasses import dataclass
@@ -14,8 +14,8 @@ from pydantic import TypeAdapter, ValidationError
 
 from app.core.errors import BusinessRuleError
 from app.modules.assistant import a2ui
-from app.modules.assistant.protocol import FORWARDED_A2UI_ACTION, STATE_DATA_VERSION
-from app.modules.assistant.schemas import MAX_MESSAGE_LENGTH
+from app.modules.assistant.api.protocol import FORWARDED_A2UI_ACTION, STATE_DATA_VERSION
+from app.modules.assistant.api.schemas import MAX_MESSAGE_LENGTH
 from app.modules.conversations import THREAD_ID_MAX_LENGTH, ThreadId
 
 # AG-UI's names for a user's message and for a text part of one.

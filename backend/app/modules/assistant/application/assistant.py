@@ -1,8 +1,8 @@
 """The assistant's use cases: answer a message, and carry out an Approve or Cancel.
 
-Application layer. They load a thread's history from the conversations module, run the agent (agent.py)
-on the right surface (surfaces.py), record approvals, and save the turn once it has finished. Both routes
-(/chat and /agent) use them; neither knows about the database or the tools.
+Application layer. They load a thread's history from the conversations module, run the agent
+(agent/agent.py) on the right surface (agent/surfaces.py), record approvals (approvals/), and save the turn
+once it has finished. Both routes (/chat and /agent) use them; neither knows about the database or the tools.
 
 Everything goes through the bus in short, separate steps (read the history, record a card, save the
 turn), never one transaction around the whole run: a model call can take a minute or two, and no
@@ -19,12 +19,12 @@ from app.core.cqrs import MessageBus
 from app.core.errors import NotFoundError
 from app.core.llm import ToolCallingModel
 from app.modules import conversations
-from app.modules.assistant.agent import Agent
+from app.modules.assistant.agent.agent import Agent
+from app.modules.assistant.agent.events import AgentEvent, TurnFinished
+from app.modules.assistant.agent.surfaces import Surface, TextChat, WebPanel
+from app.modules.assistant.application.decisions import approval_turn
 from app.modules.assistant.approvals import ExpenseSnapshot, RequestApproval, RestoreApproval, TakeApproval
-from app.modules.assistant.decisions import approval_turn
-from app.modules.assistant.events import AgentEvent, TurnFinished
-from app.modules.assistant.surfaces import Surface, TextChat, WebPanel
-from app.modules.assistant.tools import ExpenseTools
+from app.modules.assistant.tools.port import ExpenseTools
 from app.modules.mcp import ExpenseView
 
 logger = logging.getLogger(__name__)
@@ -48,8 +48,9 @@ def new_thread_id() -> str:
 class Assistant:
     """The use cases, with what they need. Built once by the composition root.
 
-    module.create_router builds it from the bus, the tools adapter and the language model, and api.py's
-    routes call it: run_turn and decide through agui.py for POST /agent, chat for POST /chat.
+    module.create_router builds it from the bus, the tools adapter and the language model, and the routes
+    (api/routes.py) call it: run_turn and decide through api/agui_stream.py for POST /agent, chat for
+    POST /chat.
     """
 
     bus: MessageBus

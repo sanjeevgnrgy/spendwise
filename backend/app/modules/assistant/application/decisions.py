@@ -1,8 +1,8 @@
 """The user's Approve or Cancel on a delete card, carried out without asking the model.
 
-Application layer. turns.Assistant.decide takes the card's record (approvals.TakeApproval) and hands its
-snapshot here; approval_turn yields the same kinds of events as the agent loop, ending with a TurnFinished
-that the use case saves. No model is asked: the decision is the user's, and it costs no tokens.
+Application layer. Assistant.decide (assistant.py) takes the card's record (approvals.TakeApproval) and
+hands its snapshot here; approval_turn yields the same kinds of events as the agent loop, ending with a
+TurnFinished that the use case saves. No model is asked: the decision is the user's, and it costs no tokens.
 
 Every outcome is stored as plain text ("I pressed Approve..." / "Done...") so later turns know what happened.
 """
@@ -13,10 +13,10 @@ from dataclasses import dataclass, field
 
 from app.core.llm import AssistantText, UserText
 from app.modules.assistant import a2ui
+from app.modules.assistant.agent.events import AgentEvent, TextDelta, ToolCallSummary, TurnFinished
+from app.modules.assistant.agent.tool_runs import expense_in, look_up, run_and_report
 from app.modules.assistant.approvals import TTL_MINUTES, ExpenseSnapshot
-from app.modules.assistant.events import AgentEvent, TextDelta, ToolCallSummary, TurnFinished
-from app.modules.assistant.tool_runs import expense_in, look_up, run_and_report
-from app.modules.assistant.tools import ExpenseTools
+from app.modules.assistant.tools.port import ExpenseTools
 from app.modules.mcp import CONFIRM_ARGUMENT, EXPECTED_VERSION_ARGUMENT, EXPENSE_ID_ARGUMENT, ToolName
 
 logger = logging.getLogger(__name__)

@@ -1,8 +1,9 @@
 """The expense form: shown when the user wants to add an expense but details are missing.
 
-Presentation layer. The web panel offers the show-form tool and its rules (surfaces.py, from SHOW_FORM_TOOL
-and form_instructions); the agent (agent.py) turns the model's call into a form with
-expense_form_from_call; agui_request.py writes a submitted form as the next message with describe_action.
+Presentation layer. The web panel offers the show-form tool and its rules (agent/surfaces.py, from
+SHOW_FORM_TOOL and form_instructions); the agent (agent/agent.py) turns the model's call into a form with
+expense_form_from_call; api/agui_request.py writes a submitted form as the next message with
+describe_action.
 
 The model writes the form itself (as A2UI JSON, from the catalog described in its instructions).
 Anything it writes is checked against our Pydantic models before it's sent; if it doesn't pass,

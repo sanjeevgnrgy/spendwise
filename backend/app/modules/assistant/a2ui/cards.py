@@ -1,8 +1,8 @@
 """Ready-made A2UI cards, built by code from the tools' typed results (not by the model).
 
-Presentation layer. The AG-UI adapter (agui.py) asks card_for() for a card after each successful tool
-call, and approval_card() for a delete waiting for Approve; expense_ref() is also how the agent's
-instructions (prompts.py) and replies (decisions.py) write an expense's id.
+Presentation layer. The AG-UI adapter (api/agui_stream.py) asks card_for() for a card after each
+successful tool call, and approval_card() for a delete waiting for Approve; expense_ref() is also how the
+agent's instructions (agent/prompts.py) and replies (application/decisions.py) write an expense's id.
 
 Every value shown comes from the tool's actual result and is placed in a Text: data to show,
 never instructions or markup.

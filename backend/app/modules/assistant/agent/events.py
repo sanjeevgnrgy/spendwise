@@ -1,14 +1,14 @@
 """What happens during one turn of the agent, as plain events.
 
 Shapes passed between layers. The agent (agent.py, surfaces.py, tool_runs.py), the Approve/Cancel decision
-(decisions.py) and the use cases (turns.py) yield these. They say nothing about how a client sees them:
-the AG-UI adapter (agui.py) turns them into AG-UI events for the browser, and POST /chat just waits
-for the TurnFinished at the end.
+(application/decisions.py) and the use cases (application/assistant.py) yield these. They say nothing about
+how a client sees them: the AG-UI adapter (api/agui_stream.py) turns them into AG-UI events for the
+browser, and POST /chat just waits for the TurnFinished at the end.
 
 A turn yields them as things happen: TextDelta pieces, a ToolStarted / ToolFinished pair per tool call,
 an ApprovalRequested after a delete check, a FormRequested; then a TurnFinished, always last. A run that
 fails raises instead, and has no TurnFinished. ToolCallSummary is also part of POST /chat's response
-(schemas.ChatResponse).
+(api/schemas.py's ChatResponse).
 """
 
 from dataclasses import dataclass, field
@@ -22,8 +22,8 @@ from app.modules.assistant.a2ui import CreateSurfaceMessage, FormSource
 from app.modules.mcp import ExpenseView
 
 
-# Why a tool call is shown. agui.py picks the chip's labels by it, and draws a result card only for RUN:
-# a delete check must never look like a delete.
+# Why a tool call is shown. api/agui_stream.py picks the chip's labels by it, and draws a result card only
+# for RUN: a delete check must never look like a delete.
 class ToolIntent(StrEnum):
     RUN = "run"  # the tool runs as the model asked
     APPROVAL_CHECK = "approval_check"  # a delete: the expense is only looked up, and the user is asked
@@ -102,8 +102,8 @@ class FormRequested:
 class TurnFinished:
     """Always the last event: the whole reply, the tools used, and the messages to store.
 
-    The use case (turns.py) saves `messages` as the thread's next turn when this arrives, so only a
-    turn that finished is ever stored.
+    The use case (application/assistant.py) saves `messages` as the thread's next turn when this arrives,
+    so only a turn that finished is ever stored.
     """
 
     reply: str

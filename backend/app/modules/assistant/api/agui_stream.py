@@ -1,6 +1,6 @@
 """The AG-UI adapter's output side: POST /agent's events, translated from the use cases' AgentEvents.
 
-Adapter layer. api.py's /agent route calls stream() with a run already checked by agui_request.read_request,
+Adapter layer. routes.py's /agent route calls stream() with a run already checked by agui_request.read_request,
 and sends each event it yields as one Server-Sent Event:
 
 RUN_STARTED; then, as they happen, the reply's text as TEXT_MESSAGE_START / _CONTENT / _END, each tool
@@ -34,8 +34,7 @@ from ag_ui.core import (
 
 from app.core.errors import AppError
 from app.modules.assistant import a2ui
-from app.modules.assistant.agui_request import AgentRequest
-from app.modules.assistant.events import (
+from app.modules.assistant.agent.events import (
     AgentEvent,
     ApprovalRequested,
     FormRequested,
@@ -45,8 +44,9 @@ from app.modules.assistant.events import (
     ToolStarted,
     TurnFinished,
 )
-from app.modules.assistant.protocol import STATE_DATA_VERSION, CustomEventName, MetadataKey, ToolLabels
-from app.modules.assistant.turns import Assistant
+from app.modules.assistant.api.agui_request import AgentRequest
+from app.modules.assistant.api.protocol import STATE_DATA_VERSION, CustomEventName, MetadataKey, ToolLabels
+from app.modules.assistant.application.assistant import Assistant
 from app.modules.mcp import ToolName
 
 logger = logging.getLogger(__name__)

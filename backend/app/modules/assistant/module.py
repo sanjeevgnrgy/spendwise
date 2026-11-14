@@ -10,18 +10,22 @@ from fastapi import APIRouter
 
 from app.core.cqrs import MessageBus
 from app.core.llm import LanguageModel
-from app.modules.assistant import api, approvals
-from app.modules.assistant.parse import ExpenseParser
-from app.modules.assistant.tables import TABLES
-from app.modules.assistant.tools import ExpenseTools, McpExpenseTools
-from app.modules.assistant.turns import Assistant
+from app.modules.assistant.api import routes
+from app.modules.assistant.application.assistant import Assistant
+from app.modules.assistant.application.expense_parser import ExpenseParser
+from app.modules.assistant.approvals.commands.request_approval import RequestApproval, request_approval
+from app.modules.assistant.approvals.commands.restore_approval import RestoreApproval, restore_approval
+from app.modules.assistant.approvals.commands.take_approval import TakeApproval, take_approval
+from app.modules.assistant.approvals.persistence.tables import TABLES
+from app.modules.assistant.tools.mcp_adapter import McpExpenseTools
+from app.modules.assistant.tools.port import ExpenseTools
 
 
 def register_handlers(bus: MessageBus) -> None:
     """Register a handler for each of the module's commands: the three that manage delete cards."""
-    bus.register(approvals.RequestApproval, approvals.request_approval)
-    bus.register(approvals.TakeApproval, approvals.take_approval)
-    bus.register(approvals.RestoreApproval, approvals.restore_approval)
+    bus.register(RequestApproval, request_approval)
+    bus.register(TakeApproval, take_approval)
+    bus.register(RestoreApproval, restore_approval)
 
 
 def create_router(bus: MessageBus, tools: ExpenseTools, llm: LanguageModel) -> APIRouter:
@@ -30,7 +34,7 @@ def create_router(bus: MessageBus, tools: ExpenseTools, llm: LanguageModel) -> A
     The model is used both ways: the agent's tool calling (Assistant) and /parse's structured output
     (ExpenseParser); each is given only the side it needs.
     """
-    return api.create_router(Assistant(bus=bus, tools=tools, llm=llm), ExpenseParser(bus=bus, llm=llm))
+    return routes.create_router(Assistant(bus=bus, tools=tools, llm=llm), ExpenseParser(bus=bus, llm=llm))
 
 
 __all__ = ["TABLES", "ExpenseTools", "McpExpenseTools", "create_router", "register_handlers"]

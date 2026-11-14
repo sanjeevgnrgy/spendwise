@@ -57,8 +57,9 @@ bearer token ([api_endpoints.md](api_endpoints.md#mcp-tools-and-resources)).
 ## How it's organised
 
 - **Backend:** one FastAPI process, split into modules by business domain (`categories`, `expenses`,
-  `conversations`, `assistant`, and the `mcp` adapter). Each module owns its tables and talks to the others only
-  through their contracts and the bus. → [architecture.md](architecture.md)
+  `conversations`, `assistant`, and the `mcp` adapter). Each module owns its tables, keeps each command or query in
+  one file with its handler, and talks to the others only through their contracts and the bus.
+  → [architecture.md](architecture.md)
 - **Web:** one React app, split into feature slices (`expenses`, `categories`, `dashboard`, `assistant`) over a
   `shared/` layer, composed in `app/`. → [frontend_onboarding.md](frontend_onboarding.md)
 - **The contract between them** is generated from the backend: REST types from OpenAPI, protocol names and labels from

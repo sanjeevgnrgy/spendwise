@@ -123,6 +123,6 @@ Then connect to `http://127.0.0.1:8000/mcp/` with the header `Authorization: Bea
 | Start from an empty database | stop the server, delete `backend\spendwise.db`, run `seed.py` (it migrates first) |
 | After pulling new code | `.\run.ps1` (installs changed requirements, runs new migrations); `npm install` in `web/` |
 | After changing a backend API | `.\.venv\Scripts\python.exe backend\scripts\export_contracts.py`, then `npm run gen:api` in `web/` |
-| Change a table | edit its `tables.py`, then generate and run a migration ([backend_onboarding.md](backend_onboarding.md#recipe-add-or-change-a-table)) |
+| Change a table | edit its `persistence/tables.py`, then generate and run a migration ([backend_onboarding.md](backend_onboarding.md#recipe-add-or-change-a-table)) |
 | Type-check, lint and build the web app | `npm run build` and `npx oxlint` in `web/` |
 | Something's wrong | [troubleshooting.md](troubleshooting.md) |

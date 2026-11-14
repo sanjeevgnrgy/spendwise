@@ -62,9 +62,16 @@ features/expenses/
   expense-form.ts      a draft's rules: empty, from an expense, to a request, what changed (pure)
   use-expense-draft.ts a draft being typed, for the Add dialog and the edit row
   payment-methods.ts   labels and the list, from the generated contract
-  components/          the page and its parts: the table (columns, sort button, toolbar, editor hook), the edit
-                       row, the dialogs, the filters, a labelled field
+  components/
+    expenses-page.tsx  the page: composes the parts below
+    table/             the table, its columns and sort button, the toolbar, the edit row and its editor hook
+    dialogs/           Add expense, Delete expenses
+    filters/           the filters bar
+    fields/            form controls shared by the dialogs, the edit row and the filters
 ```
+
+A folder that grows past a handful of files is grouped by area like this. Imports stay relative inside the feature;
+`npx oxlint` checks that none leaves it, at every folder depth.
 
 Each component does one job and stays small (a file under about 150 lines of code, a component or hook under about
 60). Logic that doesn't need React is a pure function in its own file, so it can be tested without rendering.

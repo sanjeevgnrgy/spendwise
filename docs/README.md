@@ -20,11 +20,11 @@ it's built that way.
 | File | What's in it |
 |---|---|
 | [overview.md](overview.md) | What SpendWise does, its features, the tech stack, the roadmap |
-| [architecture.md](architecture.md) | The modular monolith with CQRS, the module rules, how a request flows, feature slices, the shared contract |
+| [architecture.md](architecture.md) | The modular monolith with CQRS, vertical slices inside each module, the module rules, how a request flows, feature slices, the shared contract |
 | [assistant_architecture.md](assistant_architecture.md) | The agent loop, tools over MCP, AG-UI streaming, A2UI cards and forms, approvals, memory, cost |
 | [how_spendwise_works.md](how_spendwise_works.md) | The main flows as diagrams: adding an expense, the Dashboard, asking, deleting with approval, staying in sync |
 | [architecture-review.md](architecture-review.md) | Every finding of the architecture review and the two code reviews, and how each was resolved |
-| [decisions.md](decisions.md) | Every design decision (D1–D174), with why, and when to revisit it |
+| [decisions.md](decisions.md) | Every design decision (D1–D175), with why, and when to revisit it |
 
 ## Developer guides
 

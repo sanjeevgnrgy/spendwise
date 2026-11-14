@@ -12,7 +12,7 @@ sequenceDiagram
     participant Query as TanStack Query
     participant API as POST /api/v1/expenses<br/>(expenses/api.py)
     participant Bus as MessageBus
-    participant Cmd as create_expense<br/>(command handler)
+    participant Cmd as create_expense<br/>(expenses/commands/create_expense.py)
     participant Cat as categories module
     participant DB as SQLite
 
@@ -130,10 +130,10 @@ flowchart TD
     MW --> ROUTE["module api.py<br/>validates input, translates to a message"]
     ROUTE -->|"execute(command)"| BUS["MessageBus<br/>opens the unit of work"]
     ROUTE -->|"ask(query)"| BUS
-    BUS --> HANDLER["command or query handler"]
-    HANDLER --> DOMAIN["domain rules"]
+    BUS --> HANDLER["command or query handler<br/>(its slice: commands/ or queries/)"]
+    HANDLER --> DOMAIN["domain rules<br/>(domain/rules.py)"]
     HANDLER --> OTHER["other modules' contracts<br/>(ctx.bus, same session)"]
-    HANDLER --> REPO["repository (writes) / SQL (reads)"]
+    HANDLER --> REPO["persistence/: repository (writes)<br/>SQL on its own tables (reads)"]
     REPO --> DB[("database")]
     BUS -->|"command ok: COMMIT<br/>error: ROLLBACK"| DB
     HANDLER -->|"NotFound / BusinessRule / ExternalService"| ERR["core/errors.py<br/>→ RFC 9457 problem"]

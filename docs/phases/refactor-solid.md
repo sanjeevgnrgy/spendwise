@@ -119,3 +119,10 @@ works only because the seams exist: the fake reaches the app through `bootstrap.
 imported normally anywhere stays in the main bundle, so a `lazy()` in `app/` would split nothing. The boundary has to
 be where the page is exported.
 </details>
+
+> **Later changes:** the backend's modules were then reorganised inside, with no change in behaviour (checked with
+> the same recorded scenarios): commands and queries became vertical slices (one file per message, holding the
+> message and its handler), and the assistant's files moved into folders by role, so `agent.py`, `surfaces.py`,
+> `prompts.py` and `tool_runs.py` are now in `assistant/agent/`, and `decisions.py` in `assistant/application/`.
+> MCP tools are one file each in `mcp/tools/`. See
+> [D175](../decisions.md#d175-vertical-slices-inside-modules-folders-by-role).

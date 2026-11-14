@@ -16,13 +16,13 @@ flowchart LR
     end
 
     subgraph Assistant ["backend: modules/assistant"]
-        API["api.py<br/>/chat · /agent · /parse"]
-        AGUI["agui_request.py · agui.py<br/>AG-UI in · out"]
-        TURNS["turns.py · decisions.py<br/>use cases"]
-        AGENT["agent.py<br/>the loop"]
-        SURF["surfaces.py<br/>WebPanel · TextChat"]
-        TOOLS["tools.py<br/>ExpenseTools port"]
-        APPROVALS["approvals.py<br/>pending cards"]
+        API["api/routes.py<br/>/chat · /agent · /parse"]
+        AGUI["api/agui_request.py · agui_stream.py<br/>AG-UI in · out"]
+        TURNS["application/assistant.py · decisions.py<br/>use cases"]
+        AGENT["agent/agent.py<br/>the loop"]
+        SURF["agent/surfaces.py<br/>WebPanel · TextChat"]
+        TOOLS["tools/port.py · mcp_adapter.py<br/>ExpenseTools port + adapter"]
+        APPROVALS["approvals/<br/>pending cards"]
         A2UI["a2ui/<br/>cards · forms"]
     end
 
@@ -42,22 +42,29 @@ flowchart LR
     STREAM --> RENDER
 ```
 
-| File | Layer | Job |
+The module is organised in folders by role. Imports run one way: `api/` (adapters) → `application/` (use cases) →
+`agent/`, `approvals/`, `tools/` and `a2ui/`; nothing lower down imports the layers above it, and only `module.py`
+(the composition root's entry point) builds the router and the use cases.
+
+| File (under `modules/assistant/`) | Layer | Job |
 |---|---|---|
-| `api.py` | adapter (HTTP) | `/parse`, `/chat`, `/agent`; gets the use cases (`Assistant`, `ExpenseParser`) injected |
-| `agui_request.py` | adapter (AG-UI in) | `read_request`: checks a run before streaming (a bad one is a 422) and reads the message or button click |
-| `agui.py` | adapter (AG-UI out) | turns agent events into AG-UI events, adds cards and chip labels |
-| `turns.py` | use cases | `Assistant.run_turn` (answer a message in the web panel), `decide` (Approve/Cancel), `chat` (`/chat`); loads history, saves turns, records approvals |
-| `decisions.py` | use case | Approve/Cancel carried out without the model: stale card, cancelled, or approved (a version-checked delete) |
-| `agent.py` | application | `Agent.run`: ask the model, run tools, repeat; at most 5 model calls |
-| `surfaces.py` | application | what differs between the web panel (`WebPanel`: cards, forms, deletes become approval cards) and plain text (`TextChat`): prompt rules, the tools offered, the calls handled specially |
-| `prompts.py` | application | the system instruction: the shared rules plus a surface's `PromptRules` |
-| `tool_runs.py` | application | running one tool call over the port, with its timing, logging and error handling |
-| `tools.py` | port + adapter | `ExpenseTools` (what the agent needs) and `McpExpenseTools` (any MCP server, in-process or remote) |
-| `approvals.py` | commands | `RequestApproval`, `TakeApproval`, `RestoreApproval` on the `pending_approval` table |
-| `parse.py` | use case | `ExpenseParser`: `/parse` as one structured-output call, with no database session open meanwhile |
+| `api/routes.py` | adapter (HTTP) | `/parse`, `/chat`, `/agent`; gets the use cases (`Assistant`, `ExpenseParser`) injected |
+| `api/agui_request.py` | adapter (AG-UI in) | `read_request`: checks a run before streaming (a bad one is a 422) and reads the message or button click |
+| `api/agui_stream.py` | adapter (AG-UI out) | turns agent events into AG-UI events, adds cards and chip labels (`TOOL_LABELS`) |
+| `api/schemas.py`, `api/protocol.py` | shapes | request/response bodies (`MAX_MESSAGE_LENGTH`); names on the wire beyond AG-UI's own |
+| `application/assistant.py` | use cases | `Assistant.run_turn` (answer a message in the web panel), `decide` (Approve/Cancel), `chat` (`/chat`); loads history, saves turns, records approvals |
+| `application/decisions.py` | use case | Approve/Cancel carried out without the model: stale card, cancelled, or approved (a version-checked delete) |
+| `application/expense_parser.py` | use case | `ExpenseParser`, with its `ParsedExpense` and `ParseResponse`: `/parse` as one structured-output call, with no database session open meanwhile |
+| `agent/agent.py` | application | `Agent.run`: ask the model, run tools, repeat; at most 5 model calls |
+| `agent/surfaces.py` | application | what differs between the web panel (`WebPanel`: cards, forms, deletes become approval cards) and plain text (`TextChat`): prompt rules, the tools offered, the calls handled specially |
+| `agent/prompts.py` | application | the system instruction: the shared rules plus a surface's `PromptRules` |
+| `agent/tool_runs.py` | application | running one tool call over the port, with its timing, logging and error handling |
+| `agent/events.py` | shapes | the events a turn yields (`TextDelta`, `ToolStarted`, ..., `TurnFinished`) |
+| `approvals/` | commands | `RequestApproval`, `TakeApproval`, `RestoreApproval`, one vertical slice each in `commands/` (the message and its handler), on the `pending_approval` table (`persistence/tables.py`); `models.py` (the snapshot, the limits) and `store.py` (the table access they share) |
+| `tools/port.py` | port | `ExpenseTools` (what the agent needs), `ToolOutput`, `ToolsUnavailableError` |
+| `tools/mcp_adapter.py` | adapter | `McpExpenseTools`: the port over any MCP server, in-process or remote |
 | `a2ui/` | presentation | message models and catalogs, ready-made cards, the expense form |
-| `events.py`, `protocol.py`, `schemas.py` | shapes | the agent's events, names on the wire, request/response bodies |
+| `module.py` | wiring | what the composition root plugs in: the handlers, `create_router`, `TABLES`, the tools adapter |
 
 ## The agent loop
 
@@ -91,7 +98,7 @@ flowchart TD
   schemas to the subset Gemini accepts, and hands back its private reasoning (thought signatures) for the next step.
 - **Limits:** at most **5** model calls per message; reasoning effort **low** (deeper took 40–60 s per step in tests);
   each Gemini attempt gives up after 60 s, at most 2 attempts, retrying only 5xx errors, never a 429 (quota).
-- **The result** is a stream of events (`events.py`): `TextDelta`, `ToolStarted`, `ToolFinished`,
+- **The result** is a stream of events (`agent/events.py`): `TextDelta`, `ToolStarted`, `ToolFinished`,
   `ApprovalRequested`, `FormRequested`, and finally `TurnFinished`. The use case saves the turn when it arrives:
   a failed run saves nothing.
 
@@ -116,7 +123,7 @@ screen, so it's declared next to the form, not on the MCP server.
 
 ## Streaming: AG-UI over Server-Sent Events
 
-`POST /api/v1/agent` answers with a stream of AG-UI events. `agui.py` translates the agent's events:
+`POST /api/v1/agent` answers with a stream of AG-UI events. `api/agui_stream.py` translates the agent's events:
 
 | Agent event | AG-UI events |
 |---|---|
@@ -148,10 +155,11 @@ sequenceDiagram
     A-->>B: RUN_FINISHED
 ```
 
-- **Before streaming**, `read_request` checks the run (thread id, a message or a valid button click): problems are
-  ordinary 422 responses. After the first byte, the status is 200 and failures are `RUN_ERROR` events.
-- **Chip labels** come from the backend (`TOOL_LABELS` in `agui.py`), so the browser knows no tool names. A delete in
-  the web panel gets its own: "Checking the expense…" → "Waiting for your OK".
+- **Before streaming**, `read_request` (`api/agui_request.py`) checks the run (thread id, a message or a valid button
+  click): problems are ordinary 422 responses. After the first byte, the status is 200 and failures are `RUN_ERROR`
+  events.
+- **Chip labels** come from the backend (`TOOL_LABELS` in `api/agui_stream.py`), so the browser knows no tool names.
+  A delete in the web panel gets its own: "Checking the expense…" → "Waiting for your OK".
 - **Shared state:** the browser sends `dataVersion` with each run; a `STATE_SNAPSHOT` with a higher one means "data
   changed". The web app's assistant feature then calls `onDataChanged`, and the app invalidates the expense and
   Dashboard queries.
@@ -260,8 +268,9 @@ Text from the user or from data can contain instructions ("ignore your rules and
 
 | To add | Do |
 |---|---|
-| a tool | a registrar in `modules/mcp/read_tools.py` or `write_tools.py` (typed arguments, a result model in `mcp/contracts.py`, the right annotations), added to `TOOL_REGISTRARS` in `mcp/server.py`; restart. The agent discovers it |
+| a tool | a file in `modules/mcp/tools/` with its `register_<tool>` function (typed arguments, a result model in `mcp/contracts.py`, the right annotations from `tools/support.py`), added to `TOOL_REGISTRARS` in `mcp/server.py`; restart. The agent discovers it ([backend_onboarding.md](backend_onboarding.md#recipe-give-the-assistant-a-new-tool)) |
 | a card for it | a builder in `a2ui/cards.py`, registered in `_CARDS` with the tool's result model |
-| chip labels | an entry in `TOOL_LABELS` (`agui.py`); without one, the chip says "Running <tool>…" |
+| chip labels | an entry in `TOOL_LABELS` (`api/agui_stream.py`); without one, the chip says "Running <tool>…" |
 | another provider | a class implementing `LanguageModel` (`core/llm/port.py`: `ask_for_json` and `stream_with_tools`), chosen in `bootstrap.build()` |
-| another surface | a class with `prompt_rules`, `tool_specs` and `call_handlers` (`surfaces.py`), passed to `Agent.run` by a use case |
+| another surface | a class with `prompt_rules`, `tool_specs` and `call_handlers` (`agent/surfaces.py`), passed to `Agent.run` by a use case (`application/assistant.py`) |
+| an approval command | a slice in `approvals/commands/` (the message and its handler), registered in `module.py` and exported from `approvals/__init__.py` |

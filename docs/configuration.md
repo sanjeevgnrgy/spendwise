@@ -41,15 +41,15 @@ These are deliberate design values, each defined once, next to the code it gover
 |---|---|---|
 | `API_PREFIX = "/api/v1"`, `API_VERSION = "1.0.0"`, `MCP_PATH = "/mcp"` | `core/config.py` | URLs and the OpenAPI version |
 | Gemini timeout 60 s, 2 attempts, retry only on 5xx | `core/llm/gemini.py` | how long a model call may hang ([gemini.md](gemini.md#timeouts-and-retries)) |
-| `MAX_STEPS = 5` | `assistant/agent.py` | model round trips per message |
-| `REASONING_EFFORT = low` | `assistant/agent.py` | how hard the model thinks (deeper is slower) |
-| `MAX_HISTORY_TURNS = 10` | `assistant/turns.py` | earlier turns resent with each message (cost vs memory) |
-| `TTL_MINUTES = 15`, `MAX_PENDING = 200` | `assistant/approvals.py` | how long a delete card works, and how many are kept |
-| `TIMEOUT_SECONDS = 15` | `assistant/tools.py` | how long a tool call may take |
-| `MAX_ROWS = 50`, `RECENT_ROWS = 20` | `mcp/read_tools.py`, `mcp/resources.py` | rows an MCP list returns (each costs tokens) |
-| `DEFAULT_LIST_LIMIT = 100`, `MAX_LIST_LIMIT = 500` | `expenses/contracts.py` | `GET /expenses` page size |
-| `DEFAULT_TREND_MONTHS = 6`, `MAX_TREND_MONTHS = 24` | `expenses/contracts.py` | the trend's length |
-| `MAX_MESSAGE_LENGTH = 2000` | `assistant/schemas.py` | one chat message (also the web text box's limit) |
+| `MAX_STEPS = 5` | `assistant/agent/agent.py` | model round trips per message |
+| `REASONING_EFFORT = low` | `assistant/agent/agent.py` | how hard the model thinks (deeper is slower) |
+| `MAX_HISTORY_TURNS = 10` | `assistant/application/assistant.py` | earlier turns resent with each message (cost vs memory) |
+| `TTL_MINUTES = 15`, `MAX_PENDING = 200` | `assistant/approvals/models.py` | how long a delete card works, and how many are kept |
+| `TIMEOUT_SECONDS = 15` | `assistant/tools/mcp_adapter.py` | how long a tool call may take |
+| `MAX_ROWS = 50`, `RECENT_ROWS = 20` | `mcp/tools/list_expenses.py`, `mcp/resources.py` | rows an MCP list returns (each costs tokens) |
+| `DEFAULT_LIST_LIMIT = 100`, `MAX_LIST_LIMIT = 500` | `expenses/values.py` | `GET /expenses` page size |
+| `DEFAULT_TREND_MONTHS = 6`, `MAX_TREND_MONTHS = 24` | `expenses/values.py` | the trend's length |
+| `MAX_MESSAGE_LENGTH = 2000` | `assistant/api/schemas.py` | one chat message (also the web text box's limit) |
 | `DEFAULT_CURRENCY = "INR"`, `CURRENCY_SYMBOLS` | `core/money.py` | the currency assumed and how money is written |
 | Log level `INFO` for `app.*` | `core/logging.py` | message text and tool arguments appear only at `DEBUG` |
 

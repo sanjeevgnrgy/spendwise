@@ -96,6 +96,8 @@ flowchart TD
   its tables, contracts and handlers. Another module's names come only from its package (`app.modules.expenses`), never
   its files; no module queries another's tables; links are plain ids with no cross-module foreign keys.
   `core/` never imports a module, and `bootstrap.py` is the one composition root.
+- **Vertical slices inside a module:** each command or query is one file holding the message and its handler, so a
+  use case is one file to read and adding one is a new file plus one registration line.
 - **CQRS-lite with a unit of work:** every operation is a **command** (changes data, returns at most an id) or a
   **query** (reads, changes nothing), sent through `MessageBus`. The bus opens one session per outermost command,
   commits once, rolls back on error, and gives nested commands a SAVEPOINT. Same database for reads and writes.
@@ -206,12 +208,15 @@ spendwise/
       migrations.py       run or check the database migrations from code
       core/               config, db, cqrs (the bus), errors, clock, months, money, logging, llm/ (port + Gemini)
       modules/
-        categories/       contracts, tables, commands, queries, api, module
-        expenses/         + domain rules and the write-side repository
+        categories/       commands/ and queries/ (one file per message: the message and its handler), values,
+                          models, persistence/ (tables), api, module
+        expenses/         + domain/ (business rules) and persistence/repository.py (the write side)
         conversations/    chat threads, stored as provider-neutral messages
-        assistant/        agent loop, use cases, approvals, AG-UI adapter, tools port, a2ui/ cards & forms
-        mcp/              MCP server: typed tool contract, tools, resources, HTTP endpoint
-    migrations/           Alembic: 0001 baseline, 0002 conversations + approvals, 0003 expense versions
+        assistant/        api/ (routes, AG-UI in and out), application/ (use cases), agent/ (the loop),
+                          approvals/, tools/ (port + MCP adapter), a2ui/ (cards & forms)
+        mcp/              MCP server: typed tool contract, tools/ (one file per tool), resources, HTTP endpoint
+    migrations/           Alembic: 0001 baseline, 0002 conversations + approvals, 0003 expense versions,
+                          0004 conversation index
     scripts/              export_contracts.py: the contract for the web app
     seed.py               sample categories and expenses
     mcp_stdio.py          the MCP server over stdio

@@ -160,6 +160,8 @@ add a new entry and mark the old one **Superseded by D<n>**.
 - **Why:** shape errors are caught before any code runs. Business rules live in the one place every caller
   passes through.
 - **Updated by D139:** business rules live in each module's `domain.py` and command handlers.
+- **Updated by D175:** the rules several commands share are in `expenses/domain/rules.py` (`require_positive_amount`,
+  `require_category_exists`); a rule only one command applies stays in that command's handler.
 
 ### D28. Service errors become HTTP responses in one place
 - **What:** services raise `NotFoundError` or `BusinessRuleError` (`core/errors.py`). `main.py` registers
@@ -1117,6 +1119,8 @@ is natural. It's still a soft, model-judged guard.
 - **Why:** one `service.py` per module mixed reads and writes, and repositories committed on their own, so two writes
   couldn't be one transaction.
 - **Revisit when:** reads and writes need different storage, or a handler needs to run after another commits (events).
+- **Updated by D175:** each command and query is now one file, `commands/<command>.py` or `queries/<query>.py`,
+  holding the message and its handler; `commands.py`, `queries.py` and `contracts.py` are gone.
 
 ### D140. Modules plug in through `module.py`; `bootstrap.py` is the composition root
 - Each module has `module.py` (handlers, routes, tables) for the composition root, and `__init__.py` (its contract)
@@ -1146,6 +1150,7 @@ is natural. It's still a soft, model-judged guard.
   run as a separate service (then `MCP_TOKEN` is sent as a bearer token).
 - The tools still go through MCP, so the agent stays decoupled from the expenses module (D72).
 - **Why:** calling ourselves over HTTP was what forced sync routes and a connection per tool call.
+- **Updated by D175:** the port is `assistant/tools/port.py` and the adapter `assistant/tools/mcp_adapter.py`.
 
 ### D144. MCP tools return typed results; the contract lives in the mcp module
 - Each tool returns a Pydantic model (`ExpenseSaved`, `ExpenseSearch`, `MonthSpending`, ...). The SDK publishes it as
@@ -1177,6 +1182,8 @@ is natural. It's still a soft, model-judged guard.
 - `agui.py` turns them into AG-UI events, reads `forwardedProps`, and adds cards; `api.py` serves HTTP.
 - The names on the wire beyond AG-UI's own are in `assistant/protocol.py`.
 - **Why:** the service built AG-UI events itself, mixing a transport protocol into the use cases.
+- **Updated by D175:** the files moved into folders by role: `turns.py` is `application/assistant.py`, `agui.py` is
+  `api/agui_stream.py`, `api.py` is `api/routes.py`, and `protocol.py` is `api/protocol.py`.
 
 ### D148. Migrations with Alembic
 - `backend/alembic.ini` and `backend/migrations`. 0001 is the schema as it was, created only where missing, so existing
@@ -1310,10 +1317,14 @@ is natural. It's still a soft, model-judged guard.
   break if that contract changes.
 - Tool descriptions are built from the contract's names, and the server checks its tools' parameters at start-up.
 - **Updated by D172:** the port is split by use (`StructuredOutputModel`, `ToolCallingModel`); `LanguageModel` is both.
+- **Updated by D175:** the mcp package still exports only its contract (`contracts.py`) and loads no server code; its
+  tools are now one file each in `mcp/tools/`. The domain modules' packages, by contrast, now load their handlers
+  and tables when imported, because they re-export the messages from the slice files.
 
 ### D167. `/agent` checks its input before streaming
 - A FastAPI dependency (`agui.read_request`) validates the thread id, the message or the button click: problems are a
   422 problem response. The stream starts only with a valid run.
+- **Updated by D175:** `read_request` is in `assistant/api/agui_request.py`.
 
 ### D168. Web: one refresh rule; data kept when a refresh fails; boundaries everywhere
 - Mutations declare `meta: { changes: DATA_SCOPES.expenses }`; `app/query-client.ts` has the one rule
@@ -1386,6 +1397,8 @@ is natural. It's still a soft, model-judged guard.
   flags meant editing shared code for every new tool, card or client.
 - **Revisit:** if a table grows entries that need special cases, that's a sign the abstraction is wrong. Split the
   table rather than adding branches to it.
+- **Updated by D175:** those assistant files now sit in folders by role (`api/`, `application/`, `agent/`), and each
+  MCP tool's registrar is its own file in `mcp/tools/`.
 
 ### D173. Testability through seams, verified by recorded behaviour
 - **What:**
@@ -1424,3 +1437,66 @@ is natural. It's still a soft, model-judged guard.
   - Remote MCP opens a session per call (D74).
   - Details: [architecture.md](architecture.md#scalability).
 - **Revisit:** when more than one person or process uses one database, start with the SQLite writer limit.
+
+---
+
+## Folder structure
+
+> The backend's modules were reorganised inside, with no change to what the app does: the domain modules into
+> vertical slices, the assistant and the MCP adapter into folders by role. The web app's largest feature folder was
+> grouped by area. The layout and its rules: [architecture.md](architecture.md#layout) and
+> [architecture.md](architecture.md#why-vertical-slices); working in it:
+> [backend_onboarding.md](backend_onboarding.md#anatomy-of-a-module).
+
+### D175. Vertical slices inside modules; folders by role
+- **What:**
+  - **Domain modules** (categories, expenses, conversations): each command and each query is one file,
+    `commands/<command>.py` or `queries/<query>.py`, holding the message class and its handler, named like the file
+    (`queries/get_monthly_summary.py`: `GetMonthlySummary` and `get_monthly_summary`), plus anything only it uses.
+    What several slices share sits beside them, named for its role: `values.py` (ids, `Annotated` types, enums,
+    limits, constants), `models.py` (read models several slices return), `domain/rules.py` (expenses:
+    `require_positive_amount`, and `require_category_exists`, formerly `_require_category`),
+    `persistence/tables.py` (plus `persistence/repository.py` in expenses), and shared query helpers
+    (`expenses/queries/month_range.py`, `conversations/queries/thread_rows.py`). `api.py`, `module.py` and
+    `__init__.py` stay at the module root. The flat `contracts.py`, `commands.py`, `queries.py`, `domain.py`,
+    `tables.py` and `repository.py` are gone. `_Totalled` is now `Totalled` (`expenses/models.py`), since several
+    slices use it.
+  - **The assistant**, one folder per role: `api/` (`routes.py`, was `api.py`; `schemas.py`; `agui_request.py`;
+    `agui_stream.py`, was `agui.py`; `protocol.py`), `application/` (`assistant.py`, was `turns.py`;
+    `decisions.py`; `expense_parser.py`, was `parse.py`, now holding `ParsedExpense` and `ParseResponse` with the use
+    case), `agent/` (`agent.py`, `surfaces.py`, `prompts.py`, `tool_runs.py`, `events.py`), `approvals/`
+    (`models.py`, `store.py`, one slice per command in `commands/`, `persistence/tables.py`), `tools/` (`port.py`:
+    `ExpenseTools`, `ToolOutput`; `mcp_adapter.py`: `McpExpenseTools`), `a2ui/` (unchanged), `module.py`. Imports run
+    `api/` → `application/` → `agent/`, `approvals/`, `tools/`.
+  - **The mcp module:** one file per tool in `tools/` (`add_expense.py`, `list_expenses.py` with `MAX_ROWS`,
+    `get_expense.py`, `get_summary.py`, `update_expense.py`, `delete_expense.py`), and `tools/support.py` (was
+    `tool_support.py`) for what they share; `server.py` lists them in `TOOL_REGISTRARS`. `read_tools.py` and
+    `write_tools.py` are gone.
+  - Every module's `__init__.py` and `module.py` export the same names as before, so `bootstrap.py`, `main.py`,
+    `seed.py`, `mcp_stdio.py` and every import between modules stayed the same.
+  - **Web:** `features/expenses/components/` is grouped into `table/`, `dialogs/`, `filters/` and `fields/`, with
+    `expenses-page.tsx` at its root. `.oxlintrc.json` gained an override for files three folders deep, so "a relative
+    import must not leave the feature" holds at every depth.
+  - `backend/scripts/export_contracts.py` builds the app with `create_app()` and imports from `assistant/api/` and
+    `expenses/values.py`.
+- **Why:** a command or query and its handler change together, so they now live together: one file to open per use
+  case, and adding one is a new file plus one `bus.register` line in `module.py` (and an export from `__init__.py`
+  if other modules use it). The flat files grew with every use case and mixed unrelated ones. In the assistant and
+  the MCP adapter, folders make the roles visible: what translates the outside world, what decides, and what both
+  use.
+- **The trade-off:** a module's public contract is still its package (`from app.modules import expenses`), but
+  `__init__.py` now re-exports the messages from their slice files, so importing the package also loads the
+  module's handlers and tables (not its routes, and not the database engine). The earlier contract-only import is
+  given up for co-location. Module dependencies stay one-way (expenses → categories; mcp → expenses, categories;
+  assistant → the rest), so this can't create an import cycle. The mcp package still exports only `contracts.py`
+  and loads no server code (D166).
+- **How it was verified:**
+  - the recorded behaviour harness (D173) gave **identical** results before and after: 22 HTTP scenarios with a fake
+    model, recording every event, response and model call, the MCP tool listing and the OpenAPI document;
+  - the migrations check is clean: the tables still match the migrations;
+  - the generated web contract (`openapi.json`, `contracts.gen.ts`) is byte-identical;
+  - the boundary scans in [architecture.md](architecture.md#checking-the-rules) are clean;
+  - `tsc -b`, `oxlint` and `npm run build` pass in `web/`.
+- **Revisit:** if a slice starts needing another slice's internals, move them to the shared place for their role
+  (`values.py`, `models.py`, `domain/`, a helper beside the slices) instead of importing one slice from another. A
+  slice may import another slice's message only to send it through the bus.

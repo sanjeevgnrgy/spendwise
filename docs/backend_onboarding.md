@@ -8,7 +8,7 @@ the "how".
 
 1. A **module** per business domain (`categories`, `expenses`, `conversations`, `assistant`) owns its tables.
 2. Every operation is a **command** (changes data, returns at most an id) or a **query** (reads), a small frozen
-   Pydantic model with **one handler**.
+   Pydantic model with **one handler**, both in one file (a vertical slice).
 3. Everything goes through the **bus**: `bus.execute(command)`, `bus.ask(query)`. The bus is the unit of work: it
    opens the session, commits once, rolls back on error.
 4. **Adapters** translate the outside world into messages: REST routes (`api.py`), the MCP server, the AG-UI adapter.
@@ -30,7 +30,7 @@ the "how".
 
 | Feature | Where | Why |
 |---|---|---|
-| Pydantic `BaseModel`, `Field`, `Annotated[...]` | contracts, schemas | validation at the edges; `Annotated` types like `RecordId`, `Amount`, `Merchant` carry their rules everywhere they're used |
+| Pydantic `BaseModel`, `Field`, `Annotated[...]` | messages, `values.py`, `models.py`, schemas | validation at the edges; `Annotated` types like `RecordId`, `Amount`, `Merchant` carry their rules everywhere they're used |
 | `model_config = ConfigDict(frozen=True, extra="forbid")` | every message | a message can't be changed, and a misspelt field is an error |
 | `StrEnum` | `PaymentMethod`, `ToolName`, `ActionName`, ... | named values that still compare equal to their strings |
 | `Protocol` | `Clock`, `ToolCallingModel`, `StructuredOutputModel`, `ExpenseTools`, `Surface` | ports: what's needed, not which class provides it |
@@ -42,16 +42,44 @@ the "how".
 
 ```
 modules/expenses/
-  __init__.py      the contract other modules may import: commands, queries, DTOs, enums, limits
-  contracts.py     those definitions
-  domain.py        business rules that hold however a change arrives (amount > 0)
-  tables.py        SQLModel tables (private) + TABLES
-  repository.py    the write side's table access: get, add, remove (stages only; never commits)
-  commands.py      one function per command: (ctx, command) -> id | None
-  queries.py       one function per query: (ctx, query) -> DTO; SQL straight into read models
-  api.py           FastAPI router: HTTP -> messages
-  module.py        for bootstrap.py: register_handlers(bus), router, TABLES
+  __init__.py              the contract other modules may import: re-exports messages, read models, enums, limits
+  commands/                one file per command: the message and its handler, (ctx, command) -> id | None
+    create_expense.py      CreateExpense + create_expense
+    update_expense.py      UpdateExpense, ExpenseChanges + update_expense
+    delete_expense.py      DeleteExpense + delete_expense
+  queries/                 one file per query: the message, a result only it returns, its handler, (ctx, query) -> DTO
+    get_expense.py         GetExpense + get_expense
+    list_expenses.py       ListExpenses + list_expenses
+    get_monthly_summary.py GetMonthlySummary, MonthlySummary, CategoryTotal + get_monthly_summary
+    get_monthly_trend.py   GetMonthlyTrend, MonthlyTrend, MonthTotal + get_monthly_trend
+    month_range.py         the date-and-currency filter the summary and the trend share
+  values.py                ExpenseId, Annotated field types (Amount, Merchant, Note, Version), PaymentMethod and
+                           its labels, limits
+  models.py                read models several slices return: ExpenseRead, ExpenseList, Totalled
+  domain/rules.py          rules that hold however a change arrives: require_positive_amount,
+                           require_category_exists
+  persistence/
+    tables.py              SQLModel tables (private) + TABLES
+    repository.py          the write side's table access: get, add, remove (stages only; never commits)
+  api.py                   FastAPI router: HTTP -> messages
+  module.py                for bootstrap.py: register_handlers(bus), router, TABLES
 ```
+
+`categories` and `conversations` have the same shape, without what they don't need: neither has `domain/` or a
+repository, and `conversations` has no `models.py` (its one read model, `ThreadRead`, lives in
+`queries/get_thread.py`; `queries/thread_rows.py` is the row reading `GetHistory` and `GetThread` share).
+
+**Why vertical slices.** A message and its handler change together, so they live in one file: to change a use case
+you open one file, and to add one you write one file and add one `bus.register` line. Each handler is named like
+its file (`get_monthly_summary.py` holds `get_monthly_summary`). Only what several slices share sits beside them,
+in a file or folder named for its role (`values.py`, `models.py`, `domain/`, `persistence/`). A slice may import
+another slice's message to send it through the bus (`create_category` asks `FindCategoryByName`), never its handler.
+
+**The contract is still the package.** Other modules write `from app.modules import expenses` and use
+`expenses.CreateExpense`; they never import a slice file. Because `__init__.py` re-exports from the slices,
+importing the package also loads the module's handlers and tables (not its routes, and not the database engine):
+the price of keeping each message beside its handler. Module dependencies run one way (expenses → categories;
+mcp → expenses, categories; assistant → the rest), so this can't create an import cycle. See D175.
 
 A handler gets a `Context`: `ctx.session` (the unit of work's session), `ctx.bus` (to ask other modules, in the same
 transaction) and `ctx.clock`.
@@ -60,10 +88,24 @@ transaction) and `ctx.clock`.
 
 Say the Dashboard needs "how much was spent at one merchant". In the **expenses** module:
 
-**1. The contract** (`contracts.py`): the question and its answer.
+**1. The slice** (a new file, `queries/get_merchant_total.py`): the question, its answer and the handler, together.
+The handler is named like the file, reads straight into the answer, and changes nothing.
 
 ```python
-class MerchantTotal(_Totalled):        # total_minor + a computed rupee `total`
+"""GetMerchantTotal: everything spent at one merchant. The query, its answer and its handler."""
+
+from sqlalchemy import func
+from sqlmodel import col, select
+
+from app.core.cqrs import Context, Query
+from app.core.money import DEFAULT_CURRENCY, CurrencyCode
+from app.modules.expenses.models import Totalled
+from app.modules.expenses.persistence.tables import Expense
+from app.modules.expenses.values import Merchant
+
+
+# GetMerchantTotal's answer: total_minor + a computed rupee `total` (from Totalled), per merchant.
+class MerchantTotal(Totalled):
     merchant: str
     expense_count: int
 
@@ -71,14 +113,12 @@ class MerchantTotal(_Totalled):        # total_minor + a computed rupee `total`
 class GetMerchantTotal(Query[MerchantTotal]):
     """Everything spent at one merchant (any letter case), in one currency."""
 
-    merchant: Merchant                 # reuse the shared Annotated types: same rules everywhere
+    merchant: Merchant                 # reuse the shared Annotated types (values.py): same rules everywhere
     currency: CurrencyCode = DEFAULT_CURRENCY
-```
 
-**2. The handler** (`queries.py`): read straight into the answer; change nothing.
 
-```python
-def merchant_total(ctx: Context, query: GetMerchantTotal) -> MerchantTotal:
+def get_merchant_total(ctx: Context, query: GetMerchantTotal) -> MerchantTotal:
+    """Count and add up the merchant's expenses in the database; only the totals travel to Python."""
     statement = select(func.count(col(Expense.id)), func.coalesce(func.sum(Expense.amount_minor), 0)).where(
         func.lower(Expense.merchant) == func.lower(query.merchant), Expense.currency == query.currency
     )
@@ -86,12 +126,17 @@ def merchant_total(ctx: Context, query: GetMerchantTotal) -> MerchantTotal:
     return MerchantTotal(merchant=query.merchant, expense_count=count, total_minor=total)
 ```
 
-**3. Register it** (`module.py`): `bus.register(GetMerchantTotal, queries.merchant_total)`. Registering twice is an
-error at start-up, and asking an unregistered message is a `LookupError`: wiring mistakes fail loudly.
+If another slice needs the same filter or answer later, move it to the shared place for its role (`models.py`,
+`values.py`, or a helper beside the slices like `queries/month_range.py`) rather than importing one slice from another.
 
-**4. Export it** (`__init__.py`) if other modules may ask it.
+**2. Register it** (`module.py`): import the message and handler from the slice, and add one line,
+`bus.register(GetMerchantTotal, get_merchant_total)`. Registering twice is an error at start-up, and asking an
+unregistered message is a `LookupError`: wiring mistakes fail loudly.
 
-**5. A route** (`api.py`), if the web app needs it:
+**3. Export it** (`__init__.py`) if other modules may ask it: import `GetMerchantTotal` and `MerchantTotal` from the
+slice and add both to `__all__`.
+
+**4. A route** (`api.py`), if the web app needs it, importing from the slice:
 
 ```python
 @router.get("/merchants/{merchant}/total")
@@ -99,7 +144,7 @@ def merchant_total(merchant: str, bus: BusDep) -> MerchantTotal:
     return bus.ask(GetMerchantTotal(merchant=merchant))
 ```
 
-**6. Regenerate the web contract**, so the web app gets the new types:
+**5. Regenerate the web contract**, so the web app gets the new types:
 
 ```powershell
 .\.venv\Scripts\python.exe backend\scripts\export_contracts.py
@@ -108,16 +153,19 @@ cd web; npm run gen:api
 
 ## Recipe: add a command
 
-Commands follow the same steps, with three differences:
+Commands follow the same steps (a new file in `commands/`, one `bus.register` line, an export if others send it),
+with three differences:
 
 - the handler **changes data** and returns **at most an id** (`Command[int]` or `Command[None]`); a route that must
   answer with data sends the command, then asks a query;
-- business rules go in `domain.py` (or the handler) and raise `BusinessRuleError`;
-- writes go through the repository, which only stages them. **Never call `session.commit()`**: the bus commits once,
-  after the handler returns, and rolls back if anything raised. A command sent from inside another runs in a
-  SAVEPOINT.
+- business rules raise `BusinessRuleError`; a rule several commands share goes in `domain/rules.py`, one only this
+  command applies can stay in its handler;
+- writes go through the repository (`persistence/repository.py`), which only stages them. **Never call
+  `session.commit()`**: the bus commits once, after the handler returns, and rolls back if anything raised. A command
+  sent from inside another runs in a SAVEPOINT.
 
 ```python
+# commands/archive_expense.py (after its module docstring and imports)
 class ArchiveExpense(Command[None]):
     expense_id: ExpenseId
 
@@ -130,16 +178,19 @@ def archive_expense(ctx: Context, command: ArchiveExpense) -> None:
     expense.version += 1                                        # every change raises the version
 ```
 
+Then `bus.register(ArchiveExpense, archive_expense)` in `module.py`.
+
 To run several commands as one transaction (all saved, or none), wrap them: `with bus.unit_of_work(): ...`.
 
 ## Recipe: use another module
 
-Import its **package**, send its **messages**:
+Import its **package**, send its **messages**. This is the expenses module's rule that a category must exist
+(`expenses/domain/rules.py`):
 
 ```python
-from app.modules import categories                     # never app.modules.categories.tables / queries
+from app.modules import categories     # never app.modules.categories.queries.get_category or .persistence.tables
 
-def _require_category(ctx: Context, category_id: int) -> None:
+def require_category_exists(ctx: Context, category_id: int) -> None:
     if ctx.bus.ask(categories.GetCategory(category_id=category_id)) is None:
         raise BusinessRuleError(f"Category {category_id} does not exist")
 ```
@@ -149,7 +200,8 @@ disappeared.
 
 ## Recipe: add or change a table
 
-1. Change the module's `tables.py` (and add a new table to its `TABLES`).
+1. Change the module's `persistence/tables.py` (and add a new table to its `TABLES`). A column's length comes from a
+   limit in `values.py`, so the messages and the table agree.
 2. Generate a migration, then **read it** (autogenerate is a draft):
    ```powershell
    .\.venv\Scripts\python.exe -m alembic -c backend\alembic.ini revision --autogenerate -m "expenses get archived"
@@ -166,8 +218,22 @@ The whole upgrade runs in one transaction: if it fails, nothing changed. Details
 
 For example, budgets:
 
-1. `backend/app/modules/budgets/` with `contracts.py`, `tables.py`, `commands.py`, `queries.py`, `api.py`,
-   `module.py`, and `__init__.py` exporting the contract.
+1. The module's folder, as vertical slices like the others:
+
+   ```
+   modules/budgets/
+     __init__.py                re-exports the contract: messages, read models, ids, limits
+     values.py                  BudgetId, field types, limits (imports no other file of the module)
+     commands/create_budget.py  CreateBudget + create_budget
+     queries/get_budget.py      GetBudget, its answer + get_budget
+     persistence/tables.py      the Budget table + TABLES
+     api.py                     the routes
+     module.py                  register_handlers(bus): one bus.register per message; router; TABLES
+   ```
+
+   Each folder has an `__init__.py` whose docstring says what it holds. Add `models.py` (read models),
+   `domain/rules.py` (shared rules) or `persistence/repository.py` (the write side's table access) once several
+   slices need them.
 2. Add `budgets_module` to `MODULES` and its router to `api_routers()` in `app/bootstrap.py`.
 3. A migration for its tables.
 4. Regenerate the web contract.
@@ -177,14 +243,16 @@ For example, budgets:
 ## Recipe: give the assistant a new tool
 
 1. In `modules/mcp/contracts.py`: the tool's name in `ToolName`, and a result model.
-2. In `modules/mcp/read_tools.py` or `write_tools.py`: a `register_<tool>(server, bus, views)` function holding the
-   tool, with a description, typed `Annotated` arguments (with descriptions: the model
-   reads them), the right annotations (`READS_ONLY`, `ADDS_DATA`, `CHANGES_DATA`), and its body inside
-   `with tool_errors():` (`tool_support.py`), sending commands and queries through the bus. Optional text arguments
-   are `str = ""`. Then add the registrar to `TOOL_REGISTRARS` in `mcp/server.py` (the order there is the order the
-   model sees the tools in).
-3. Optional: a card in `assistant/a2ui/cards.py` (`_CARDS`) and chip labels in `assistant/agui.py` (`TOOL_LABELS`).
-4. Restart: the assistant lists tools once.
+2. A new file, `modules/mcp/tools/<tool>.py`, with a `register_<tool>(server, bus, views)` function holding the
+   tool: a description, typed `Annotated` arguments (with descriptions: the model reads them), the right annotations
+   (`READS_ONLY`, `ADDS_DATA`, `CHANGES_DATA`), and its body inside `with tool_errors():`, sending commands and
+   queries through the bus. Those pieces come from `tools/support.py`. Optional text arguments are `str = ""`.
+   Constants only the tool uses stay in its file (`MAX_ROWS` in `tools/list_expenses.py`).
+3. Add the registrar to `TOOL_REGISTRARS` in `mcp/server.py` (the order there is the order the model sees the
+   tools in).
+4. Optional: a card in `assistant/a2ui/cards.py` (`_CARDS`) and chip labels in `assistant/api/agui_stream.py`
+   (`TOOL_LABELS`).
+5. Restart: the assistant lists tools once.
 
 ## Errors: which to raise
 
@@ -206,6 +274,11 @@ Never catch exceptions in a route: `core/errors.py` turns them into problem resp
 | money | `rupees_to_paise`, `paise_to_rupees`, `format_money` (`core/money.py`); never `float` |
 | an id from a client | `RecordId` (bodies, `core/ids.py`), `IdPath` (URL paths, `core/dependencies.py`) |
 | currency codes | `CurrencyCode` / `CURRENCY_PATTERN` |
+| an expense's fields | `ExpenseId`, `Amount`, `Merchant`, `Note`, `Version`, `PaymentMethod` and the limits (`expenses/values.py`) |
+| a total in paise and rupees | subclass `Totalled` (`expenses/models.py`): `total_minor` plus a computed `total` |
+| "this month, in this currency" | `in_month_range(start, end, currency)` (`expenses/queries/month_range.py`) |
+| an expense rule | `require_positive_amount`, `require_category_exists` (`expenses/domain/rules.py`) |
+| an MCP tool's pieces | `tool_errors()`, `given()`, `READS_ONLY` / `ADDS_DATA` / `CHANGES_DATA`, `ExpenseIdArg` (`mcp/tools/support.py`) |
 | the LLM | the injected model port (`core/llm`: depend on `StructuredOutputModel` or `ToolCallingModel`, whichever you call); never import the Gemini adapter outside `bootstrap.py` |
 
 ## Plugging in fakes
@@ -244,9 +317,12 @@ agent.
 - **Comments say why**, in plain words, next to the code they explain.
 - **No magic strings or numbers:** a name, key, limit or label is an enum or constant, defined once, in the module that
   owns it, and exported if others need it. Values the web app needs go through `export_contracts.py`.
-- **No duplication:** shared rules live in `Annotated` types, `domain.py` or `core/`.
+- **No duplication:** shared rules live in `Annotated` types (`values.py`), `domain/rules.py` or `core/`.
+- **Vertical slices:** one file per command or query, holding the message and its handler (named like the file);
+  what several slices share goes in `values.py`, `models.py`, `domain/` or `persistence/`, never in one slice that
+  others import.
 - **Boundaries:** `core/` imports no module; a module imports another's package only; only `bootstrap.py` and
-  `main.py` import a `module.py`.
+  `main.py` import a `module.py`; inside the assistant, imports run `api/` → `application/` → the rest.
 - **Logging:** `logger = logging.getLogger(__name__)`; user data only at DEBUG.
 - **Pins:** a new dependency gets an exact version in `requirements.txt`.
 
@@ -263,8 +339,10 @@ Automated tests aren't part of the repository yet. Until they are, before asking
 ### Review checklist
 
 - [ ] Commands return at most an id; queries change nothing; no `commit()` outside the bus
+- [ ] A new command or query is one slice file (message + handler, named like the file), registered in `module.py`,
+      exported from `__init__.py` if other modules use it
 - [ ] Files under ~180 code lines, functions under ~50; extend through tables and protocols, not new branches
-- [ ] No import of another module's files; `core/` untouched by module imports
+- [ ] No import of another module's files, or of another slice's handler; `core/` untouched by module imports
 - [ ] Inputs validated by contract types; business rules raise `BusinessRuleError`
 - [ ] No literal names, keys or limits that already exist elsewhere
 - [ ] Time from the clock, money in paise

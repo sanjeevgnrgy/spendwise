@@ -88,8 +88,8 @@ on your tier, or temporarily overloaded).
 - **Fix:** check the id, or leave `thread_id` out to start a new conversation.
 
 ### The assistant forgot something from much earlier in a long thread
-- **Cause:** only the last 10 turns are sent (`MAX_HISTORY_TURNS` in `modules/assistant/turns.py`), to keep cost down.
-  Older turns are still stored (`GET /threads/{id}`), but the model doesn't see them.
+- **Cause:** only the last 10 turns are sent (`MAX_HISTORY_TURNS` in `modules/assistant/application/assistant.py`),
+  to keep cost down. Older turns are still stored (`GET /threads/{id}`), but the model doesn't see them.
 - **Fix:** repeat the detail, or start a new thread for a new topic.
 
 ### `/parse` returns 422 "There are no categories yet"
@@ -152,8 +152,9 @@ on your tier, or temporarily overloaded).
   data **succeeded** (a ✓ chip such as "Expense saved"). A red ✗ chip means the backend refused it.
 - **Check:** in the raw stream (`curl.exe -N`, see [phases/phase-15-tool-progress.md](phases/phase-15-tool-progress.md)),
   a `STATE_SNAPSHOT` should follow that tool's `TOOL_CALL_RESULT`. If it doesn't, the tool may be marked
-  `read_only_hint=True` in `modules/mcp/tool_support.py`. After changing a tool's annotations, restart the app: the assistant
-  reads the tool list only once.
+  `read_only_hint=True`: check which annotations (`READS_ONLY`, `ADDS_DATA`, `CHANGES_DATA`, from
+  `modules/mcp/tools/support.py`) its own file in `modules/mcp/tools/` registers it with. After changing a tool's
+  annotations, restart the app: the assistant reads the tool list only once.
 
 ### Assistant panel: a tool chip keeps spinning
 - **Cause:** the tool is still running. An MCP call gives up after 15 s, and then the chip turns red. If the whole run

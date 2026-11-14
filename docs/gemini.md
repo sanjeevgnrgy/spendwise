@@ -104,7 +104,7 @@ streamed (used by `POST /api/v1/chat` and `POST /api/v1/agent`, see
   every step Gemini returned **unchanged**, then one `{"type": "function_result", "name", "call_id", "is_error",
   "result": [{"type": "text", "text": "<json>"}]}` per call.
 - **Automatic function calling** (the SDK running your Python functions for you) isn't available in the Interactions
-  API, so `modules/assistant/agent.py` runs the loop itself.
+  API, so `modules/assistant/agent/agent.py` runs the loop itself.
 - **Thinking level:** `generation_config={"thinking_level": "minimal" | "low" | "medium" | "high" | "xhigh"}`. The agent
   uses `low`; with deeper thinking, a single step took 40–60+ s in testing.
 

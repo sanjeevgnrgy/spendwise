@@ -1,7 +1,8 @@
-"""YearMonth: a calendar month as a value, like 2026-11.
+"""YearMonth: a calendar month as a value, like 2026-11 (core infrastructure).
 
 Before this, "YYYY-MM" was split, joined and shifted by hand in four places. A value object keeps
-the rules (format, valid range, month arithmetic) in one spot.
+the rules (format, valid range, month arithmetic) in one spot. Used by the expenses module (the monthly
+summary and trend), the MCP server and the assistant's insight cards.
 """
 
 from dataclasses import dataclass
@@ -11,6 +12,9 @@ from typing import ClassVar, Self
 MONTHS_PER_YEAR = 12
 
 
+# One calendar month. Immutable and ordered (2026-01 < 2026-02), so it can be a dict key and sorted.
+# Comments rather than a docstring: GetMonthlySummary (a Pydantic query) has a YearMonth field, and Pydantic
+# would copy a docstring into that query's JSON schema.
 @dataclass(frozen=True, order=True)
 class YearMonth:
     year: int
@@ -23,6 +27,7 @@ class YearMonth:
     MAX_YEAR: ClassVar[int] = 2099
 
     def __post_init__(self) -> None:
+        """Refuse a month that doesn't exist or is outside MIN_YEAR..MAX_YEAR. Raises ValueError."""
         if not (self.MIN_YEAR <= self.year <= self.MAX_YEAR and 1 <= self.month <= MONTHS_PER_YEAR):
             raise ValueError(f"{self.year}-{self.month} is not a month between {self.MIN_YEAR} and {self.MAX_YEAR}")
 
@@ -36,12 +41,15 @@ class YearMonth:
 
     @classmethod
     def of(cls, day: date) -> Self:
+        """The month `day` falls in."""
         return cls(day.year, day.month)
 
     def __str__(self) -> str:
+        """The month as YYYY-MM ('2026-11'), the form the API and the model use."""
         return f"{self.year:04d}-{self.month:02d}"
 
     def first_day(self) -> date:
+        """The 1st of the month: where its date range starts."""
         return date(self.year, self.month, 1)
 
     def shift(self, months: int) -> "YearMonth":

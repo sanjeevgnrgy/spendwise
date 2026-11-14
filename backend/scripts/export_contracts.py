@@ -31,7 +31,12 @@ from app.modules.assistant.a2ui.models import (  # noqa: E402
     Component,
     Trend,
 )
-from app.modules.assistant.protocol import FORWARDED_A2UI_ACTION, STATE_DATA_VERSION, CustomEventName, MetadataKey  # noqa: E402
+from app.modules.assistant.protocol import (  # noqa: E402
+    FORWARDED_A2UI_ACTION,
+    STATE_DATA_VERSION,
+    CustomEventName,
+    MetadataKey,
+)
 from app.modules.assistant.schemas import MAX_MESSAGE_LENGTH  # noqa: E402
 from app.modules.categories import UNKNOWN_CATEGORY  # noqa: E402
 from app.modules.conversations import THREAD_ID_MAX_LENGTH  # noqa: E402
@@ -51,6 +56,7 @@ HEADER = (
 
 
 def _const(name: str, value: object) -> str:
+    """One TypeScript line: `export const <name> = <value as JSON> as const`."""
     # JSON is valid TypeScript, and `as const` keeps the exact values as types.
     return f"export const {name} = {json.dumps(value, indent=2, ensure_ascii=False)} as const\n"
 
@@ -58,10 +64,12 @@ def _const(name: str, value: object) -> str:
 def _component_names() -> dict[str, str]:
     """Every component type the server may send ({"Text": "Text", ...}), read from the models themselves."""
     union = get_args(Component)[0]
-    return {model.model_fields["component"].default: model.model_fields["component"].default for model in get_args(union)}
+    names = [model.model_fields["component"].default for model in get_args(union)]
+    return {name: name for name in names}
 
 
 def main() -> None:
+    """Write web/openapi.json and contracts.gen.ts from the backend's current code."""
     openapi = WEB_DIR / "openapi.json"
     openapi.write_text(json.dumps(app.openapi(), indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
 

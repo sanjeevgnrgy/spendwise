@@ -29,17 +29,24 @@ GEMINI = "gemini"
 
 
 def _text(parts: list[dict[str, Any]] | None) -> str:
+    """All the text parts of Gemini content, joined; other parts (and None) give ""."""
     return "".join(part.get("text", "") for part in parts or [] if part.get("type") == "text")
 
 
 def _to_neutral(step: dict[str, Any]) -> dict[str, Any] | None:
+    """One stored Gemini step -> SpendWise's own message (as JSON), or None for a step type we never used."""
     match step.get("type"):
         case "user_input":
             return {"kind": "user_text", "text": _text(step.get("content"))}
         case "model_output":
             return {"kind": "assistant_text", "text": _text(step.get("content"))}
         case "function_call":
-            return {"kind": "tool_call", "call_id": step["id"], "name": step["name"], "arguments": step.get("arguments") or {}}
+            return {
+                "kind": "tool_call",
+                "call_id": step["id"],
+                "name": step["name"],
+                "arguments": step.get("arguments") or {},
+            }
         case "function_result":
             return {
                 "kind": "tool_result",
@@ -55,6 +62,7 @@ def _to_neutral(step: dict[str, Any]) -> dict[str, Any] | None:
 
 
 def _to_gemini(message: dict[str, Any]) -> dict[str, Any] | None:
+    """The reverse, for the downgrade: one stored message -> a Gemini step, or None for another provider's reasoning."""
     content = lambda text: [{"type": "text", "text": text}]  # noqa: E731
     match message.get("kind"):
         case "user_text":
@@ -62,7 +70,12 @@ def _to_gemini(message: dict[str, Any]) -> dict[str, Any] | None:
         case "assistant_text":
             return {"type": "model_output", "content": content(message["text"])}
         case "tool_call":
-            return {"type": "function_call", "id": message["call_id"], "name": message["name"], "arguments": message["arguments"]}
+            return {
+                "type": "function_call",
+                "id": message["call_id"],
+                "name": message["name"],
+                "arguments": message["arguments"],
+            }
         case "tool_result":
             return {
                 "type": "function_result",
@@ -77,6 +90,7 @@ def _to_gemini(message: dict[str, Any]) -> dict[str, Any] | None:
 
 
 def _convert(table: str, convert: Any, kind_of: Any) -> None:
+    """Rewrite every row's content with `convert` and its kind column with `kind_of`; delete rows it can't convert."""
     connection = op.get_bind()
     rows = connection.execute(sa.text(f"SELECT id, content FROM {table}")).fetchall()
     for row_id, raw in rows:
@@ -91,6 +105,7 @@ def _convert(table: str, convert: Any, kind_of: Any) -> None:
 
 
 def upgrade() -> None:
+    """Rename chatmessage to conversation_message and convert its rows; add pending_approval."""
     op.drop_index("ix_chatmessage_thread_id", table_name="chatmessage")
     op.rename_table("chatmessage", "conversation_message")
     op.create_index("ix_conversation_message_thread_id", "conversation_message", ["thread_id"])
@@ -108,6 +123,7 @@ def upgrade() -> None:
 
 
 def downgrade() -> None:
+    """Drop pending_approval, convert the messages back to Gemini steps, and rename the table back."""
     op.drop_table("pending_approval")
     _convert("conversation_message", _to_gemini, lambda step: step["type"])
     op.drop_index("ix_conversation_message_thread_id", table_name="conversation_message")

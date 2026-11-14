@@ -2,7 +2,12 @@
 
 Before this, the chat history was stored exactly as Gemini's API writes it, so changing provider would
 have meant migrating every stored conversation. Now the agent, the history and the database speak
-these types, and each provider's adapter (gemini.py) translates at the edge.
+these types, and each provider's adapter (gemini.py, through gemini_wire.py) translates at the edge.
+
+Part of the LLM port (core/llm), exported by its __init__.py: the assistant's agent and use cases, the
+conversations module (which stores these messages as JSON) and the adapters use them. The classes below are
+Pydantic models and enums, so their notes are # comments: Pydantic copies a docstring into the JSON schema,
+and ThreadMessage.kind puts MessageKind into the OpenAPI document.
 """
 
 from enum import StrEnum
@@ -11,6 +16,7 @@ from typing import Annotated, Any, Literal
 from pydantic import BaseModel, ConfigDict, Field, TypeAdapter
 
 
+# Which kind of message: the discriminator of Message, and a column of the stored conversation.
 class MessageKind(StrEnum):
     USER_TEXT = "user_text"
     ASSISTANT_TEXT = "assistant_text"
@@ -19,15 +25,18 @@ class MessageKind(StrEnum):
     REASONING = "reasoning"
 
 
+# What every message has in common: immutable, and a misspelt field is an error.
 class _Message(BaseModel):
     model_config = ConfigDict(frozen=True, extra="forbid")
 
 
+# What the user wrote.
 class UserText(_Message):
     kind: Literal[MessageKind.USER_TEXT] = MessageKind.USER_TEXT
     text: str
 
 
+# What the model answered, in text.
 class AssistantText(_Message):
     kind: Literal[MessageKind.ASSISTANT_TEXT] = MessageKind.ASSISTANT_TEXT
     text: str
@@ -88,6 +97,7 @@ class ReasoningEffort(StrEnum):
     HIGH = "high"
 
 
+# Tokens one model call used (None when the provider didn't say), for the log.
 class Usage(BaseModel):
     input_tokens: int | None = None
     output_tokens: int | None = None

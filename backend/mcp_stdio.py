@@ -1,5 +1,7 @@
 """Run the SpendWise MCP server over stdio, for local tools (MCP Inspector, Claude Desktop).
 
+An entry point, built from the composition root: the same MCP server (and bus) the web app serves at /mcp/.
+
 The tool starts this script itself and talks to it through stdin/stdout, so no web server
 is needed. From the project folder:  .\\.venv\\Scripts\\python.exe backend\\mcp_stdio.py
 

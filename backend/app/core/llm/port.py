@@ -1,7 +1,11 @@
 """What the app needs from a language model, independent of any provider.
 
-The composition root (bootstrap.py) picks the adapter that implements it (today GeminiModel, in
-gemini.py) and hands it to the code that needs it. Nothing else imports a provider.
+The port (core layer, no business rules). Two narrow protocols, one per way the app uses a model, so each
+caller depends only on what it calls (interface segregation):
+- StructuredOutputModel: one answer as JSON in a given shape (the assistant's /parse, parse.ExpenseParser);
+- ToolCallingModel: one streamed step of a tool-using conversation (the assistant's agent loop, agent.Agent).
+LanguageModel is both: what the composition root (bootstrap.py) builds and hands out, today GeminiModel
+(gemini.py), which satisfies all three structurally. Nothing else imports a provider.
 """
 
 from collections.abc import Iterator
@@ -23,13 +27,21 @@ class LlmStream(Protocol):
     messages: list[Message]
     usage: Usage
 
-    def __iter__(self) -> Iterator[str]: ...
-
-
-class LanguageModel(Protocol):
-    def ask_for_json(self, prompt: str, schema: dict[str, Any], system_instruction: str) -> str:
-        """Structured output: the answer is JSON shaped by `schema`. Returns the JSON text."""
+    def __iter__(self) -> Iterator[str]:
+        """Yield the answer's text piece by piece, as the model writes it. Raises LlmError if the model fails."""
         ...
+
+
+class StructuredOutputModel(Protocol):
+    """A model that answers once, in JSON of a shape the caller chooses (structured output)."""
+
+    def ask_for_json(self, prompt: str, schema: dict[str, Any], system_instruction: str) -> str:
+        """Structured output: the answer is JSON shaped by `schema`. Returns the JSON text; raises LlmError."""
+        ...
+
+
+class ToolCallingModel(Protocol):
+    """A model that holds a conversation and may ask for tools to be run (function calling), streamed."""
 
     def stream_with_tools(
         self,
@@ -38,5 +50,12 @@ class LanguageModel(Protocol):
         system_instruction: str,
         effort: ReasoningEffort | None = None,
     ) -> LlmStream:
-        """One step of a tool-using conversation, streamed. `history` is the whole conversation so far."""
+        """One step of a tool-using conversation, streamed. `history` is the whole conversation so far.
+
+        Stateless: every call carries everything the model should see. Raises LlmError if the model fails.
+        """
         ...
+
+
+class LanguageModel(StructuredOutputModel, ToolCallingModel, Protocol):
+    """Everything the app asks of a model. The composition root builds one; callers take the narrow protocol."""

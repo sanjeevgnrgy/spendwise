@@ -1,3 +1,13 @@
+"""Settings and fixed values the whole backend reads (core infrastructure).
+
+Values that differ between machines (the Gemini key and model, the database URL, CORS origins, the MCP token
+and URL) come from the environment or .env, into the one `settings` object, read once at startup. Values that
+are part of the design (the API prefix and version, the MCP path) are constants instead: they change in code,
+together with the contract, never per machine. Read by db.py (the default engine), the composition root (which
+hands the Gemini key and model to the Gemini adapter, and the MCP URL and token to the tools), main.py (CORS),
+the migrations and the export script. docs/configuration.md lists every setting.
+"""
+
 from pathlib import Path
 
 from pydantic import SecretStr
@@ -17,6 +27,10 @@ API_VERSION = "1.0.0"
 MCP_PATH = "/mcp"
 
 
+# Every setting that can differ between machines. pydantic-settings fills each field from the environment
+# variable of the same name, in any letter case (GEMINI_MODEL -> gemini_model), or else from .env. A value
+# of the wrong type (say, a CORS_ORIGINS that isn't a JSON list) stops the app at startup with a validation
+# error, instead of failing later on first use.
 class Settings(BaseSettings):
     model_config = SettingsConfigDict(
         env_file=PROJECT_DIR / ".env",

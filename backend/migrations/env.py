@@ -1,12 +1,21 @@
-"""How Alembic connects to SpendWise's database. Alembic runs this for every migration command."""
+"""How Alembic connects to SpendWise's database (migrations layer).
+
+Alembic runs this for every migration command, from the command line (`alembic -c backend/alembic.ini ...`)
+or from code (app/migrations.upgrade_to_latest, used by seed.py and mcp_stdio.py). It runs on the connection
+upgrade_to_latest hands it, if any, else on the default engine (core/db.engine, the database in DATABASE_URL),
+and compares against every module's tables, which the composition root collects (bootstrap.metadata).
+"""
 
 from logging.config import fileConfig
 
 from alembic import context
 
+from sqlalchemy import Connection
+
 from app.bootstrap import metadata
 from app.core.config import settings
 from app.core.db import engine
+from app.migrations import CONNECTION_ATTRIBUTE
 
 config = context.config
 # Only on the command line: when the app runs migrations (seed.py), its own logging setup stays.
@@ -31,17 +40,31 @@ def run_migrations_offline() -> None:
 
 
 def run_migrations_online() -> None:
+    """Run the migrations against the database, all of one command in a single transaction.
+
+    If any step fails, everything is rolled back and the error is raised: the database is left as it was.
+    """
+    given = config.attributes.get(CONNECTION_ATTRIBUTE)
+    if given is not None:
+        # From app/migrations.upgrade_to_latest(engine): migrate that database, inside its transaction.
+        _run_on(given)
+        return
     with engine.connect() as connection:
-        context.configure(
-            connection=connection,
-            target_metadata=target_metadata,
-            render_as_batch=True,
-            # All migrations of one `upgrade` run in one transaction, schema changes included (core/db.py makes
-            # SQLite honour that): if any step fails, the database is left exactly as it was.
-            transactional_ddl=True,
-        )
-        with context.begin_transaction():
-            context.run_migrations()
+        _run_on(connection)
+
+
+def _run_on(connection: Connection) -> None:
+    """Run this command's migrations on `connection`, all in one transaction."""
+    context.configure(
+        connection=connection,
+        target_metadata=target_metadata,
+        render_as_batch=True,
+        # All migrations of one `upgrade` run in one transaction, schema changes included (core/db.py makes
+        # SQLite honour that: its driver needs an explicit BEGIN for transactional DDL).
+        transactional_ddl=True,
+    )
+    with context.begin_transaction():
+        context.run_migrations()
 
 
 if context.is_offline_mode():

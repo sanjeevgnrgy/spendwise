@@ -1,5 +1,8 @@
 """Insert default categories and 10 sample expenses. Safe to run more than once.
 
+An entry point (a script), built from the composition root like the web app: it brings the tables up to date,
+then sends ordinary commands through the bus, so the sample data passes every rule real data does.
+
 Run from the project folder:  .\\.venv\\Scripts\\python.exe backend\\seed.py
 """
 
@@ -7,7 +10,7 @@ from datetime import timedelta
 from decimal import Decimal
 
 from app import bootstrap, migrations
-from app.core.money import format_money, paise_to_rupees
+from app.core.money import DEFAULT_CURRENCY, format_money, paise_to_rupees
 
 # Only the modules' contracts, sent through the bus, exactly like any other caller.
 from app.modules import categories, expenses
@@ -41,6 +44,7 @@ SAMPLE_EXPENSES = [
 
 
 def main() -> None:
+    """Migrate the database, then add the sample data in one transaction, unless categories already exist."""
     # The seed may run before the server ever has, so bring the tables up to date first.
     migrations.upgrade_to_latest()
     services = bootstrap.build()
@@ -72,9 +76,10 @@ def main() -> None:
     saved = bus.ask(expenses.ListExpenses(limit=expenses.MAX_LIST_LIMIT)).items
     print(f"Seeded {len(category_ids)} categories and {len(saved)} expenses:")
     for e in saved:
-        print(f"  {e.spent_on}  {format_money(e.amount, e.currency):>12}  (stored as {e.amount_minor:>6} paise)  {e.merchant}")
+        amount = format_money(e.amount, e.currency)
+        print(f"  {e.spent_on}  {amount:>12}  (stored as {e.amount_minor:>6} paise)  {e.merchant}")
     total = sum(e.amount_minor for e in saved)
-    print(f"  Total: {format_money(paise_to_rupees(total), 'INR')} (stored as {total} paise)")
+    print(f"  Total: {format_money(paise_to_rupees(total), DEFAULT_CURRENCY)} (stored as {total} paise)")
 
 
 if __name__ == "__main__":

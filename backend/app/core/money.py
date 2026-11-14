@@ -1,3 +1,11 @@
+"""Money: rupees <-> paise, currency codes, and writing an amount for people (core infrastructure).
+
+Amounts are stored and added up as whole paise (integers), and converted through Decimal, never float, so
+no rounding error can creep into a total. Used by the expenses module (contracts, handlers, table), the MCP
+server and the assistant's cards, seed.py, and the export script (which hands the currency values to the
+web app, whose formatMoney matches format_money).
+"""
+
 from decimal import Decimal
 from typing import Annotated
 
@@ -30,6 +38,7 @@ def paise_to_rupees(paise: int) -> Decimal:
 
 
 def _indian_grouping(whole: str) -> str:
+    """Commas in a string of digits, the Indian way: '12345678' -> '1,23,45,678'."""
     # India groups the last three digits, then pairs: 12345678 -> 1,23,45,678 (the web's Intl "en-IN" does the same).
     if len(whole) <= 3:
         return whole

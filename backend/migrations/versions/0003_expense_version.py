@@ -23,11 +23,13 @@ FIRST_VERSION = "1"
 
 
 def upgrade() -> None:
+    """Add expense.version; existing rows get FIRST_VERSION."""
     # Batch mode: SQLite can't add a NOT NULL column in place, so Alembic copies the table.
     with op.batch_alter_table("expense") as batch:
         batch.add_column(sa.Column("version", sa.Integer(), nullable=False, server_default=FIRST_VERSION))
 
 
 def downgrade() -> None:
+    """Drop expense.version again."""
     with op.batch_alter_table("expense") as batch:
         batch.drop_column("version")

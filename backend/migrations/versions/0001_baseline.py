@@ -21,10 +21,12 @@ depends_on: str | Sequence[str] | None = None
 
 
 def _existing() -> set[str]:
+    """The names of the tables the database already has."""
     return set(sa.inspect(op.get_bind()).get_table_names())
 
 
 def upgrade() -> None:
+    """Create each table (and its indexes) only if it's missing, so existing data is kept."""
     existing = _existing()
     if "category" not in existing:
         op.create_table(
@@ -63,6 +65,7 @@ def upgrade() -> None:
 
 
 def downgrade() -> None:
+    """Drop all three tables, and their data with them."""
     op.drop_table("chatmessage")
     op.drop_table("expense")
     op.drop_table("category")

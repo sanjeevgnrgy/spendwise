@@ -1,29 +1,48 @@
-from datetime import UTC, datetime
+"""The conversations module's table: `conversation_message`, one row per message of a chat thread.
+
+Private to this module: only its handlers read or write it (commands.py appends a finished turn, queries.py
+reads a thread back, whole or from a given turn). Other modules use the contract (contracts.py), and the
+composition root hands TABLES to the migrations. The table itself is created and changed by Alembic
+migrations, never by the app.
+"""
+
+from datetime import datetime
 from typing import Any
 
-from sqlalchemy import JSON, DateTime
+from sqlalchemy import JSON, DateTime, Index
 from sqlmodel import Field, SQLModel
 
 from app.modules.conversations.contracts import THREAD_ID_MAX_LENGTH
 
+# The longest message kind that fits; the longest today, "assistant_text", is 14 characters.
 KIND_LENGTH = 30
+# Every read picks one thread and a range of its turns (the history from a given turn, the highest turn so
+# far), so this index finds those rows directly instead of walking the whole thread. Migration 0004 adds it.
+THREAD_TURN_INDEX = "ix_conversation_message_thread_id_turn"
 
 
+# A SQLModel table class: its docstring stays as it is; notes go in comments.
 class ConversationMessage(SQLModel, table=True):
     """One message of a chat thread. Private to this module: other modules never import it."""
 
     __tablename__ = "conversation_message"
+    __table_args__ = (Index(THREAD_TURN_INDEX, "thread_id", "turn"),)
 
+    # None until the row is inserted; the database assigns it. Also the order of a thread's messages.
     id: int | None = Field(default=None, primary_key=True)
     # Groups one conversation.
-    thread_id: str = Field(index=True, max_length=THREAD_ID_MAX_LENGTH)
+    # Indexed through THREAD_TURN_INDEX, whose first column is thread_id: a separate index would be redundant.
+    thread_id: str = Field(max_length=THREAD_ID_MAX_LENGTH)
     # 1 for the first user message in a thread, 2 for the next, ... Lets us keep only the last N turns.
     turn: int
     # The message's kind (user_text, tool_call, ...), also inside `content`: a column so it can be filtered.
     kind: str = Field(max_length=KIND_LENGTH)
     # The provider-neutral message (core/llm/messages.py) as JSON. Not any provider's own format.
     content: dict[str, Any] = Field(sa_type=JSON)
-    created_at: datetime = Field(default_factory=lambda: datetime.now(UTC), sa_type=DateTime(timezone=True))
+    # UTC, always from the app's injected clock (append_turn). No default on purpose: a row made without it
+    # fails at the INSERT (the column is NOT NULL) instead of quietly getting the server's own time.
+    created_at: datetime = Field(sa_type=DateTime(timezone=True))
 
 
+# Every table this module owns, for the composition root (bootstrap.metadata(), used by the migrations).
 TABLES = (ConversationMessage,)

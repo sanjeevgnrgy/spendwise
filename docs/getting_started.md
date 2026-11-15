@@ -27,9 +27,17 @@ Open `.env` and set at least:
 ```ini
 GEMINI_API_KEY=<your key>
 GEMINI_MODEL=gemini-3.5-flash-lite
+OIDC_ISSUER=<your identity provider>
+OIDC_CLIENT_ID=<the client id>
+OIDC_CLIENT_SECRET=<the client secret>
+SESSION_ENCRYPTION_KEYS=["<a Fernet key>"]
 ```
 
-`.env` is git-ignored: your key never gets committed. Every other setting has a working default; see
+The `OIDC_*` settings and the key are for signing in (Phase 22): set up the provider first with
+[identity_provider.md](identity_provider.md). Without them the app starts, but nobody can sign in and every API
+route answers 401.
+
+`.env` is git-ignored: your secrets never get committed. Every other setting has a working default; see
 [configuration.md](configuration.md).
 
 ## 3. Start the backend
@@ -88,12 +96,15 @@ http://127.0.0.1:8000 (one origin, D184). If the backend runs elsewhere, create 
 
 | Try | Expect |
 |---|---|
-| http://127.0.0.1:8000/health | `{"status":"ok"}` |
+| http://127.0.0.1:8000/health | `{"status":"ok"}` (needs no sign-in) |
 | http://127.0.0.1:8000/docs | Swagger UI with every route under `/api/v1` |
-| http://127.0.0.1:8000/api/v1/categories | the 8 categories |
-| http://127.0.0.1:8000/api/v1/summary?month=2026-11 | that month's totals |
+| http://localhost:5173/api/v1/auth/login | the provider's login page; after signing in, back on the web app |
 | http://localhost:5173 | the Dashboard with numbers and charts |
 | Assistant panel: *"Where did my money go this month?"* | a short reply and an insight card |
+
+Opening an API route such as `/api/v1/categories` in the browser's address bar now answers 403: a page's own calls
+carry the `X-CSRF` header, an address typed by hand doesn't (D186). To call the API from a script, see
+[api_endpoints.md](api_endpoints.md#calling-the-api-from-a-script).
 
 ## 7. Connect an MCP client (optional)
 

@@ -171,6 +171,9 @@ Never edit them. After a backend change: run `backend\scripts\export_contracts.p
   `₹1,250.50` (the currency's CLDR format, the same data as the backend's cards), `formatDate`, `formatMonth`.
 - **The server's language:** the API client and the assistant's stream send `Accept-Language` (the language on now),
   so error details, cards, chip labels and the assistant's replies come back in it.
+- **Every call carries `apiHeaders()`** (`shared/api/http.ts`): the language and `X-CSRF: 1`, without which the API
+  answers 403 (D186). `api` adds them itself; a direct `fetch` (the assistant's stream) spreads them in. The session
+  is a cookie the browser sends by itself (same origin, D184): the app never sees or stores a token.
 - **Charts:** shadcn charts (Recharts 3). A chart config's keys become CSS variables; keep configs fixed.
 
 ## The assistant feature

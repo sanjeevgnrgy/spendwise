@@ -50,6 +50,56 @@ the project folder (the repo root, where `run.ps1` is) unless noted.
   `Get-CimInstance Win32_Process -Filter "Name='python.exe'" | Select ProcessId, CommandLine` and stop the
   leftover one with `Stop-Process -Id <id>`.
 
+## Signing in (Phase 22)
+
+### Every API call answers 401 "Sign in to continue."
+- **Cause:** since Phase 22 every route but `/health` and the sign-in routes needs a session (D186). Without the
+  sign-in settings nobody can sign in at all: the server log says "Sign-in isn't configured, so nobody can sign in" at
+  startup. Until Part 3, the web app has no sign-in page either, so it shows this error everywhere.
+- **Fix:** set up a provider ([identity_provider.md](identity_provider.md)) and the `OIDC_*` settings and
+  `SESSION_ENCRYPTION_KEYS` in `.env`, restart the backend, then sign in. Until the web app's sign-in page exists
+  (Part 3), open `http://localhost:5173/api/v1/auth/login` in the browser: it ends back on the web app, signed in.
+
+### `curl`, Swagger UI or a script gets 403 "This request didn't come from the app, so it was refused."
+- **Cause:** every API call needs the header `X-CSRF: 1` (D186). Browsers can't add it to a request another site
+  starts, which is the point; `curl` and Swagger UI's "Try it out" don't send it either.
+- **Fix:** send `-H "X-CSRF: 1"` and the session cookie ([api_endpoints.md](api_endpoints.md#calling-the-api-from-a-script)).
+  In the web app, call the API through `api`, or spread `apiHeaders()` into a `fetch`. Swagger UI can show the routes
+  but not call protected ones.
+
+### Signing in ends on `/sign-in?error=...`
+The server log has the details (at WARNING); the page only gets the code.
+
+| `error` | Usual causes |
+|---|---|
+| `unavailable` | a setting is missing ("Sign-in isn't configured: set ..." names it); the provider is unreachable; `OIDC_ISSUER` isn't exactly the provider's issuer (the log says "the discovery document is for issuer ..."); the client id or secret is wrong (the token endpoint answered 400/401) |
+| `expired` | the sign-in took over 10 minutes; the browser dropped the login cookie (see the next entry); the callback was opened twice (back button) |
+| `rejected` | the state didn't match (a link from another browser); the ID token failed a check: the server's clock is over a minute off the provider's, `OIDC_CLIENT_ID` isn't the one the token was issued to, or the token was signed with an algorithm that isn't accepted |
+| `cancelled` | the person pressed cancel at the provider, or the provider refused them |
+| `not-allowed` | `OIDC_REQUIRED_ROLE` is set and the person doesn't have it (with ZITADEL: the role isn't assigned, or "Assert Roles on Authentication" is off, so no roles are sent), or their account here is switched off |
+
+### Signed in at the provider, but back in the app nothing is (401 again, or `error=expired`)
+- **Cause:** the browser didn't keep a cookie. Usually the web app was opened at another address than `PUBLIC_URL`
+  (`127.0.0.1` vs `localhost` are different hosts to a browser: the provider sends you back to `PUBLIC_URL`, where the
+  login cookie set at the other address isn't sent). Or the browser refuses Secure cookies over http: Safari does
+  (Edge and Chrome accept them on `http://localhost`).
+- **Fix:** open the app at exactly `PUBLIC_URL` (default `http://localhost:5173`). For Safari in development only,
+  set `COOKIE_SECURE=false`.
+
+### The provider shows its own error page: "redirect_uri is invalid" (or similar)
+- **Cause:** the redirect URI isn't registered at the provider exactly as SpendWise sends it:
+  `<PUBLIC_URL>/api/v1/auth/callback`. With ZITADEL, plain `http://` addresses also need the application's
+  development mode.
+- **Fix:** register it exactly (scheme, host, port, path), and the post-logout URI `<PUBLIC_URL>/sign-in`
+  ([identity_provider.md](identity_provider.md#registered-at-the-provider)).
+
+### Everyone was signed out after changing `.env`
+- **Cause:** `OIDC_ISSUER` changed, and sessions are only accepted from the provider they were signed in with; or the
+  sessions' key in `SESSION_ENCRYPTION_KEYS` was removed (their sign-out can't name the ID token then, but they still
+  work). Restarting alone doesn't sign anyone out: sessions are in the database.
+- **Fix:** expected after a switch of provider; everyone signs in again. To rotate keys without losing anything, put
+  the new key first and keep the old one for 14 days.
+
 ## Gemini (`/parse`, `/chat`, the assistant)
 
 See the error table in [gemini.md](gemini.md#when-something-goes-wrong). In short: `500` means a setting

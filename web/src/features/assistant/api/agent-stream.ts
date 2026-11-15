@@ -7,9 +7,9 @@ import { EventType, type Event as AgentEvent, type RunAgentInput, type UserMessa
 import { EventSchemas } from "@ag-ui/core/schemas"
 
 import { A2UI, AGUI } from "@/shared/api/contracts.gen"
-import { ApiError, unreachableError } from "@/shared/api/http"
+import { ApiError, apiHeaders, unreachableError } from "@/shared/api/http"
 import type { paths } from "@/shared/api/schema.gen"
-import { i18n, languageHeaders } from "@/shared/i18n"
+import { i18n } from "@/shared/i18n"
 import { isAbort, UserFacingError } from "@/shared/lib/errors"
 import { newId } from "@/shared/lib/ids"
 
@@ -113,9 +113,9 @@ async function startRun(
     // fetch, not EventSource: EventSource can only send GET requests, and a run needs a POST body.
     response = await fetch(AGENT_PATH, {
       method: "POST",
-      // The run's language: the server writes its cards, progress labels and errors in it, and the model replies in
-      // it.
-      headers: { "Content-Type": "application/json", Accept: "text/event-stream", ...languageHeaders() },
+      // The headers every API call carries: the run's language (the server writes its cards, progress labels and
+      // errors in it, and the model replies in it) and X-CSRF.
+      headers: { "Content-Type": "application/json", Accept: "text/event-stream", ...apiHeaders() },
       body: JSON.stringify(runInput(threadId, prompt, dataVersion, receipt)),
       signal,
     })

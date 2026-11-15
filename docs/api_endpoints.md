@@ -15,7 +15,7 @@ are generated from it).
 | **Ids** | positive integers up to 2⁶³−1; larger ones are a 422, not a crash. |
 | **Language** | send `Accept-Language` (`hi`, `hi-IN,hi;q=0.9,en;q=0.5`): error `detail`s, and `/chat`'s and `/agent`'s texts (cards, chip labels, fixed replies, the model's reply), come in the best language the server speaks (English, Hindi), else English. Data (category names, merchants, notes) is never translated; problem `title`s stay English. |
 | **Unknown fields** | rejected (422), in bodies and query strings, so a typo like `merchnat` is an error, not a silent no-op. |
-| **Auth** | none yet for REST (single-user, local; sign-in arrives with Phase 22). `/mcp/` requires a bearer token. The API sends no CORS headers: in a browser, only pages on the API's own origin can read its answers (D184). |
+| **Auth** | every route below except `/health` and [Signing in](#signing-in) needs **a session cookie and `X-CSRF: 1`** (D186): without the header, 403; without a live session, 401. `/mcp/` requires its bearer token instead. The API sends no CORS headers: in a browser, only pages on the API's own origin can read its answers (D184). |
 
 ## Errors: RFC 9457 problem details
 
@@ -36,7 +36,9 @@ Every error, from any route, has one shape and the media type `application/probl
 | 404 | `not-found` | the resource in the URL doesn't exist |
 | 422 | `validation` | the request's shape is wrong; adds `errors: [{location, field, message}]` |
 | 422 | `business-rule` | well-formed but against a rule: amount ≤ 0, unknown category, an expense that changed since it was shown |
-| 401 | `unauthorized` | `/mcp/` without the right bearer token |
+| 400 | `invalid-token` | `POST /auth/backchannel-logout` with a logout token that fails a check |
+| 401 | `unauthorized` | no live session ("Sign in to continue."), or `/mcp/` without the right bearer token |
+| 403 | `forbidden` | a request the app didn't send: no `X-CSRF: 1`, a `Sec-Fetch-Site` from another site, or a sign-out link whose `sid` isn't this session's |
 | 4xx | `http` | FastAPI's own (404 unknown URL, 405 wrong method with an `Allow` header) |
 | 500 | `internal` | a bug; the details go to the server log only |
 | 502 | `external-service` | Gemini (or a remote MCP server) failed: bad key, quota, overload |
@@ -64,7 +66,76 @@ value sent):
 
 ### `GET /health`
 
-`{"status": "ok"}` when the server is up and its database answers. Cheap: meant for monitors.
+`{"status": "ok"}` when the server is up and its database answers. Cheap: meant for monitors. Needs no session.
+
+## Signing in
+
+The accounts module's routes (Phase 22, D185–D187). `login`, `callback` and `logout` are **browser navigations**
+answered with redirects (302, `Cache-Control: no-store`), not API calls; `options` and `user` are API calls and need
+`X-CSRF: 1`. None of them needs a session to be reached.
+
+### `GET /api/v1/auth/options`
+
+The sign-in page's buttons, from `OIDC_LOGIN_OPTIONS`: `[{"key": "google", "label": "Google"}]`, or `[]` when the page
+should offer the provider's own page (or sign-in isn't configured).
+
+### `GET /api/v1/auth/login?option=google&return_to=/expenses`
+
+Starts signing in: 302 to the provider's login page, with a short-lived login cookie (`__Host-spendwise-login`,
+HttpOnly, Secure, SameSite=Lax, 10 minutes) that ties the sign-in to this browser. `option` (a button's key) skips to
+that way of signing in; an unknown one is ignored. `return_to` is the page to come back to: only a path in the web
+app is kept, anything else becomes `/`. A session this browser already has is ended first. If sign-in isn't
+configured or the provider can't be reached: 302 to `/sign-in?error=unavailable`.
+
+### `GET /api/v1/auth/callback?code=...&state=...`
+
+The redirect URI registered at the provider; only the provider sends people here. On success: 302 to `return_to`,
+with the session cookie (`__Host-spendwise-session`, HttpOnly, Secure, SameSite=Strict, 14 days). On failure: 302 to
+`/sign-in?error=<code>`:
+
+| `error` | Meaning |
+|---|---|
+| `cancelled` | the person cancelled at the provider, or it refused them |
+| `expired` | the sign-in took over 10 minutes, was already used, or started in another browser |
+| `rejected` | something in the provider's answer failed a check (state, signature, nonce, ...) |
+| `not-allowed` | signed in, but may not use SpendWise (no required role, or the account is switched off) |
+| `unavailable` | the provider couldn't be used (not configured, unreachable, an error) |
+
+Either way the login cookie is cleared.
+
+### `GET /api/v1/auth/user`
+
+Who is signed in, and the link that signs this browser out (401 when nobody is):
+
+```json
+{"id": 1, "name": "Asha Rao", "email": "asha@example.com", "avatar_url": "https://...",
+ "logout_url": "/api/v1/auth/logout?sid=4f1c...e2"}
+```
+
+### `GET /api/v1/auth/logout?sid=<handle>`
+
+Signs this browser out: the session ends, the cookie is cleared, and 302 to the provider's sign-out page (with the ID
+token as a hint, so it ends its own session too), or to `/sign-in` if it has none. `sid` must be this session's handle
+(from `logout_url`): otherwise 403, so a link on another site can't sign anyone out. Without a session: 302 to
+`/sign-in`.
+
+### `POST /api/v1/auth/backchannel-logout`
+
+The provider, server to server (OpenID Connect Back-Channel Logout 1.0): `application/x-www-form-urlencoded` with a
+signed `logout_token`. Ends the sessions it names (the provider's session, else all of that user's). 200 with an empty
+body; 400 `invalid-token` if the token fails a check.
+
+### Calling the API from a script
+
+A script needs what the browser has: the session cookie and the header. Sign in in the browser, copy the
+`__Host-spendwise-session` cookie's value from the developer tools, then:
+
+```powershell
+curl.exe -H "X-CSRF: 1" -b "__Host-spendwise-session=<value>" http://localhost:5173/api/v1/categories
+```
+
+(`-b "name=value"` sends the cookie as it is. Treat the value like a password: it's the session.) The examples below
+leave the cookie and header out for brevity. MCP clients use `/mcp/` and its bearer token instead.
 
 ## Categories
 

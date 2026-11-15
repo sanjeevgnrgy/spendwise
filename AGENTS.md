@@ -2,7 +2,7 @@
 
 Rules for AI coding agents, and anyone else, changing SpendWise. They describe how this codebase is built: a change
 that doesn't follow them isn't finished. The reasoning behind each rule is in [docs/](docs/README.md). Read the linked
-doc before working in an area, and check [decisions.md](docs/decisions.md) (D1–D184) before changing a settled choice.
+doc before working in an area, and check [decisions.md](docs/decisions.md) (D1–D187) before changing a settled choice.
 
 | Before you change… | Read |
 |---|---|
@@ -33,8 +33,9 @@ doc before working in an area, and check [decisions.md](docs/decisions.md) (D1�
 
 ## 2. Backend: a modular monolith with CQRS (`backend/`)
 
-**Modules.** One per business domain, in `backend/app/modules/<name>/`: `categories`, `conversations`, `expenses`,
-`receipts`, `assistant`, `mcp`. Split by domain, never by technical layer (no app-wide `models/` or `routers/`).
+**Modules.** One per business domain, in `backend/app/modules/<name>/`: `accounts`, `categories`, `conversations`,
+`expenses`, `receipts`, `assistant`, `mcp`. Split by domain, never by technical layer (no app-wide `models/` or
+`routers/`).
 
 **Commands and queries.** Every operation is a **command** (changes data, returns at most an id) or a **query** (reads,
 changes nothing): a frozen Pydantic message with exactly one handler. Send them through the bus (`bus.execute`,
@@ -74,18 +75,31 @@ modules need it. Recipes: [backend_onboarding.md](docs/backend_onboarding.md).
   is passed in); only their HTTP adapters (`api.py`, `assistant/api/routes.py`, `mcp/http.py`) import `web/`.
 - Only `bootstrap.py` and `main.py` import a `module.py`.
 - Module dependencies stay one-way: expenses → categories; mcp → expenses, categories; receipts → categories,
-  expenses; assistant → the rest. A new dependency must not create a cycle; if two modules need each other,
-  redesign (an event, or a third module).
+  expenses; assistant → the rest; accounts depends on none. A new dependency must not create a cycle; if two modules
+  need each other, redesign (an event, or a third module).
 - Inside the assistant, imports run `api/` → `application/` → `agent/`, `approvals/`, `tools/`, `a2ui/`, never back.
 
-**Composition root.** `bootstrap.build(clock, llm, tools, engine)` creates everything replaceable;
+**Composition root.** `bootstrap.build(clock, llm, tools, engine, files, identity, sealer)` creates everything
+replaceable;
 `main.create_app(services)` serves it; nothing is built at import (uvicorn runs with `--factory`).
 
 **Ports and adapters.** The model sits behind `core/llm` ports: depend on the narrowest one you call
 (`StructuredOutputModel` or `ToolCallingModel`). Only `bootstrap.py` imports the Gemini adapter
 (`infrastructure/llm/`). The expense tools sit behind `ExpenseTools`, uploaded files' bytes behind `FileStore`
-(`core/files.py`; never a path built from a user's file name). Time comes from the injected clock
+(`core/files.py`; never a path built from a user's file name), the sign-in provider behind `IdentityProvider`
+(`core/identity.py`) and sealed secrets behind `Sealer` (`core/sealing.py`). Time comes from the injected clock
 (`ctx.clock`, `ClockDep`), never `date.today()` or `datetime.now()`.
+
+**Signing in (D185–D187).**
+- The provider is configuration: speak only OpenID Connect through `IdentityProvider`. Never write a provider's name,
+  SDK or special case into `backend/app` or `web/src` (scan 8 in architecture.md); a difference between providers
+  is a setting (`OIDC_LOGIN_OPTIONS`, `OIDC_ROLE_CLAIM`).
+- Every module's routes are behind `require_csrf` and `require_user` (`main.py`); only the accounts module's sign-in
+  routes and `/health` aren't. A route that needs the person takes `principal: CurrentUserDep` (`web/auth.py`).
+- No token or session data reaches the browser: the session cookie holds a random key only, the server stores its
+  hash, and the ID token is kept sealed. Never log a key, a token or a cookie.
+- A user is found by their identity (issuer, subject), never by email. Other modules will point at `UserId`, never at
+  a provider's subject.
 
 **Files the model reads are data.** A receipt (or any attachment) goes to the model through `ask_for_json(...,
 attachments=...)`, in a call without tools; its type is judged by its bytes, the instruction says its text is never
@@ -158,6 +172,8 @@ files, not new branches in shared code.
 - **API calls** go through `api` (openapi-fetch) with `unwrap` or `unwrapEmpty`, and types come from `Schemas[...]`.
   - The API is on the page's own origin (D184): call relative paths (`/api/v1/...`), never an absolute API address;
     the dev server or a reverse proxy forwards them. The backend sends no CORS headers.
+  - Every call carries `apiHeaders()` (the language and `X-CSRF`, D186): `api` adds them itself; anything that calls
+    `fetch` directly (the assistant's stream) spreads them in. Never store a token or session data in the browser.
   - Never hand-copy a backend type or value: use `schema.gen.ts` and `contracts.gen.ts`.
   - Never edit `*.gen.ts` or `openapi.json`.
 - **Pages** are exported from their feature's `index.ts` through `lazyWithRetry`, and listed once in `PAGES`
@@ -214,8 +230,12 @@ Everything outside a unit can be passed in, so the owner's future tests (and you
 ```python
 engine = create_db_engine("sqlite://")                  # in memory, or a copy of the database
 migrations.upgrade_to_latest(engine)
-services = bootstrap.build(clock=FixedClock(), llm=FakeModel(), engine=engine)
-client = TestClient(create_app(services))                # the real routes, bus and MCP server
+services = bootstrap.build(clock=FixedClock(), llm=FakeModel(), engine=engine,
+                           identity=FakeIdentityProvider(), sealer=FernetSealer([Fernet.generate_key().decode()]))
+client = TestClient(create_app(services), base_url="https://localhost")   # https: the cookies are Secure
+# Sign in through the real routes: GET /api/v1/auth/login, then /auth/callback with the state the fake was given.
+# Send X-CSRF: 1 on every API call. A fake provider implements core/identity.IdentityProvider; the OIDC adapter
+# itself takes httpx2.MockTransport (transport=...) to talk to a fake provider without a network.
 ```
 
 Use cases take their ports in their constructors. Keep it that way: new code gets its collaborators passed in, and

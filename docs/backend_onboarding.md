@@ -241,7 +241,9 @@ For example, budgets:
    Each folder has an `__init__.py` whose docstring says what it holds. Add `models.py` (read models),
    `domain/rules.py` (shared rules) or `persistence/repository.py` (the write side's table access) once several
    slices need them.
-2. Add `budgets_module` to `MODULES` and its router to `api_routers()` in `app/bootstrap.py`.
+2. Add `budgets_module` to `MODULES` and its router to `api_routers()` in `app/bootstrap.py`. Its routes are then
+   behind the X-CSRF and session checks, like every module's (D186); a route that needs the person takes
+   `principal: CurrentUserDep` (`web/auth.py`).
 3. A migration for its tables.
 4. Regenerate the web contract.
 5. Document it: [architecture.md](architecture.md)'s interface table, [api_endpoints.md](api_endpoints.md),
@@ -334,7 +336,19 @@ client = TestClient(create_app(services))      # the real routes, bus and MCP se
 
 `build()` also takes `tools=` (any `ExpenseTools`); pass it if your `.env` sets `MCP_URL`, or the default tools talk to
 that server (and its database). It takes `files=` (any `FileStore`: `save`, `read`, `delete`); pass one when you use a
-copy of the database, or uploads land in the real `UPLOADS_DIR`. Use cases take their ports directly
+copy of the database, or uploads land in the real `UPLOADS_DIR`. It takes `identity=` (any `IdentityProvider`,
+`core/identity.py`) and `sealer=` (any `Sealer`): with a fake provider, a check signs in through the real routes.
+Every module's route needs a session and `X-CSRF: 1`, so a check signs in first:
+
+```python
+client = TestClient(create_app(services), base_url="https://localhost")   # https: the cookies are Secure
+start = client.get("/api/v1/auth/login", follow_redirects=False)          # the fake was given the state
+client.get("/api/v1/auth/callback", params={"code": "...", "state": state}, follow_redirects=False)
+client.headers["X-CSRF"] = "1"                                            # then call any route
+```
+
+The OIDC adapter itself takes `transport=httpx2.MockTransport(handler)`: a fake provider's discovery, keys, token
+and UserInfo endpoints in-process, so every token check runs with no network. Use cases take their ports directly
 (`Assistant(bus, tools, llm)`, `ExpenseParser(bus, llm)`, `ReceiptExtractor(bus, files, llm)`, `Agent(llm, tools)`),
 and `GeminiModel(api_key, model, client_factory=...)` takes a fake SDK client. A fake model only needs the method its
 user calls: `ask_for_json` for `/parse` and receipts (which pass `attachments=`), `stream_with_tools` for the agent.

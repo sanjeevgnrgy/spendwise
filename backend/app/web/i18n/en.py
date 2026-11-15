@@ -1,8 +1,9 @@
 """The web layer's texts for people, in English: their keys, and the source every other language translates (web).
 
 Only what the web layer itself says: the problem details it writes when an error's own text isn't for people (a bug,
-an outside service's failure) and a validation error's summary. (Problem titles stay English: clients show the
-detail.) hi.py translates them; __init__.py registers the catalog.
+an outside service's failure), a validation error's summary, and the refusals of web/auth.py (no session, a request
+the app didn't send). (Problem titles stay English: clients show the detail.) hi.py translates them; __init__.py
+registers the catalog.
 """
 
 from enum import StrEnum
@@ -16,6 +17,8 @@ class WebText(StrEnum):
     UNEXPECTED = "problems.unexpected"
     SERVICE_FAILED = "problems.serviceFailed"
     INVALID_REQUEST = "problems.invalidRequest"
+    SIGN_IN_REQUIRED = "problems.signInRequired"
+    NOT_FROM_APP = "problems.notFromApp"
 
 
 EN: dict[WebText, TextValue] = {
@@ -25,4 +28,8 @@ EN: dict[WebText, TextValue] = {
     WebText.SERVICE_FAILED: "A service the app depends on didn't answer properly. Try again in a moment.",
     # A 422's detail; which values were wrong is in the problem's "errors" list, for the client's developer.
     WebText.INVALID_REQUEST: "Some of the values sent aren't valid.",
+    # A 401: no session, or it has ended (expired, signed out). The web app answers it by showing the sign-in page.
+    WebText.SIGN_IN_REQUIRED: "Sign in to continue.",
+    # A 403 from the X-CSRF check: the request didn't come from the app's own pages.
+    WebText.NOT_FROM_APP: "This request didn't come from the app, so it was refused.",
 }

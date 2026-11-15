@@ -44,16 +44,22 @@ event sourcing would be overkill here (D139).
 ```
 backend/
   app/
-    main.py              the web app: create_app(services): error handlers, routes under /api/v1, /health, /mcp/
-                         (uvicorn calls it with --factory: nothing is built at import); no CORS (D184)
+    main.py              the web app: create_app(services): error handlers, routes under /api/v1 (every module's
+                         behind the X-CSRF and session checks, the sign-in routes not), /health, /mcp/ (uvicorn calls
+                         it with --factory: nothing is built at import); no CORS (D184)
     bootstrap.py         the composition root: the one list of modules; build() makes the Services (clock, engine,
-                         bus, LLM, expense tools, file store, MCP server), each replaceable; api_routers(services)
+                         bus, LLM, expense tools, file store, MCP server, identity provider, sealer, session check,
+                         cookies), each replaceable; auth_routers(services), api_routers(services)
     core/                shared building blocks: no I/O, no framework, no business rules; imports nothing else
       cqrs.py            Command, Query, MessageBus (also the unit of work)
-      errors.py          NotFoundError, BusinessRuleError, ExternalServiceError (each with its status and type)
+      errors.py          NotFoundError, BusinessRuleError, ExternalServiceError, AuthenticationError (401),
+                         ForbiddenError (403), each with its status and type
       ids.py             RecordId, MAX_ID (apart from the database, so a contract doesn't load it)
       clock.py           Clock (today, now), instead of date.today()
       files.py           FileStore: the port for uploaded files' bytes (save, read, delete by a key it makes up)
+      identity.py        IdentityProvider: the sign-in port (D185), with VerifiedLogin, LogoutNotice, Principal
+                         (who a request comes from), IdentityError and InvalidTokenError
+      sealing.py         Sealer: the port for keeping a secret text unreadable where it's stored (seal, unseal)
       months.py          YearMonth: "2026-11", its range and arithmetic
       money.py           rupees <-> paise, CURRENCY_PATTERN, format_money (CLDR, in a language's locale)
       i18n/              Language and Accept-Language negotiation, define_catalog / text / Plural / Translatable
@@ -69,14 +75,25 @@ backend/
       migrations.py      run / check the Alembic migrations from code
       logging.py         console logging for our own loggers ("app.*")
       files.py           LocalFileStore: the FileStore port as a folder (UPLOADS_DIR), files named by random keys
+      identity/          the sign-in adapters: oidc.py (OidcIdentityProvider: standard OpenID Connect only),
+                         documents.py (discovery and signing keys, cached), exchange.py (token and UserInfo
+                         endpoints), tokens.py (checking ID and logout tokens), options.py (OIDC_LOGIN_OPTIONS),
+                         unconfigured.py (refuses every sign-in while a setting is missing)
+      sealing.py         FernetSealer: the Sealer port with Fernet (SESSION_ENCRYPTION_KEYS, rotatable)
       llm/               the Gemini adapter (gemini.py: GeminiModel, SDK calls and errors; gemini_wire.py: pure
                          translation to and from Gemini's wire format, and the stream's step assembly)
     web/                 the FastAPI plumbing every route shares; imports only core/
       dependencies.py    BusDep, ClockDep, IdPath, LanguageDep (the request's Accept-Language) for routes
+      auth.py            the session cookie and the login cookie (SessionCookies), require_csrf (X-CSRF and
+                         Sec-Fetch-Site), require_user / CurrentUserDep (the session check main.py puts on app.state)
       problems.py        RFC 9457 problem details for every error, the detail in the request's language: the
                          error handlers and the unexpected-error middleware
-      i18n/              the web layer's own texts (a bug's generic detail)
+      i18n/              the web layer's own texts (a bug's generic detail, "Sign in to continue.", a refused request)
     modules/
+      accounts/          people, how they sign in, their sessions (D187); the same shape, plus domain/ (keys.py,
+                         return_paths.py, rules.py) and application/ (sign_in.py: SignInFlow; sign_out.py:
+                         SignOutFlow; sessions.py: SessionGate, the check behind every protected route), which call
+                         the identity provider and so aren't bus messages
       categories/        a domain module, as vertical slices (rule 2):
                            commands/     one file per command: the message and its handler (create_category.py)
                            queries/      one file per query: the message, its handler and its result
@@ -113,7 +130,7 @@ backend/
                          plus support.py: argument types, error mapping, checks), resources.py, views.py (an
                          expense as tools show it), http.py (bearer token), module.py
   migrations/            Alembic: env.py and versions/0001_baseline, 0002_neutral_conversations, 0003_expense_version,
-                         0004_conversation_turn_index, 0005_receipt_files
+                         0004_conversation_turn_index, 0005_receipt_files, 0006_accounts
   scripts/               export_contracts.py (the contract for the web app)
   seed.py                sample data, through the bus
   mcp_stdio.py           the MCP server over stdio (Inspector, Claude Desktop)
@@ -153,9 +170,11 @@ backend/
 9. **Adapters translate, use cases decide.** REST routes, the MCP server and the AG-UI adapter are adapters over the
    same commands and queries. The assistant's use cases yield plain events; `api/agui_stream.py` turns them into
    AG-UI.
-10. **Ports for the outside world:** the LLM (`core/llm/port.py`), uploaded files (`core/files.py`: `FileStore`) and
-    the expense tools (`assistant/tools/port.py`: `ExpenseTools`) are protocols with one adapter each (`GeminiModel`
-    in `infrastructure/llm/`; `LocalFileStore` in `infrastructure/files.py`; `McpExpenseTools` in
+10. **Ports for the outside world:** the LLM (`core/llm/port.py`), uploaded files (`core/files.py`: `FileStore`), the
+    sign-in provider (`core/identity.py`: `IdentityProvider`), sealed secrets (`core/sealing.py`: `Sealer`) and the
+    expense tools (`assistant/tools/port.py`: `ExpenseTools`) are protocols with one adapter each (`GeminiModel` in
+    `infrastructure/llm/`; `LocalFileStore` in `infrastructure/files.py`; `OidcIdentityProvider`, standard OpenID
+    Connect, in `infrastructure/identity/`, D185; `FernetSealer` in `infrastructure/sealing.py`; `McpExpenseTools` in
     `assistant/tools/mcp_adapter.py`, in-process by default).
     Each user depends only on what it calls: `/parse` and the receipt reader on `StructuredOutputModel`, the agent on
     `ToolCallingModel`.
@@ -182,8 +201,8 @@ A module's public contract is still its package: other modules write `from app.m
 slice files, so importing a module's package also loads its handlers and tables (not its routes, and not the
 database engine). The earlier layout, where the package loaded only a `contracts.py`, gave the lighter import;
 co-location was judged worth more. It can't cause an import cycle, because module dependencies run one way:
-expenses → categories; mcp → expenses, categories; receipts → categories, expenses; assistant → the rest. The mcp
-package still exports only its
+expenses → categories; mcp → expenses, categories; receipts → categories, expenses; assistant → the rest; accounts
+depends on none. The mcp package still exports only its
 `contracts.py` and loads no server code (D166, D175).
 
 ### Why each module owns its tables
@@ -205,6 +224,7 @@ at the database level. Instead, `CreateExpense`'s handler asks `categories.GetCa
 | `mcp` | `ToolName`, `ResourceUri`, `SERVER_NAME`, `AUTHORIZATION_HEADER` and `BEARER_SCHEME` (how `/mcp/` is authenticated), the argument names (`EXPENSE_ID_ARGUMENT`, `CONFIRM_ARGUMENT`, `EXPECTED_VERSION_ARGUMENT`, `CLEAR_NOTE_ARGUMENT`), the typed results (`ExpenseView`, `ExpenseSaved`, `MonthSpending`, ...). The server itself (`create_server`, `create_http_app`) comes from `mcp/module.py`, for the composition root only | assistant |
 | `receipts` | `ReceiptExtractor` (reads an uploaded receipt with the model: `extract(receipt_id, today)`), `ReceiptExtraction`, `LineItem`, `ReceiptRead`, `ReceiptId`, `ReceiptMediaType`, `MAX_RECEIPT_BYTES`, `ReceiptText`. Its `module.py` gives the composition root `create_reader(bus, files, llm)` and `create_router(bus, files, reader)` | the assistant (reads a receipt attached in the chat) |
 | `assistant` | nothing for other modules; its `module.py` gives the composition root `create_router` and the `ExpenseTools` port type | — |
+| `accounts` | `UserId`, `CurrentUser`, `SignedInUser`, `SignInFailure`, `SignInParam`, `SIGN_IN_PAGE`, `CALLBACK_PATH`, `SESSION_LIFETIME`, `LOGIN_ATTEMPT_TTL`. Its `module.py` gives the composition root `create_session_gate(bus, identity, clock)` (the check main.py puts on `app.state.authenticate`), `create_router(bus, identity, sealer, config)` and `SignInConfig` | the composition root, the export script; Phase 23's per-user data will use `UserId` |
 
 Each module's `module.py` is what `bootstrap.py` plugs in: `register_handlers(bus)`, its router (or a function that
 builds one), its `TABLES`. Only `bootstrap.py` and `main.py` import a `module.py`.
@@ -287,6 +307,32 @@ HTTP request (RunAgentInput)
   <- RUN_FINISHED, or RUN_ERROR on any failure (the turn isn't saved)
 ```
 
+Every module's route, before any of the above (`main.py` puts these in front of each one; D186):
+
+```
+  -> web/auth.py require_csrf  no X-CSRF: 1, or Sec-Fetch-Site from another site -> 403 problem
+  -> web/auth.py require_user  the session cookie's key -> app.state.authenticate (accounts' SessionGate):
+                               GetSession(hash of the key, today's issuer) -> none live -> 401 problem;
+                               renewed (RenewSession) if last renewed over 12 h ago -> the Principal
+```
+
+Signing in (`accounts/`; the provider is the `IdentityProvider` port, D185):
+
+```
+GET /auth/login?option&return_to   application/sign_in.py begin: ends this browser's old session; asks the provider
+                                   for its authorization URL (state, nonce, PKCE challenge); StartLogin stores the
+                                   attempt -> 302 to the provider + the login cookie
+   ... the person signs in at the provider (Google, GitHub) ...
+GET /auth/callback?code&state      finish: TakeLoginAttempt (the login cookie's; once) -> state matches -> the
+                                   provider: code -> tokens, every check on the ID token, UserInfo -> role rule ->
+                                   SignIn (find or add the user by issuer and subject, a new session, the ID token
+                                   sealed) -> 302 to return_to + the session cookie; any failure -> 302 /sign-in?error
+GET /auth/logout?sid=<handle>      sign_out.py: EndSession -> 302 to the provider's sign-out page (ID token as hint)
+```
+
+The provider is asked outside any database transaction (D164): the attempt is stored before the browser leaves,
+taken when it comes back, and the session written only after the provider has answered.
+
 ### Adding a module
 
 1. `backend/app/modules/<name>/` with `commands/` and `queries/` (one file per message: the message and its
@@ -313,8 +359,11 @@ HTTP request (RunAgentInput)
 
 Everything a test would want to replace can be passed in, without patching modules:
 
-- `bootstrap.build(clock=..., llm=..., tools=..., engine=...)` builds the app's services around fakes, and
-  `main.create_app(services)` serves them over HTTP (FastAPI's `TestClient` works directly on it).
+- `bootstrap.build(clock=..., llm=..., tools=..., engine=..., files=..., identity=..., sealer=...)` builds the app's
+  services around fakes, and `main.create_app(services)` serves them over HTTP (FastAPI's `TestClient` works directly
+  on it; with `base_url="https://localhost"` it keeps the Secure session cookie). A fake identity provider signs a
+  test in through the real routes; the OIDC adapter itself takes `transport=httpx2.MockTransport(...)` to talk to a
+  fake provider, so the token checks run with no network.
 - `migrations.upgrade_to_latest(engine)` migrates any engine, including an in-memory SQLite one (which shares a
   single connection, so every thread sees the same database).
 - Nothing is built as a side effect of importing: uvicorn calls `create_app` (`--factory`), and each module's
@@ -484,12 +533,15 @@ $assistant | Where-Object FullName -NotMatch '\\assistant\\(api|application)\\' 
 
 # 6. Each module package imports on its own, in a fresh interpreter. Expect no output. An error here usually means
 #    an import cycle between modules (importing a package also loads its slices, D175).
-foreach ($m in "categories", "conversations", "expenses", "mcp", "receipts", "assistant") {
+foreach ($m in "accounts", "categories", "conversations", "expenses", "mcp", "receipts", "assistant") {
   .\.venv\Scripts\python.exe -c "import sys; sys.path.insert(0, 'backend'); import app.modules.$m"
 }
 
-# 7. Only a module's HTTP adapters import web/. Expect api.py (categories, conversations, expenses, receipts),
-#    http.py (mcp) and routes.py (the assistant's api/).
+# 7. Only a module's HTTP adapters import web/. Expect api.py (accounts, categories, conversations, expenses,
+#    receipts), http.py (mcp) and routes.py (the assistant's api/).
 Get-ChildItem backend\app\modules -Recurse -Filter *.py | Select-String -Pattern 'app\.web\b' | Split-Path -Leaf |
   Sort-Object -Unique
+
+# 8. No identity provider's name in the code (D185): the provider is configuration. Expect no output.
+Get-ChildItem backend\app, web\src -Recurse -Include *.py,*.ts,*.tsx | Select-String -Pattern 'zitadel'
 ```

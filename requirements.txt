@@ -25,3 +25,8 @@ httpx2==2.16.0
 # FastAPI reads uploaded files (multipart/form-data, POST /receipts) with it. The MCP SDK already brings it; pinned
 # because our upload route depends on it directly.
 python-multipart==0.0.33
+# Sign-in (Phase 22). PyJWT checks the identity provider's signed tokens (signature, issuer, audience) against its
+# published keys; cryptography gives it RSA and EC keys, and seals the ID token kept with a session (Fernet). The MCP
+# SDK and google-genai already bring both; pinned because the sign-in adapter uses them directly.
+pyjwt==2.15.1
+cryptography==50.0.2

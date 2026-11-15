@@ -633,6 +633,74 @@ Checked on 2026-11-14.
 **Used in:** `web/vite.config.ts` (`apiProxy`, `loadEnv`), `web/src/shared/api/http.ts` (no base URL,
 `GATEWAY_FAILURES`), `docs/security.md`, D184.
 
+## 27. OpenID Connect and ZITADEL (Phase 22)
+
+Checked on 2026-11-14.
+
+**Web: the standards the sign-in adapter implements** (D185):
+- OpenID Connect Core 1.0 (https://openid.net/specs/openid-connect-core-1_0.html):
+  - 3.1.3.7, ID token validation: the issuer must match exactly; the audience must contain the client id; with
+    several audiences the client should check `azp`, and if `azp` is present it must be the client id; the token must
+    not have expired; `iat` can be used to refuse tokens issued too far off; the `nonce` must be the one sent.
+  - 2: `sub` is at most 255 ASCII characters, never reassigned by its issuer: issuer and subject together identify a
+    person.
+  - 5.3.4: the `sub` in a UserInfo answer must be checked to be exactly the ID token's.
+- OpenID Connect Discovery 1.0 (https://openid.net/specs/openid-connect-discovery-1_0.html): the metadata is at the
+  issuer plus `/.well-known/openid-configuration` (4); its `issuer` must be the issuer the client asked about (4.3).
+- RFC 8414, 2 (https://www.rfc-editor.org/rfc/rfc8414#section-2): `token_endpoint_auth_methods_supported` defaults to
+  `client_secret_basic` when it's left out.
+- RFC 6749 (https://www.rfc-editor.org/rfc/rfc6749): 2.3.1, the client id and secret are form-encoded before they go
+  into HTTP Basic credentials; 4.1.2.1, `access_denied` is the error when the person (or the server) refused.
+- RFC 7636, PKCE (https://www.rfc-editor.org/rfc/rfc7636): a verifier is 43 to 128 characters (4.1); the S256
+  challenge is BASE64URL(SHA-256(verifier)) without padding (4.2).
+- RP-Initiated Logout 1.0 (https://openid.net/specs/openid-connect-rpinitiated-1_0.html): the provider's
+  `end_session_endpoint` takes `id_token_hint`, `client_id` and a registered `post_logout_redirect_uri`.
+- Back-Channel Logout 1.0 (https://openid.net/specs/openid-connect-backchannel-1_0.html): the provider POSTs a form
+  with `logout_token` (2.5), a signed JWT with `iss`, `aud`, `iat`, `jti`, `events` holding
+  `http://schemas.openid.net/event/backchannel-logout`, a `sub` or a `sid` or both, and never a `nonce` (2.4); the
+  client checks it like an ID token, plus those rules (2.6), and answers 200, or 400 if it's invalid (2.8).
+
+**Web: ZITADEL's documentation** (read 2026-11-14):
+- Scopes (https://zitadel.com/docs/apis/openidoauth/scopes): `urn:zitadel:iam:org:idp:id:{idp_id}` sends the person
+  straight to that identity provider; send the organization's scope too if a custom login policy applies. The role
+  scopes request `urn:zitadel:iam:org:project:roles`.
+- Claims (https://zitadel.com/docs/apis/openidoauth/claims): the ID token carries `sid`, `azp`, `amr`, `auth_time`, and
+  `nonce` when one was sent; the profile and email claims are in it only "when requested and response_type id_token"
+  (so the code flow reads them from UserInfo); the roles claim is an object of role names, each mapping organization
+  ids to their domains (the page's example wraps it in a list).
+- Back-channel logout (https://zitadel.com/docs/guides/integrate/back-channel-logout): advertised in discovery by
+  default; set `backchannel_logout_uri` on the application; a POST with `application/x-www-form-urlencoded` and
+  `logout_token` (`iss`, `sub`, `aud` with the client id, `iat`, `exp`, `jti`, `events`, `sid`), sent when the SSO
+  session ends. (An older logout page still says "not yet implemented"; the dedicated guide is newer.)
+- Projects (https://zitadel.com/docs/guides/manage/console/projects): "Check Role Assignment on Authentication" (in
+  older consoles and guides "Check authorization on Authentication") lets only people with a role in the project
+  sign in; "Assert Roles on Authentication" sends the roles from UserInfo (and in tokens, by the application's
+  settings).
+- Applications (https://zitadel.com/docs/guides/manage/console/applications): a Web application's methods include PKCE,
+  Code (with a client secret) and JWT; development mode allows http redirect URIs and must be off in production.
+
+**Package:** `.venv\Lib\site-packages\jwt\` (PyJWT 2.15.1)
+- `api_jwt.py`, `_validate_claims`: the time checks read `datetime.now(tz=timezone.utc)` themselves, so they're
+  turned off (`verify_exp`, `verify_iat`, `verify_nbf`: `False`) and done against the injected clock; `require`
+  checks only that the claims are present.
+- `jwt.PyJWK(jwk, algorithm=...)` builds the key for one algorithm; `jwt.decode(..., algorithms=[...], audience=...,
+  issuer=...)` checks the signature, `aud` (a list containing it is accepted) and `iss`.
+
+**Package:** `.venv\Lib\site-packages\cryptography\fernet.py` (cryptography 50.0.2): `MultiFernet` encrypts with its
+first key and decrypts with any of them, which is how keys rotate; a token that's been changed fails its HMAC
+(`InvalidToken`).
+
+**Observed:**
+- Cookies on `http://localhost` (a probe server setting `__Host-` + `Secure`, `Secure` and plain cookies, read back by
+  `fetch`): headless Edge 157 and the installed Chrome sent all three back. A 2023 report
+  (https://github.com/httpwg/http-extensions/issues/2605) said Chrome refused prefixed cookies there; it's out of
+  date for these versions. Safari doesn't accept `Secure` cookies over http, hence `COOKIE_SECURE`.
+- The adapter against a fake provider (`httpx2.MockTransport`, 42 checks) and the routes with a fake provider (71
+  checks): the phase note lists them.
+
+**Used in:** `backend/app/infrastructure/identity/` (the adapter), `backend/app/modules/accounts/` (sessions, login
+attempts, return paths), `backend/app/web/auth.py` (cookies, `X-CSRF`), `docs/identity_provider.md`, D185–D187.
+
 ---
 
 ## How to re-check a package fact

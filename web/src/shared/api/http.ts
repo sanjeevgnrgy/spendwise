@@ -5,6 +5,7 @@
 
 import createClient from "openapi-fetch"
 
+import { AUTH } from "@/shared/api/contracts.gen"
 import type { components, paths } from "@/shared/api/schema.gen"
 import { APP_NAME } from "@/shared/config/app"
 import { i18n, languageHeaders, type CommonTexts } from "@/shared/i18n"
@@ -22,10 +23,18 @@ export type Schemas = components["schemas"]
  */
 export const api = createClient<paths>()
 
-// Every call asks for the language on now, so the server writes its texts (an error's detail) in it.
+/**
+ * The headers every API call carries: the language on now (the server writes its texts, an error's detail, in it),
+ * and X-CSRF, which says the app's own page sent it (the server refuses any call without it, D186). Used by `api`
+ * and by the assistant's stream, which calls fetch itself.
+ */
+export function apiHeaders(): Record<string, string> {
+  return { ...languageHeaders(), [AUTH.csrfHeader]: AUTH.csrfValue }
+}
+
 api.use({
   onRequest({ request }) {
-    for (const [name, value] of Object.entries(languageHeaders())) request.headers.set(name, value)
+    for (const [name, value] of Object.entries(apiHeaders())) request.headers.set(name, value)
     return request
   },
 })

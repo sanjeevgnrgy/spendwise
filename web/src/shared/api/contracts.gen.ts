@@ -91,6 +91,25 @@ export const A2UI = {
   }
 } as const
 
+export const AUTH = {
+  "csrfHeader": "X-CSRF",
+  "csrfValue": "1",
+  "signInPage": "/sign-in",
+  "params": {
+    "option": "option",
+    "returnTo": "return_to",
+    "session": "sid",
+    "error": "error"
+  },
+  "failures": {
+    "cancelled": "cancelled",
+    "expired": "expired",
+    "rejected": "rejected",
+    "notAllowed": "not-allowed",
+    "unavailable": "unavailable"
+  }
+} as const
+
 export const AGUI = {
   "customEvents": {
     "a2ui": "a2ui"

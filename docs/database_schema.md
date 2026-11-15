@@ -45,7 +45,50 @@ erDiagram
         INTEGER size_bytes
         DATETIME created_at "UTC, with time zone"
     }
+    app_user {
+        INTEGER id PK "SpendWise's own id for a person"
+        VARCHAR_200 name "as the provider last said"
+        VARCHAR_320 email
+        BOOLEAN email_verified
+        VARCHAR_2048 avatar_url "http(s) only"
+        BOOLEAN is_active
+        DATETIME created_at
+        DATETIME updated_at
+    }
+    user_identity {
+        INTEGER id PK
+        INTEGER user_id FK "indexed"
+        VARCHAR_255 issuer "unique with subject"
+        VARCHAR_255 subject
+        VARCHAR_320 email "when first seen"
+        DATETIME created_at
+    }
+    user_session {
+        INTEGER id PK
+        VARCHAR_64 key_hash "unique; SHA-256 of the cookie's key"
+        VARCHAR_32 handle "unique; the sign-out link's sid"
+        INTEGER user_id FK "indexed"
+        VARCHAR_255 issuer
+        VARCHAR_255 provider_session_id "indexed; OIDC sid"
+        TEXT sealed_id_token "encrypted"
+        DATETIME created_at
+        DATETIME renewed_at
+        DATETIME expires_at "indexed; idle"
+        DATETIME absolute_expires_at
+        DATETIME revoked_at "nullable"
+    }
+    login_attempt {
+        INTEGER id PK
+        VARCHAR_64 key_hash "unique"
+        VARCHAR_64 state
+        VARCHAR_64 nonce
+        VARCHAR_128 code_verifier
+        VARCHAR_2048 return_to
+        DATETIME created_at "indexed"
+    }
     category ||..o{ expense : "category_id (checked in code)"
+    app_user ||--o{ user_identity : "user_id"
+    app_user ||--o{ user_session : "user_id"
 ```
 
 The dotted line is a link kept **in code**, not by the database: there are no foreign keys between modules (below).
@@ -58,6 +101,10 @@ The dotted line is a link kept **in code**, not by the database: there are no fo
 | `conversation_message` | conversations | chat history, one row per message |
 | `pending_approval` | assistant | delete cards waiting for Approve or Cancel |
 | `receipt_file` | receipts | uploaded receipts (the files themselves are in `UPLOADS_DIR`, not the database) |
+| `app_user` | accounts | the people who use SpendWise, by SpendWise's own id |
+| `user_identity` | accounts | how each person signs in: a provider (issuer) and their id there (subject) |
+| `user_session` | accounts | signed-in browsers: the hash of each cookie's key, and the session's lifetimes |
+| `login_attempt` | accounts | sign-ins that have left for the provider and not come back yet |
 | `alembic_version` | (migrations) | which migration the database is at |
 
 ## `category`
@@ -146,6 +193,59 @@ fails midway, the card is put back unchanged (same age).
 `UPLOADS_DIR` under its key (D181). The upload saves the file first and deletes it again if the row can't be added,
 so there's never a file without a row. Nothing deletes receipts yet.
 
+## The accounts tables
+
+Owned by the accounts module (Phase 22, D186, D187). The solid lines are real foreign keys: they stay inside the
+module, which D13 allows (it forbids them between modules).
+
+### `app_user`
+
+| Column | Type | Notes |
+|---|---|---|
+| `id` | INTEGER, primary key | SpendWise's own id for the person: what other data will point at (Phase 23), whatever provider they use |
+| `name`, `email`, `email_verified`, `avatar_url` | VARCHAR(200), VARCHAR(320), BOOLEAN, VARCHAR(2048) | the profile as the provider said at the last sign-in; never used to find a person. A picture is kept only as an http(s) URL |
+| `is_active` | BOOLEAN, not null | SpendWise's own off switch: off, the person can't sign in and their sessions stop working |
+| `created_at`, `updated_at` | DATETIME with time zone | UTC, from the app's clock |
+
+### `user_identity`
+
+| Column | Type | Notes |
+|---|---|---|
+| `user_id` | INTEGER, foreign key to `app_user.id` | indexed |
+| `issuer`, `subject` | VARCHAR(255) each | **unique together**: the provider and the person's id there. How a person is found at sign-in; never by email (D187) |
+| `email` | VARCHAR(320), nullable | the email when this identity was first seen, as a record |
+
+A person can have several identities: that's how a later switch of provider can keep them the same person
+([identity_provider.md](identity_provider.md#switching-providers)).
+
+### `user_session`
+
+| Column | Type | Notes |
+|---|---|---|
+| `key_hash` | VARCHAR(64), unique | SHA-256 of the cookie's random key; the key itself is never stored |
+| `handle` | VARCHAR(32), unique | a random public name for the session; the sign-out link carries it |
+| `user_id` | INTEGER, foreign key to `app_user.id` | indexed |
+| `issuer` | VARCHAR(255) | the provider it was signed in with; a session from another provider isn't accepted |
+| `provider_session_id` | VARCHAR(255), nullable, indexed | the provider's session (OIDC `sid`), for back-channel logout |
+| `sealed_id_token` | TEXT, nullable | the ID token, encrypted with `SESSION_ENCRYPTION_KEYS` (Fernet); signing out names it to the provider |
+| `renewed_at`, `expires_at` | DATETIME | renewed while used (written at most every 12 h); `expires_at` (indexed) is a day after the last renewal |
+| `absolute_expires_at` | DATETIME | 14 days after sign-in, whatever happens |
+| `revoked_at` | DATETIME, nullable | set by signing out, a new sign-in in the same browser, or the provider's back-channel logout |
+
+A session is live when it isn't revoked, both expiries are in the future, its issuer is today's provider's, and its
+user is active: all checked in one query. Ended sessions are deleted at the next sign-in.
+
+### `login_attempt`
+
+| Column | Type | Notes |
+|---|---|---|
+| `key_hash` | VARCHAR(64), unique | SHA-256 of the login cookie's key: the attempt completes only in the browser that started it |
+| `state`, `nonce`, `code_verifier` | VARCHAR(64), VARCHAR(64), VARCHAR(128) | what the callback checks the provider's answer against |
+| `return_to` | VARCHAR(2048) | the web app's page to come back to, already checked |
+| `created_at` | DATETIME, indexed | attempts over 10 minutes old are forgotten; at most 500 are kept |
+
+Each attempt is read and deleted in one step when the provider sends the browser back, so it completes once.
+
 ## Rules every table follows
 
 - **One owner.** Only the owning module's handlers touch a table. Other modules ask through the bus
@@ -169,6 +269,7 @@ The tables are created and changed only by **Alembic migrations** in `backend/mi
 | `0003_expense_version` | adds `expense.version` (existing expenses start at 1) |
 | `0004_conversation_turn_index` | indexes `conversation_message` on (thread_id, turn) and drops the old thread_id index, which the new one makes redundant |
 | `0005_receipt_files` | adds `receipt_file` (Phase 21); downgrade drops it and leaves the files in `UPLOADS_DIR` |
+| `0006_accounts` | adds `app_user`, `user_identity`, `user_session` and `login_attempt` (Phase 22); downgrade drops them, which signs everyone out and forgets them |
 
 - `.\run.ps1` runs `alembic upgrade head` before starting; `seed.py` and `mcp_stdio.py` do too. The app itself only
   checks, and refuses to start on an out-of-date database with the command to fix it.

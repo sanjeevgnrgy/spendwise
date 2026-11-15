@@ -65,3 +65,19 @@ class ExternalServiceError(AppError):
     status = 502
     slug = "external-service"
     title = "A service we depend on failed"
+
+
+class AuthenticationError(AppError):
+    """The request needs a signed-in person, and has no live session (none, expired, revoked or unknown)."""
+
+    status = 401
+    slug = "unauthorized"
+    title = "Sign-in required"
+
+
+class ForbiddenError(AppError):
+    """The request is refused whoever sends it: it didn't come from the app itself (D186), or isn't allowed."""
+
+    status = 403
+    slug = "forbidden"
+    title = "Forbidden"

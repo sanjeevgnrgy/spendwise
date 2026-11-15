@@ -20,7 +20,7 @@ from starlette.datastructures import Headers
 from starlette.exceptions import HTTPException
 from starlette.types import ASGIApp, Message, Receive, Scope, Send
 
-from app.core.errors import AppError, ExternalServiceError
+from app.core.errors import AppError, AuthenticationError, ExternalServiceError
 from app.core.i18n import Language, text
 from app.web.dependencies import get_language, language_of
 from app.web.i18n import WebText
@@ -36,7 +36,8 @@ PROBLEM_TYPE_PREFIX = "urn:spendwise:problem:"
 # and the MCP endpoint's 401. (A bug's detail, all a client is ever told about it, is WebText.UNEXPECTED.)
 VALIDATION_SLUG = "validation"
 HTTP_SLUG = "http"
-UNAUTHORIZED_SLUG = "unauthorized"
+# The MCP endpoint's 401 (a missing or wrong bearer token) is the same kind of problem as a missing session.
+UNAUTHORIZED_SLUG = AuthenticationError.slug
 
 
 def problem_response(

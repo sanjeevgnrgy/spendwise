@@ -3,7 +3,8 @@
 - web/openapi.json: the REST API (FastAPI's OpenAPI document). `npm run gen:api` turns it into
   TypeScript types (web/src/shared/api/schema.gen.ts).
 - web/src/shared/api/contracts.gen.ts: the names and limits that aren't in OpenAPI (A2UI catalogs and
-  actions, AG-UI event names and keys, payment-method labels, limits).
+  actions, AG-UI event names and keys, payment-method labels, limits, and sign-in's header, page, parameters and
+  failure codes).
 
 Run from the project folder after changing an API or one of these values, then `cd web; npm run gen:api`:
     .\\.venv\\Scripts\\python.exe backend\\scripts\\export_contracts.py
@@ -48,6 +49,8 @@ from app.modules.expenses.values import (  # noqa: E402
     MAX_LIST_LIMIT,
     MAX_TREND_MONTHS,
 )
+from app.modules.accounts import SIGN_IN_PAGE, SignInFailure, SignInParam  # noqa: E402
+from app.web.auth import CSRF_HEADER, CSRF_VALUE  # noqa: E402
 from app.web.problems import PROBLEM_JSON  # noqa: E402
 
 WEB_DIR = PROJECT_DIR / "web"
@@ -61,6 +64,24 @@ def _const(name: str, value: object) -> str:
     """One TypeScript line: `export const <name> = <value as JSON> as const`."""
     # JSON is valid TypeScript, and `as const` keeps the exact values as types.
     return f"export const {name} = {json.dumps(value, indent=2, ensure_ascii=False)} as const\n"
+
+
+def _camel(name: str) -> str:
+    """An enum member's name as a TypeScript key: NOT_ALLOWED -> notAllowed."""
+    first, *rest = name.lower().split("_")
+    return first + "".join(part.capitalize() for part in rest)
+
+
+def _auth_contract() -> dict[str, object]:
+    """Signing in (Phase 22): the header every API call carries, the sign-in page's path (the server sends people
+    there), the query parameters the sign-in routes and that page read, and the reasons a sign-in fails."""
+    return {
+        "csrfHeader": CSRF_HEADER,
+        "csrfValue": CSRF_VALUE,
+        "signInPage": SIGN_IN_PAGE,
+        "params": {_camel(param.name): param.value for param in SignInParam},
+        "failures": {_camel(failure.name): failure.value for failure in SignInFailure},
+    }
 
 
 def _component_names() -> dict[str, str]:
@@ -117,6 +138,7 @@ def main() -> None:
                 "cancelDelete": ActionName.CANCEL_DELETE.value,
             },
         },
+        "AUTH": _auth_contract(),
         "AGUI": {
             "customEvents": {"a2ui": CustomEventName.A2UI.value},
             "forwardedA2uiAction": FORWARDED_A2UI_ACTION,

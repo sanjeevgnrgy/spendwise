@@ -4,8 +4,8 @@ main.py (the web app), seed.py, mcp_stdio.py and the migrations (for the tables)
 so there's exactly one list of modules, and nothing registers itself as a side effect of being imported.
 
 build() is also the one seam for replacing the outside world: pass it a clock, a language model, expense
-tools, a database engine or a file store, and everything built from the result (the bus, the MCP server, the routes,
-main.create_app(services)) uses those instead of the real ones.
+tools, a database engine, a file store, an identity provider or a sealer, and everything built from the result (the
+bus, the MCP server, the session check, the routes, main.create_app(services)) uses those instead of the real ones.
 """
 
 from dataclasses import dataclass
@@ -18,20 +18,29 @@ from sqlmodel import SQLModel
 from app.core.clock import Clock, SystemClock
 from app.core.cqrs import MessageBus
 from app.core.files import FileStore
+from app.core.identity import IdentityProvider
 from app.core.llm import LanguageModel
+from app.core.sealing import Sealer
 from app.infrastructure import db
-from app.infrastructure.config import settings
+from app.infrastructure.config import API_PREFIX, settings
 from app.infrastructure.files import LocalFileStore
+from app.infrastructure.identity import ClientCredentials, OidcIdentityProvider, UnconfiguredIdentityProvider
 from app.infrastructure.llm.gemini import GeminiModel
+from app.infrastructure.sealing import FernetSealer
+from app.modules import accounts
+from app.modules.accounts import module as accounts_module
 from app.modules.assistant import module as assistant_module
 from app.modules.categories import module as categories_module
 from app.modules.conversations import module as conversations_module
 from app.modules.expenses import module as expenses_module
 from app.modules.mcp import module as mcp_module
 from app.modules.receipts import module as receipts_module
+from app.web.auth import SessionCookies
 
 # Every module with handlers or tables. (The mcp module has neither: it's an adapter over the bus.)
-MODULES = (categories_module, expenses_module, conversations_module, receipts_module, assistant_module)
+MODULES = (
+    accounts_module, categories_module, expenses_module, conversations_module, receipts_module, assistant_module
+)
 
 
 @dataclass(frozen=True)
@@ -50,6 +59,14 @@ class Services:
     mcp_server: MCPServer
     # The MCP token, if MCP over HTTP is enabled (see MCP_TOKEN in .env.example).
     mcp_token: str | None
+    # Sign-in (Phase 22): the identity provider (its issuer is None when sign-in isn't configured), the sealer for
+    # the ID tokens sessions keep, the session check main.py puts in front of the protected routes, how the cookies
+    # are written, and the addresses the provider is given.
+    identity: IdentityProvider
+    sealer: Sealer
+    sessions: accounts_module.SessionGate
+    cookies: SessionCookies
+    sign_in: accounts_module.SignInConfig
 
 
 def build_bus(clock: Clock, engine: Engine) -> MessageBus:
@@ -69,6 +86,8 @@ def build(
     tools: assistant_module.ExpenseTools | None = None,
     engine: Engine | None = None,
     files: FileStore | None = None,
+    identity: IdentityProvider | None = None,
+    sealer: Sealer | None = None,
 ) -> Services:
     """Everything the app is made of. Each argument left out gets the real one, configured from the settings.
 
@@ -78,7 +97,10 @@ def build(
       injects only an engine still reaches a remote server's database when MCP_URL is in .env: pass tools too);
     - engine: the database in DATABASE_URL (infrastructure/db.engine);
     - files: a folder on disk, UPLOADS_DIR (created on the first upload). A check that uses a copy of the database
-      should pass its own too, so uploads don't land among the real ones.
+      should pass its own too, so uploads don't land among the real ones;
+    - identity: the OpenID Connect provider in OIDC_ISSUER (nothing is fetched from it until someone signs in), or,
+      if a sign-in setting is missing, one that refuses every sign-in (D185);
+    - sealer: Fernet, with SESSION_ENCRYPTION_KEYS.
     """
     clock = SystemClock() if clock is None else clock
     engine = db.engine if engine is None else engine
@@ -92,13 +114,72 @@ def build(
         # The assistant's tools: this app's own MCP server in-process, unless MCP_URL points elsewhere.
         tools = assistant_module.McpExpenseTools(settings.mcp_url or mcp_server, token=token)
     files = LocalFileStore(settings.uploads_dir) if files is None else files
+    identity = _identity_provider(clock) if identity is None else identity
+    if sealer is None:
+        sealer = FernetSealer([key.get_secret_value() for key in settings.session_encryption_keys])
     return Services(
-        clock=clock, engine=engine, bus=bus, llm=llm, tools=tools, files=files, mcp_server=mcp_server, mcp_token=token
+        clock=clock,
+        engine=engine,
+        bus=bus,
+        llm=llm,
+        tools=tools,
+        files=files,
+        mcp_server=mcp_server,
+        mcp_token=token,
+        identity=identity,
+        sealer=sealer,
+        sessions=accounts_module.create_session_gate(bus, identity, clock),
+        cookies=_session_cookies(),
+        sign_in=_sign_in_config(),
     )
 
 
+def _session_cookies() -> SessionCookies:
+    """How the session and login cookies are written: Secure (COOKIE_SECURE), and as long-lived as the session and
+    the sign-in attempt they stand for (the server ends either sooner when it must)."""
+    return SessionCookies(
+        secure=settings.cookie_secure,
+        session_max_age=int(accounts.SESSION_LIFETIME.total_seconds()),
+        login_max_age=int(accounts.LOGIN_ATTEMPT_TTL.total_seconds()),
+    )
+
+
+def _sign_in_config() -> accounts_module.SignInConfig:
+    """The addresses the provider is given, all on PUBLIC_URL (the origin people open the web app at, D184), and the
+    role sign-in requires."""
+    return accounts_module.SignInConfig(
+        redirect_uri=settings.public_url + API_PREFIX + accounts.CALLBACK_PATH,
+        signed_out_url=settings.public_url + accounts.SIGN_IN_PAGE,
+        required_role=settings.oidc_required_role,
+    )
+
+
+def _identity_provider(clock: Clock) -> IdentityProvider:
+    """The one place that picks the sign-in adapter: standard OpenID Connect, configured from the OIDC_* settings, or,
+    while one of them (or SESSION_ENCRYPTION_KEYS) is missing, one that refuses every sign-in (fail closed)."""
+    missing = settings.missing_for_sign_in()
+    issuer, client_id, secret = settings.oidc_issuer, settings.oidc_client_id, settings.oidc_client_secret
+    if missing or issuer is None or client_id is None or secret is None:
+        return UnconfiguredIdentityProvider(missing)
+    return OidcIdentityProvider(
+        issuer,
+        ClientCredentials(client_id, secret.get_secret_value()),
+        clock,
+        scopes=settings.oidc_scopes.split(),
+        options=settings.oidc_login_options,
+        role_claim=settings.oidc_role_claim,
+    )
+
+
+def auth_routers(services: Services) -> list[APIRouter]:
+    """The sign-in routes (the accounts module's). main.py mounts them without the session check: they're how a
+    session starts and ends."""
+    return [accounts_module.create_router(services.bus, services.identity, services.sealer, services.sign_in)]
+
+
 def api_routers(services: Services) -> list[APIRouter]:
-    """Every module's REST routes. Their order is the OpenAPI document's order.
+    """Every other module's REST routes; main.py puts the X-CSRF and session checks in front of all of them. Their
+    order is the OpenAPI document's order.
 
     The receipts and assistant routers are built from `services` (the file store, the tools and the model), and share
     one receipt reader: the receipts routes read a receipt on request, the assistant when one is attached in the

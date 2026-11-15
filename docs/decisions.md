@@ -1221,6 +1221,8 @@ is natural. It's still a soft, model-judged guard.
   constant time). The SDK's DNS-rebinding protection (Host and Origin checks for a server on 127.0.0.1) stays on.
 - `POST /ask` sent any prompt to Gemini: an open proxy to your quota, with no product use. Removed.
 - **Revisit when:** users exist (the planned auth phase); then the REST API and the web app get real login.
+- **Updated by D186:** the REST API now needs a session and the X-CSRF header (Phase 22); `/mcp/` keeps its bearer
+  token, since its clients are programs, not browsers.
 
 ### D151. A Clock instead of `date.today()`
 - `core/clock.py`: routes get it as `ClockDep`, handlers as `ctx.clock`. Created-at times come from it too.
@@ -1282,6 +1284,7 @@ is natural. It's still a soft, model-judged guard.
 
 ### D161. Not done on purpose
 - **Login for the REST API and the web app:** a feature, not a refactor; planned with users (auth phase).
+  **Updated by D185–D187:** built in Phase 22.
 - **Two runs on one thread at once** (D138) and **re-rendering bubbles** (D138): unchanged.
 - **Splitting the bundle by page:** the assistant (always loaded) already pulls in the chart library.
 
@@ -1921,3 +1924,91 @@ is natural. It's still a soft, model-judged guard.
   - the contract is byte-identical; the migrations check, the architecture scans, `tsc -b`, oxlint and the build pass.
 - **Revisit:** if the web app ever has to be served from a different site than the API, the cookie needs
   `SameSite=None` with credentialed CORS and a CSRF token; put a thin BFF at the web app's host instead.
+
+### D185. Sign-in through a provider-neutral port and one standard OpenID Connect adapter
+- **What:**
+  - **A port:** `IdentityProvider` (`core/identity.py`): the login options, the authorization URL, completing a login
+    (a `VerifiedLogin`), the provider's sign-out URL, and reading a back-channel logout token. The accounts module
+    depends only on it; `bootstrap.build(identity=...)` takes a fake.
+  - **One adapter, standards only:** `OidcIdentityProvider` (`infrastructure/identity/`): Discovery, the authorization
+    code flow with PKCE (S256), the ID token's checks (signature, issuer, audience, `azp`, times, nonce), UserInfo when
+    the ID token lacks the profile or the role claim (its `sub` must match), RP-Initiated Logout, Back-Channel Logout.
+    The client authenticates with `client_secret_basic` (credentials form-encoded, RFC 6749 2.3.1), or
+    `client_secret_post` when that's all the provider offers. Discovery and the signing keys are fetched on first use
+    and cached; an unknown key id fetches the keys again, at most once a minute.
+  - **Provider differences are data:** how to skip to one login option (`OIDC_LOGIN_OPTIONS`: extra scopes or
+    parameters, never the flow's own) and where roles are (`OIDC_ROLE_CLAIM`, a claim or a dotted path; a list, an
+    object keyed by name, or a list of those).
+  - **Fail closed:** while an `OIDC_*` setting or `SESSION_ENCRYPTION_KEYS` is missing, `UnconfiguredIdentityProvider`
+    refuses every sign-in: every protected route answers 401, never runs open.
+  - **Libraries:** PyJWT 2.15.1 checks signatures, issuer, audience and required claims; cryptography 50.0.2 gives it
+    the keys. Both were already installed (by the MCP SDK and google-genai), now pinned. Only asymmetric algorithms
+    are accepted (no `none`, no HMAC keyed by the client secret). The times (`exp`, `iat`, `nbf`, 60 s of skew) are
+    compared with the injected clock, because PyJWT reads the system clock itself.
+  - The provider's name appears nowhere in `backend/app` or `web/src`; a scan checks it (architecture.md, scan 8).
+- **Why:** the owner asked that ZITADEL be replaceable. Speaking only the standard makes any compliant provider a change
+  of settings; anything else is one adapter behind the port, as with the model (D166). Authlib, the library first
+  considered, isn't installed, and its HTTP integrations expect `httpx` or `requests`, not the `httpx2` this repo pins.
+- **Chosen with the owner:** ZITADEL's hosted login, one OIDC client, the provider replaceable; buttons that skip to
+  Google or GitHub with the provider's hint, falling back to the provider's own page.
+- **How it was verified:** 42 checks against a fake provider in-process (`httpx2.MockTransport`, RSA keys made on the
+  spot): the authorization request (PKCE challenge, an option's scope and parameter, an unknown option adding
+  nothing, a reserved parameter refused); a sign-in with the profile and roles from UserInfo; each way a token can be
+  wrong (another key, issuer, audience, `azp`, several audiences without `azp`, expired, issued in the future, wrong
+  or missing nonce, `none`, HS256, no `exp`), and 30 s past `exp` accepted; key rotation; the provider refusing the
+  code, answering for another issuer, or unreachable; sign-out URLs; logout tokens (valid, with a nonce, without the
+  event, naming no one, an ID token instead).
+- **Revisit:** private-key JWT client authentication (no shared secret) if the provider supports it; `offline_access`
+  and stored refresh tokens if SpendWise ever calls another API as the user.
+
+### D186. Sessions kept on the server, one HttpOnly cookie, and the X-CSRF header (backend-for-frontend)
+- **What:**
+  - **The session lives on the server** (`user_session`); the browser holds one cookie, a random 256-bit key
+    (`__Host-spendwise-session`: HttpOnly, Secure, SameSite=Strict, Path=/). Only the key's SHA-256 is stored. The
+    provider's ID token is kept with the session, sealed with Fernet (`SESSION_ENCRYPTION_KEYS`, rotatable); access
+    and refresh tokens aren't kept, because nothing uses them.
+  - **Lifetimes:** a session ends after a day unused (renewed as it's used, written at most every 12 hours) and after
+    14 days whatever happens. A new sign-in always starts a new session and ends the browser's old one.
+  - **The login attempt** (state, nonce, PKCE verifier, return path) is stored server-side too, keyed by a short-lived
+    login cookie (`__Host-spendwise-login`, SameSite=Lax, 10 minutes), used once (`TakeLoginAttempt`), and at most 500
+    are kept. Lax because the provider's redirect back starts on another site, where Strict cookies aren't sent.
+  - **Every API call carries `X-CSRF: 1`**; `main.py` puts `require_csrf` and then `require_user` in front of every
+    module's routes. Another site can't add a header without a preflight, which fails (no CORS, D184). A
+    `Sec-Fetch-Site` other than `same-origin` or `none` is refused too. The web app's `apiHeaders()` adds the header.
+  - **Sign-out is a navigation** (`GET /auth/logout?sid=<handle>`) that ends the session and goes on to the
+    provider's sign-out page with the ID token as a hint. The handle is the session's random public name, from
+    `/auth/user`'s `logout_url`: another site can't know it, so it can't sign anyone out.
+  - **Back-channel logout:** `POST /auth/backchannel-logout` ends the sessions a valid logout token names (by provider
+    session, else by user).
+  - **Errors:** 401 `unauthorized` ("Sign in to continue.") without a live session; 403 `forbidden` without the
+    header. A failed sign-in goes back to `/sign-in?error=<code>` with one of five codes, never the provider's words.
+- **Why:** the owner asked for cookie sessions kept on the server, as Duende's BFF does for ASP.NET Core. No token
+  ever reaches the browser, so nothing a script can read gives the session away.
+- **Trade-offs:** each protected request reads the session from the database (one indexed query; a write at most every
+  12 hours). Tools like `curl` need the cookie and the header now (api_endpoints.md). `/docs` can show the routes but
+  can't call protected ones. The OpenAPI document doesn't list the header or the cookie (they're read from the request
+  directly, so the generated client doesn't ask for them on every call).
+- **How it was verified:** 71 checks through the real HTTP API with a fake provider and a movable clock (listed in
+  the phase note); and the recorded behaviour of Part 1 (D173): signed in and sending the header, all 52 scenarios
+  are byte-identical, and the OpenAPI document only gained the sign-in routes and their three schemas.
+- **Revisit:** a background job to delete ended sessions if the table grows between sign-ins (today they're deleted
+  at each sign-in); remembering the device ("stay signed in") as a separate, longer cookie if people ask for it.
+
+### D187. The accounts module: users by issuer and subject, never merged by email
+- **What:**
+  - A new module, `accounts`, owns `app_user`, `user_identity`, `user_session` and `login_attempt` (migration 0006).
+    Foreign keys stay inside it. It depends on no other module; nothing depends on it yet (Phase 23 will use `UserId`).
+  - **A person is their identity:** the provider's issuer and subject, unique together. SpendWise's own `app_user.id`
+    is what everything else will point at, so a switch of provider orphans nothing. Two provider accounts with the same
+    email are two users: matching by email would let whoever controls an address at any linked provider into someone
+    else's account. Linking is the provider's job; a later switch has a runbook (identity_provider.md).
+  - **The profile** (name, email, verified flag, picture) is refreshed at each sign-in, cut to its columns; a picture
+    must be an http(s) URL, since the web app shows it as an image.
+  - **Who may sign in:** the provider decides first (ZITADEL's role assignment check); `OIDC_REQUIRED_ROLE` lets
+    SpendWise check too; `app_user.is_active` switches a person off here (their sessions stop working at once).
+  - **Where a sign-in may end:** only a path in the web app (`domain/return_paths.py`): not `//host`, a backslash, a
+    control character, a scheme, or the sign-in page itself.
+- **Why:** the owner's prompt asked for users, identities and sessions, no merging by email, safe redirects; the module
+  layout follows D175.
+- **Not done now:** per-user data (Phase 23): until then everyone signed in shares one set of expenses, so the
+  provider must let in only people who should see them.

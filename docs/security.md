@@ -2,15 +2,15 @@
 
 What protects SpendWise today, why, and what's still missing before it could run anywhere but your own machine.
 
-**Scope today:** one person, one machine. The backend listens on `127.0.0.1`, the web app on `localhost`, and
-there are no user accounts yet. The measures below are chosen for that setting; the last section lists what a
-deployment would need.
+**Scope today:** people sign in through an identity provider (Phase 22), but everyone signed in shares one set of
+expenses until Phase 23 makes data per-user, so the provider must let in only people who should see them. The
+backend listens on `127.0.0.1`, the web app on `localhost`. The last section lists what a deployment still needs.
 
 ## Secrets
 
 | Measure | How |
 |---|---|
-| Kept out of code and git | `GEMINI_API_KEY` and `MCP_TOKEN` live in `.env`, which is git-ignored; `.env.example` holds only names |
+| Kept out of code and git | `GEMINI_API_KEY`, `MCP_TOKEN`, `OIDC_CLIENT_SECRET` and `SESSION_ENCRYPTION_KEYS` live in `.env`, which is git-ignored; `.env.example` holds only names |
 | Never printed | settings hold them as `SecretStr` (masked when printed); the key is passed to the Gemini client explicitly and nowhere else |
 | Never in the browser | the web app has no secrets; anything in a `VITE_` variable would ship to every visitor, so none is used for secrets |
 | Checked before commits | each commit is checked so that the key's value doesn't appear in the staged changes, and no `.env` or `*.db` is staged |
@@ -21,10 +21,11 @@ deployment would need.
   reverse proxy in production), and the API sends no CORS headers. So the browser's same-origin policy keeps every
   other website from reading the API's answers, and refuses another site's requests that need a preflight (a JSON
   body, `PATCH`, `DELETE`) before they're sent. There's no allow-list to keep in step.
-- **No cookies, no sessions yet:** a request from another site carries no credentials. Such a site can still *send*
-  a "simple" request, as it always could (CORS only ever governed reading). JSON routes refuse it (`text/plain` or a
-  form body is a 422), but a multipart upload to `POST /receipts` is accepted. Phase 22's sign-in closes this: every
-  API call will need an `X-CSRF` header, which another site can't add without a preflight.
+- **Every API call needs `X-CSRF: 1` (D186):** another site can make your browser *send* a "simple" request (a plain
+  form post, a multipart upload) with no preflight, cookies included. It can't add a header without a preflight,
+  which the API refuses (no CORS). So a request without the header is a 403, before the session is even looked at;
+  and one whose `Sec-Fetch-Site` says it comes from another site is refused too. The session cookie is also
+  `SameSite=Strict`, so a browser doesn't send it on requests another site starts at all.
 - **Input validation everywhere:** unknown fields and query parameters are rejected, text has length limits, ids are
   bounded (no driver overflow), months are limited to 1900–2099, amounts to 2 decimals and > 0. See
   [api_endpoints.md](api_endpoints.md).
@@ -33,6 +34,29 @@ deployment would need.
   a quota message), Pydantic's explanation of the model's answer, the tools server's URL and a tool's output stay in
   the server log too; a `RUN_ERROR`'s `code` is the problem kind, not a class name. In the browser, an error that
   isn't written for people (a crash) shows a generic text; its details go to the browser console.
+
+## Signing in and sessions
+
+People sign in at an OpenID Connect provider (ZITADEL today, configured in [identity_provider.md](identity_provider.md));
+the backend is the client, and the browser never sees a token (D185, D186: the backend-for-frontend pattern).
+
+| Risk | Defence |
+|---|---|
+| A token stolen from the browser (by an injected script) | No token is ever in the browser. It holds one cookie, a random 256-bit key, **HttpOnly** (scripts can't read it), **Secure**, **SameSite=Strict**, with the `__Host-` prefix (no other host or subdomain can set or read it) |
+| A copy of the database | Only the SHA-256 of each cookie's key is stored, which can't be turned back into a cookie; the ID token kept with a session is sealed (Fernet: AES with an HMAC, `SESSION_ENCRYPTION_KEYS`) |
+| A forged or replayed answer from "the provider" | The callback needs this browser's login cookie (the attempt is stored on the server and used once), the `state` it was sent, and a code that only works with the PKCE verifier the server kept. The ID token's signature is checked against the provider's published keys (asymmetric algorithms only: no `none`, no HMAC with the client secret), and its issuer, audience, `azp`, times (60 s of skew, against the app's clock) and the nonce this sign-in sent |
+| The provider's answer about someone else | UserInfo's `sub` must be the ID token's; a back-channel logout token must be signed for this client, announce the logout event, and carry no nonce |
+| Someone taking over an account by email | People are found only by the provider's issuer and subject; the same email at two providers is two people (D187). Linking accounts is the provider's job |
+| A stolen session kept alive for ever | Sessions end after a day unused and after 14 days whatever happens; signing out, signing in again in the same browser, being switched off (`is_active`) and the provider's back-channel logout all end them on the server at once |
+| Session fixation | A new session (new key) at every sign-in; the browser's old one is ended first. A session key is never accepted from anywhere but the server's own Set-Cookie |
+| A link that signs you out (or in as someone else) | Sign-out needs the session's random handle (`sid`), which another site can't know. Signing in as someone else needs the login cookie, which only your browser has |
+| An "open redirect" through the sign-in (`return_to=//evil.com`) | Only a path in the web app is kept: no `//`, backslash, control character, scheme or host; anything else returns to `/` |
+| The provider's words reaching people | A failed sign-in goes to `/sign-in?error=<code>`, one of five codes; the details go to the server log only (D180) |
+| Sign-in half configured | Fail closed: while a setting is missing, nobody can sign in and every protected route answers 401 |
+| Flooding the sign-in with attempts | Attempts expire after 10 minutes and at most 500 are kept (the oldest go first) |
+
+Who may sign in at all is the provider's decision (with ZITADEL, a role in the project); `OIDC_REQUIRED_ROLE` lets
+SpendWise check a role too. The OpenID Connect and OAuth facts these rely on: [sources.md](sources.md#27-openid-connect-and-zitadel-phase-22).
 
 ## MCP
 
@@ -96,6 +120,8 @@ Every AG-UI event is validated with `@ag-ui/core`'s schemas before it's used.
 - Gemini is called with `store=False`, so Google doesn't keep the conversation for later retrieval. On the free tier,
   Google's data-use terms still apply to what's sent ([gemini.md](gemini.md)).
 - The database is a local file, git-ignored.
+- Sign-in logs say what happened (signed in: session 12; refused: the required role is missing) and the provider's
+  own error words, never a token, a key, a cookie or an email.
 
 ## Dependencies
 
@@ -106,9 +132,9 @@ Every backend and web dependency is pinned to an exact version (`requirements.tx
 
 | Gap | Why it matters | What to add |
 |---|---|---|
-| **No login** for the REST API and the web app | anyone who can reach the port can read and change everything | sign-in through an OpenID Connect provider with a server-side session (Phase 22, in progress); then per-user data (Phase 23) |
-| **Cross-site uploads** | another website can make your browser upload a file to `POST /receipts` (a multipart form needs no preflight) | the `X-CSRF` header on every API call (Phase 22) |
-| **No HTTPS** | traffic, including any future tokens, would be readable | TLS at a reverse proxy |
+| **No per-user data** | everyone signed in sees and changes the same expenses | an owner on every row (Phase 23); until then, let in only people who should see them (the provider's role check) |
+| **No sign-in page yet** | the API needs a session, but the web app can't start one (Part 3) | Phase 22, Part 3 |
+| **No HTTPS** | traffic, including the session cookie, would be readable | TLS at a reverse proxy; the cookie is Secure, so browsers send it only over HTTPS (and to `localhost`) |
 | **No security headers** | no Content-Security-Policy, HSTS, `X-Content-Type-Options`, `frame-ancestors` | set them at the proxy or in a middleware; a CSP also limits the damage of any future injection |
 | **No rate limiting** | the model-backed routes (`/chat`, `/agent`, `/parse`, `/receipts/{id}/extraction`) spend your Gemini quota | per-user/IP limits on those routes |
 | **No request-size limit** | an upload is spooled to a temporary file before the receipts route can refuse it, so a very large one uses disk and time | a body-size limit at the proxy (a little over 5 MB for `POST /receipts`) |

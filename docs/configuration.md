@@ -25,12 +25,33 @@ All backend settings are one Pydantic `Settings` class in `backend/app/infrastru
 | `MCP_URL` | not set | Only if the expense tools run as a **separate** MCP server: its URL (keep the trailing slash). Not set: the assistant calls this app's own MCP server in-process. When set, `MCP_TOKEN` is sent to it |
 | `UPLOADS_DIR` | `<project>/backend/uploads` | The folder uploaded receipts are kept in, by random names (created on the first upload; git-ignored). It goes with the database: a copy of one needs a copy of the other |
 
+### Sign-in
+
+Signing in through an OpenID Connect provider (Phase 22, D185). Until the issuer, client id, secret and an
+encryption key are all set, **nobody can sign in, and every API route answers 401** (fail closed). Setting up a
+provider, and the values each one needs: [identity_provider.md](identity_provider.md).
+
+| Setting | Default | Used for |
+|---|---|---|
+| `OIDC_ISSUER` | not set | The provider's issuer URL (its discovery document is at `<issuer>/.well-known/openid-configuration`). Changing it ends every session (a session remembers its issuer) |
+| `OIDC_CLIENT_ID`, `OIDC_CLIENT_SECRET` | not set | This app's registration at the provider, a confidential web client. The secret never leaves the server |
+| `OIDC_SCOPES` | `openid profile email` | Scopes every sign-in asks for, space-separated |
+| `OIDC_LOGIN_OPTIONS` | `[]` | The sign-in page's buttons, a JSON list of `{"key", "label", "extra_scopes", "extra_params"}`: what each adds to the request so the provider skips to that way of signing in. A parameter the flow sets itself (`state`, `redirect_uri`...) is refused at startup. Empty: one button, the provider's own page |
+| `OIDC_ROLE_CLAIM`, `OIDC_REQUIRED_ROLE` | not set | Where the tokens list roles (a claim's name or a dotted path) and the role a person must have. Unset: anyone the provider lets sign in may |
+| `PUBLIC_URL` | `http://localhost:5173` | The origin people open the web app at (no path). The redirect URI is `<PUBLIC_URL>/api/v1/auth/callback` and signing out ends at `<PUBLIC_URL>/sign-in`: register both at the provider exactly |
+| `SESSION_ENCRYPTION_KEYS` | `[]` | Fernet keys, a JSON list, newest first, that seal the ID token each session keeps. Rotate by putting a new one first and removing the old one 14 days later. Make one: `python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"` |
+| `COOKIE_SECURE` | `true` | The cookies' Secure flag and `__Host-` prefix. Browsers accept Secure cookies on `http://localhost`; turn it off only for one that doesn't, never in production |
+
 Example `.env`:
 
 ```ini
 GEMINI_API_KEY=AIza...your key...
 GEMINI_MODEL=gemini-3.5-flash-lite
 # MCP_TOKEN=change-me-to-a-long-random-string
+OIDC_ISSUER=https://spendwise-abc.zitadel.cloud
+OIDC_CLIENT_ID=...
+OIDC_CLIENT_SECRET=...
+SESSION_ENCRYPTION_KEYS=["...a Fernet key..."]
 ```
 
 ## Fixed in code (change the constant, not `.env`)
@@ -54,6 +75,12 @@ These are deliberate design values, each defined once, next to the code it gover
 | `DEFAULT_CURRENCY = "INR"`, `CURRENCY_SYMBOLS` (a chart's unit) | `core/money.py` | the currency assumed; amounts are written in their currency's CLDR format (Babel) |
 | the server's languages (English, Hindi), each one's CLDR locale and English name (for the model) | `core/i18n/languages.py` | which `Accept-Language` the server answers in; the web app's table is typed against them |
 | Log level `INFO` for `app.*` | `infrastructure/logging.py` | message text and tool arguments appear only at `DEBUG` |
+| `SESSION_IDLE = 1 day`, `SESSION_LIFETIME = 14 days`, `RENEW_AFTER = 12 h` | `accounts/values.py` | when a session ends unused, when it ends anyway, how often its renewal is written |
+| `LOGIN_ATTEMPT_TTL = 10 min`, `MAX_LOGIN_ATTEMPTS = 500` | `accounts/values.py` | how long a sign-in may take at the provider, how many unfinished ones are kept |
+| `SIGN_IN_PAGE = "/sign-in"`, `CALLBACK_PATH = "/auth/callback"` | `accounts/values.py` | where failed sign-ins and sign-outs end; the callback's path (shared with the web app) |
+| `CSRF_HEADER = "X-CSRF"`, the cookies' names (`__Host-spendwise-session`, `__Host-spendwise-login`) | `web/auth.py` | the header every API call carries; the cookies the browser holds |
+| `CLOCK_SKEW = 60 s`, `ALLOWED_ALGORITHMS` (RS, PS, ES, EdDSA) | `infrastructure/identity/tokens.py` | how far the provider's clock may be off; which token signatures are accepted |
+| `METADATA_TTL = 1 h`, `KEYS_REFETCH_INTERVAL = 1 min`, `HTTP_TIMEOUT_SECONDS = 10` | `infrastructure/identity/` | how long the provider's metadata is trusted, how often its keys may be fetched again, how long a call to it may take |
 
 ## Web settings (`web/.env`)
 
@@ -84,7 +111,7 @@ Values the backend and the web app must agree on are **generated from the backen
 | File | Holds | Regenerate with |
 |---|---|---|
 | `web/openapi.json` | the REST API's OpenAPI document | `.\.venv\Scripts\python.exe backend\scripts\export_contracts.py` |
-| `web/src/shared/api/contracts.gen.ts` | API prefix, problem media type, currency, payment-method labels, "Unknown", limits, A2UI catalogs / components / chart types / actions, AG-UI event names and keys | the same script |
+| `web/src/shared/api/contracts.gen.ts` | API prefix, problem media type, currency, payment-method labels, "Unknown", limits, A2UI catalogs / components / chart types / actions, AG-UI event names and keys, sign-in's header, page, query parameters and failure codes (`AUTH`) | the same script |
 | `web/src/shared/api/schema.gen.ts` | TypeScript types for every route, plus enum value lists | `npm run gen:api` in `web/` (openapi-typescript 7.13, run through `npx`) |
 
 Run both after changing an API, a label or a limit, and commit the results with the change. A forgotten

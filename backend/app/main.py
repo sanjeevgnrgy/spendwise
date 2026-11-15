@@ -1,18 +1,20 @@
 """The web app: FastAPI, built from the composition root (bootstrap.py) (entry point, HTTP adapter).
 
-create_app() puts together the error handling (RFC 9457 problem details), /health, every module's routes under
-API_PREFIX and, when MCP_TOKEN is set, the MCP server at MCP_PATH. uvicorn serves `app` (`.\\run.ps1`), and the
-export script reads its OpenAPI document. create_app(services) builds the same app around services made elsewhere,
-e.g. bootstrap.build() with a fake model or another database.
+create_app() puts together the error handling (RFC 9457 problem details), /health, the sign-in routes, every other
+module's routes under API_PREFIX behind the X-CSRF and session checks (D186), and, when MCP_TOKEN is set, the MCP
+server at MCP_PATH. uvicorn serves `app` (`.\\run.ps1`), and the export script reads its OpenAPI document.
+create_app(services) builds the same app around services made elsewhere, e.g. bootstrap.build() with a fake model,
+a fake identity provider or another database.
 
 There's no CORS (D184): the web app reaches the API on its own origin, through the Vite dev server's proxy or a
 reverse proxy, so no other website is ever allowed to read these responses in a browser.
 """
 
+import logging
 from collections.abc import AsyncIterator, Callable
 from contextlib import AbstractAsyncContextManager, AsyncExitStack, asynccontextmanager
 
-from fastapi import FastAPI
+from fastapi import Depends, FastAPI
 from sqlalchemy import Engine, text
 from starlette.types import ASGIApp
 
@@ -22,9 +24,15 @@ from app.infrastructure import migrations
 from app.infrastructure.config import API_PREFIX, API_VERSION, MCP_PATH
 from app.infrastructure.logging import setup_logging
 from app.modules.mcp import module as mcp_module
+from app.web.auth import require_csrf, require_user
 from app.web.problems import UnexpectedErrorMiddleware, register_error_handlers
 
+logger = logging.getLogger(__name__)
+
 HEALTHY = {"status": "ok"}
+# What every module's routes need, sign-in's aside: a request the app itself sent (X-CSRF), then a live session.
+# The cheap header check runs first, so a forged request never reaches the database.
+PROTECTED = [Depends(require_csrf), Depends(require_user)]
 
 Lifespan = Callable[[FastAPI], AbstractAsyncContextManager[None]]
 
@@ -37,14 +45,21 @@ def create_app(services: Services | None = None) -> FastAPI:
     mcp_http_app = mcp_module.create_http_app(built.mcp_server, built.mcp_token) if built.mcp_token else None
 
     app = FastAPI(title="SpendWise API", version=API_VERSION, lifespan=_lifespan(built, mcp_http_app))
-    # Shared services for routes (web/dependencies.py): one bus and one clock for the whole app.
+    # Shared services for routes (web/dependencies.py, web/auth.py): one bus and one clock for the whole app, the
+    # session check (the accounts module's) and how the cookies are written.
     app.state.bus = built.bus
     app.state.clock = built.clock
+    app.state.authenticate = built.sessions.authenticate
+    app.state.cookies = built.cookies
+    if built.identity.issuer is None:
+        logger.warning("Sign-in isn't configured, so nobody can sign in: every API route answers 401 (see OIDC_*).")
     _add_error_handling(app)
     # Registered before the modules' routes, so the OpenAPI document keeps /health first.
     _add_health_check(app, built.engine)
-    for router in bootstrap.api_routers(built):
+    for router in bootstrap.auth_routers(built):
         app.include_router(router, prefix=API_PREFIX)
+    for router in bootstrap.api_routers(built):
+        app.include_router(router, prefix=API_PREFIX, dependencies=PROTECTED)
     if mcp_http_app is not None:
         # MCP clients connect to http://127.0.0.1:8000/mcp/ with "Authorization: Bearer <MCP_TOKEN>".
         app.mount(MCP_PATH, mcp_http_app)

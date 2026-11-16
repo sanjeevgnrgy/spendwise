@@ -49,7 +49,15 @@ from app.modules.expenses.values import (  # noqa: E402
     MAX_LIST_LIMIT,
     MAX_TREND_MONTHS,
 )
-from app.modules.accounts import SIGN_IN_PAGE, SignInFailure, SignInParam  # noqa: E402
+from app.modules.accounts import (  # noqa: E402
+    DEFAULT_TOKEN_LIFETIME,
+    MAX_ACCESS_TOKENS,
+    MAX_TOKEN_NAME_LENGTH,
+    SIGN_IN_PAGE,
+    SignInFailure,
+    SignInParam,
+    TokenLifetime,
+)
 from app.web.auth import CSRF_HEADER, CSRF_VALUE  # noqa: E402
 from app.web.problems import PROBLEM_JSON  # noqa: E402
 
@@ -81,6 +89,17 @@ def _auth_contract() -> dict[str, object]:
         "signInPage": SIGN_IN_PAGE,
         "params": {_camel(param.name): param.value for param in SignInParam},
         "failures": {_camel(failure.name): failure.value for failure in SignInFailure},
+    }
+
+
+def _account_contract() -> dict[str, object]:
+    """Personal access tokens (Phase 23), for the Settings page's form: how long a name may be, how many tokens a
+    person may have, and the lifetimes on offer, in days (the server refuses any other)."""
+    return {
+        "tokenNameLength": MAX_TOKEN_NAME_LENGTH,
+        "maxTokens": MAX_ACCESS_TOKENS,
+        "tokenLifetimeDays": [lifetime.value for lifetime in TokenLifetime],
+        "defaultTokenLifetimeDays": DEFAULT_TOKEN_LIFETIME.value,
     }
 
 
@@ -139,6 +158,7 @@ def main() -> None:
             },
         },
         "AUTH": _auth_contract(),
+        "ACCOUNT": _account_contract(),
         "AGUI": {
             "customEvents": {"a2ui": CustomEventName.A2UI.value},
             "forwardedA2uiAction": FORWARDED_A2UI_ACTION,

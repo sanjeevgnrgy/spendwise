@@ -3,7 +3,10 @@
 Port. The agent and the use cases (agent/agent.py, agent/tool_runs.py, agent/surfaces.py,
 application/decisions.py, application/assistant.py) only know ExpenseTools, ToolOutput and
 ToolsUnavailableError. The composition root (bootstrap.py) decides what's behind it, through module.py:
-by default mcp_adapter.McpExpenseTools, which reaches this app's own MCP server in-process, or a remote one.
+mcp_adapter.McpExpenseTools, which reaches this app's own MCP server in-process.
+
+The tools always act for one person: the use cases bind them to the signed-in person (acting_for) before any call,
+and an unbound adapter refuses to run a tool (D191).
 """
 
 from dataclasses import dataclass
@@ -29,12 +32,17 @@ class ToolOutput:
 class ExpenseTools(Protocol):
     """What the agent needs from the expense tools. Every method raises ToolsUnavailableError if unreachable."""
 
+    def acting_for(self, owner_id: int) -> "ExpenseTools":
+        """The same tools, acting for one person: every call reads and changes only `owner_id`'s expenses."""
+        ...
+
     def specs(self) -> list[ToolSpec]:
         """Every tool, described for the model."""
         ...
 
     def call(self, name: str, arguments: dict[str, Any]) -> ToolOutput:
-        """Run one tool. A tool that reports a problem returns ok=False rather than raising."""
+        """Run one tool for the person these tools act for. A tool that reports a problem returns ok=False rather
+        than raising."""
         ...
 
     def changes_data(self, name: str) -> bool:

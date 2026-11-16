@@ -18,6 +18,7 @@ from pydantic import Field
 from app.core.cqrs import MessageBus
 from app.core.money import CURRENCY_PATTERN, DEFAULT_CURRENCY
 from app.modules import expenses
+from app.modules.mcp.caller import current_caller
 from app.modules.mcp.contracts import ExpenseSaved, ResourceUri, ToolName
 from app.modules.mcp.tools.support import ADDS_DATA, PAYMENT_METHODS, given, tool_errors
 from app.modules.mcp.views import ExpenseViews
@@ -51,7 +52,10 @@ def register_add_expense(server: MCPServer, bus: MessageBus, views: ExpenseViews
         ] = DEFAULT_CURRENCY,
     ) -> ExpenseSaved:
         with tool_errors():
-            command = expenses.CreateExpense(
+            # The caller's own expense: the person behind the token or the signed-in run (caller.py), never an
+            # argument (D191).
+            owner = current_caller()
+            new = expenses.NewExpense(
                 amount=str(amount),
                 currency=currency,
                 category_id=views.category_id(category),
@@ -60,4 +64,5 @@ def register_add_expense(server: MCPServer, bus: MessageBus, views: ExpenseViews
                 spent_on=spent_on,
                 payment_method=payment_method,
             )
-            return ExpenseSaved(saved=views.find(bus.execute(command)))
+            expense_id = bus.execute(expenses.CreateExpense(owner_id=owner, expense=new))
+            return ExpenseSaved(saved=views.find(owner, expense_id))

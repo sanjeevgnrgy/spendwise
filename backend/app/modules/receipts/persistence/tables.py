@@ -21,6 +21,9 @@ class ReceiptFile(SQLModel, table=True):
 
     # None until the row is inserted; the database assigns it (see the flush in commands/store_receipt.py).
     id: int | None = Field(default=None, primary_key=True)
+    # Who uploaded it (core.ids.UserId; no foreign key: the users table is the accounts module's). Only they can see
+    # it, read it with the model or attach it in the chat (D190).
+    owner_id: int = Field(index=True)
     # Where the bytes are kept: a random key the FileStore made, never a name the user sent. Unique: one file, one row.
     storage_key: str = Field(max_length=STORAGE_KEY_LENGTH, unique=True)
     # The type read from the file's first bytes (values.ReceiptMediaType), so the model is told the truth about it.

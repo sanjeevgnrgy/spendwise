@@ -12,6 +12,7 @@ from typing import Self
 from pydantic import BaseModel, ConfigDict, model_validator
 
 from app.core.cqrs import Command, Context
+from app.core.ids import UserId
 from app.core.money import CurrencyCode, rupees_to_paise
 from app.modules.categories import CategoryId
 from app.modules.expenses.domain.rules import require_category_exists, require_positive_amount
@@ -49,11 +50,12 @@ class ExpenseChanges(BaseModel):
         return self
 
 
-# Change some fields of one expense (PATCH /expenses/{id}, MCP's update_expense). The handler raises
-# NotFoundError for a missing expense and BusinessRuleError for an amount <= 0 or an unknown category,
-# and raises the version by one. There's no expected_version: an update applies to whatever is stored
-# (last write wins); only deletes check the version.
+# Change some fields of one of the owner's expenses (PATCH /expenses/{id}, MCP's update_expense). The handler
+# raises NotFoundError for a missing expense, or one that isn't the owner's (D190), and BusinessRuleError for an
+# amount <= 0 or an unknown category, and raises the version by one. There's no expected_version: an update applies
+# to whatever is stored (last write wins); only deletes check the version.
 class UpdateExpense(Command[None]):
+    owner_id: UserId
     expense_id: ExpenseId
     changes: ExpenseChanges
 
@@ -61,11 +63,11 @@ class UpdateExpense(Command[None]):
 def update_expense(ctx: Context, command: UpdateExpense) -> None:
     """Change the fields the caller sent and raise the expense's version by one.
 
-    Raises NotFoundError if there's no such expense, and BusinessRuleError for an amount that isn't above
+    Raises NotFoundError if the owner has no such expense, and BusinessRuleError for an amount that isn't above
     zero or a category that doesn't exist. Sending "note": null clears the note. The version isn't
     checked here: an update always applies to what's stored now.
     """
-    expense = repository.get(ctx.session, command.expense_id)
+    expense = repository.get(ctx.session, command.owner_id, command.expense_id)
     # Only the fields the caller actually sent; anything left out stays as it was.
     changes = command.changes.model_dump(exclude_unset=True)
     if "amount" in changes:

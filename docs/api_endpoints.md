@@ -14,8 +14,11 @@ are generated from it).
 | **Dates** | `YYYY-MM-DD`; months `YYYY-MM` (years 1900–2099); timestamps ISO 8601 in UTC. |
 | **Ids** | positive integers up to 2⁶³−1; larger ones are a 422, not a crash. |
 | **Language** | send `Accept-Language` (`hi`, `hi-IN,hi;q=0.9,en;q=0.5`): error `detail`s, and `/chat`'s and `/agent`'s texts (cards, chip labels, fixed replies, the model's reply), come in the best language the server speaks (English, Hindi), else English. Data (category names, merchants, notes) is never translated; problem `title`s stay English. |
+| **Caching** | every API answer is `Cache-Control: no-store`: it's one person's data (D193) |
 | **Unknown fields** | rejected (422), in bodies and query strings, so a typo like `merchnat` is an error, not a silent no-op. |
-| **Auth** | every route below except `/health` and [Signing in](#signing-in) needs **a session cookie and `X-CSRF: 1`** (D186): without the header, 403; without a live session, 401. `/mcp/` requires its bearer token instead. The API sends no CORS headers: in a browser, only pages on the API's own origin can read its answers (D184). |
+| **Auth** | every route below except `/health` and [Signing in](#signing-in) needs **a session cookie and `X-CSRF: 1`** (D186): without the header, 403; without a live session, 401. `/mcp/` takes a personal access token instead (`Authorization: Bearer <token>`, D191). **Everything is the signed-in
+person's own** (D190): lists, totals and searches cover only their data, and an id that isn't theirs is a 404, exactly
+like one that doesn't exist. No request names an owner: an `owner_id` in a body or query string is a 422. The API sends no CORS headers: in a browser, only pages on the API's own origin can read its answers (D184). |
 
 ## Errors: RFC 9457 problem details
 
@@ -33,15 +36,16 @@ Every error, from any route, has one shape and the media type `application/probl
 
 | Status | `type` (after `urn:spendwise:problem:`) | When |
 |---|---|---|
-| 404 | `not-found` | the resource in the URL doesn't exist |
+| 404 | `not-found` | the resource in the URL doesn't exist, or isn't the signed-in person's (the same answer, D190) |
 | 422 | `validation` | the request's shape is wrong; adds `errors: [{location, field, message}]` |
 | 422 | `business-rule` | well-formed but against a rule: amount ≤ 0, unknown category, an expense that changed since it was shown |
 | 400 | `invalid-token` | `POST /auth/backchannel-logout` with a logout token that fails a check |
-| 401 | `unauthorized` | no live session ("Sign in to continue."), or `/mcp/` without the right bearer token |
+| 401 | `unauthorized` | no live session ("Sign in to continue."), or `/mcp/` without a working personal access token |
+| 429 | `too-many-requests` | the person's allowance for the routes that call the model (`/agent`, `/chat`, `/parse`, reading a receipt) is spent: `Retry-After` says when to try again (D194) |
 | 403 | `forbidden` | a request the app didn't send: no `X-CSRF: 1`, a `Sec-Fetch-Site` from another site, or a sign-out link whose `sid` isn't this session's |
 | 4xx | `http` | FastAPI's own (404 unknown URL, 405 wrong method with an `Allow` header) |
 | 500 | `internal` | a bug; the details go to the server log only |
-| 502 | `external-service` | Gemini (or a remote MCP server) failed: bad key, quota, overload |
+| 502 | `external-service` | Gemini failed: bad key, quota, overload |
 
 The `detail` is always a text written for people, in the request's language. Nothing else's words reach the client
 (D180): a bug's traceback, Gemini's own error message (a 502 says only that a service the app depends on failed),
@@ -135,7 +139,55 @@ curl.exe -H "X-CSRF: 1" -b "__Host-spendwise-session=<value>" http://localhost:5
 ```
 
 (`-b "name=value"` sends the cookie as it is. Treat the value like a password: it's the session.) The examples below
-leave the cookie and header out for brevity. MCP clients use `/mcp/` and its bearer token instead.
+leave the cookie and header out for brevity. MCP clients use `/mcp/` and a personal access token instead.
+
+## Account
+
+The signed-in person's own sessions and personal access tokens, for the web app's Settings page (D191). A session
+or token id that isn't theirs is a 404.
+
+### `GET /api/v1/account/sessions`
+
+Their live sessions (the browsers they're signed in on), most recently used first. `current` marks the one asking;
+`user_agent` is the browser's own description at sign-in.
+
+```json
+[{"id": 7, "created_at": "2026-11-15T09:12:00Z", "last_active_at": "2026-11-15T10:01:00Z",
+  "user_agent": "Mozilla/5.0 (Windows NT 10.0; ...) Edg/157.0", "current": true}]
+```
+
+### `DELETE /api/v1/account/sessions/{session_id}`
+
+Signs that browser out: its cookie stops working at once. **204**. (This browser is better signed out with the
+sign-out link, which also signs out at the provider.)
+
+### `POST /api/v1/account/sessions/sign-out-others`
+
+Signs out every other browser, keeping this one. **204**.
+
+### `GET /api/v1/account/tokens`
+
+Their personal access tokens, newest first: never the tokens themselves.
+
+```json
+[{"id": 3, "name": "Desktop assistant", "hint": "x9Qa", "created_at": "2026-11-15T09:20:00Z",
+  "expires_at": "2027-02-13T09:20:00Z", "last_used_at": null, "expired": false}]
+```
+
+### `POST /api/v1/account/tokens`
+
+Makes a token for MCP clients. **201** with the token's details and `token` itself: **the only time it's sent**
+(`Cache-Control: no-store`).
+
+```json
+{"name": "Desktop assistant", "lifetime_days": 90}
+```
+
+`name`: 1–50 characters; `lifetime_days`: 30, 90 (default) or 365. More than 10 working tokens is a 422.
+
+### `DELETE /api/v1/account/tokens/{token_id}`
+
+Revokes the token: it stops working at once. **204**.
 
 ## Categories
 
@@ -175,7 +227,8 @@ one yet); names are unique ignoring letter case.
 
 ### `POST /api/v1/expenses`
 
-Records an expense. **201 Created** with the expense, and `Location: /api/v1/expenses/{id}`.
+Records an expense for the signed-in person. **201 Created** with the expense, and
+`Location: /api/v1/expenses/{id}`. The body is `NewExpense`; it has no owner (the session decides).
 
 ```json
 {
@@ -287,7 +340,8 @@ curl.exe -F "file=@receipt.jpg" http://127.0.0.1:8000/api/v1/receipts
 
 ### `GET /api/v1/receipts/{receipt_id}`
 
-What's known about an uploaded receipt (the same object as above; not its bytes). 404 if there's no such receipt.
+What's known about an uploaded receipt (the same object as above; not its bytes). 404 if the person has no such
+receipt.
 
 ### `POST /api/v1/receipts/{receipt_id}/extraction`
 
@@ -347,7 +401,7 @@ expenses through its tools; deletes need you to confirm in words.
 }
 ```
 
-Send the `thread_id` back to continue the same conversation; an unknown `thread_id` is a 404. `message`: 1–2000
+Send the `thread_id` back to continue the same conversation; a `thread_id` the person doesn't have is a 404. `message`: 1–2000
 characters.
 
 ### `POST /api/v1/agent` (AG-UI over Server-Sent Events)
@@ -363,7 +417,8 @@ The same agent, streamed. The web app's chat panel uses this one. The request is
 }
 ```
 
-- The client names the thread (1–32 characters); an unknown one starts a new conversation. Only the newest user
+- The client names the thread (1–32 characters); one the person doesn't have yet starts a new conversation (a
+  thread is the person and its id together: another person's id is just a new one of their own). Only the newest user
   message is read: the server keeps the history.
 - A button click (a form's Save, a card's Approve or Cancel) goes in `forwardedProps.a2uiAction` as an A2UI `action`
   message instead of a message.
@@ -380,8 +435,8 @@ The same agent, streamed. The web app's chat panel uses this one. The request is
   ```
 
   Only this is accepted: one part, a `file` source with that provider, a valid receipt id. Several files, bytes sent
-  inline or by URL, audio or video, or another provider's handle are a 422. An unknown receipt is a `RUN_ERROR`
-  (`not-found`).
+  inline or by URL, audio or video, or another provider's handle are a 422. A receipt the person doesn't have is a
+  `RUN_ERROR` (`not-found`).
 - Problems found before streaming starts (bad thread id, no message, an invalid action or attachment) are ordinary
   **422 problem** responses. Once streaming has started, a failure is a `RUN_ERROR` event.
 
@@ -410,7 +465,7 @@ The full event flow, cards and approvals: [assistant_architecture.md](assistant_
 ### `GET /api/v1/threads/{thread_id}`
 
 A stored conversation, readable: user messages, replies, tool calls (`name({...})`) and tool results, oldest first.
-The model's private reasoning is stored but not shown. 404 for an unknown thread.
+The model's private reasoning is stored but not shown. 404 if the person has no such thread.
 
 ```json
 {"thread_id": "9f1c…", "messages": [{"turn": 1, "kind": "user_text", "text": "hi", "created_at": "…"}]}
@@ -418,9 +473,12 @@ The model's private reasoning is stored but not shown. 404 for an unknown thread
 
 ## MCP tools and resources
 
-The MCP server named `spendwise`, over stdio (`backend\mcp_stdio.py`) or Streamable HTTP at `/mcp/` (only when
-`MCP_TOKEN` is set; send `Authorization: Bearer <token>`; Host and Origin must be local). Every tool returns a typed
-result: its JSON Schema is the tool's `outputSchema`, and the result arrives as `structuredContent`.
+The MCP server named `spendwise`, over stdio (`backend\mcp_stdio.py`) or Streamable HTTP at `/mcp/`. **Every
+request acts for one person** (D191): over HTTP, the owner of the personal access token in
+`Authorization: Bearer <token>` (made in Settings; 401 without a working one); over stdio, the owner of the token in
+the `SPENDWISE_TOKEN` environment variable. Host and Origin must be local. The tools and `expenses://recent` see and
+change only that person's expenses. Every tool returns a typed result: its JSON Schema is the tool's
+`outputSchema`, and the result arrives as `structuredContent`.
 
 | Tool | Annotations | Arguments | Returns |
 |---|---|---|---|

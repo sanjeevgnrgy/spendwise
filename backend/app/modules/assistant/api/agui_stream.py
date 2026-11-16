@@ -66,18 +66,19 @@ NO_TOOL_CONTENT = ""
 
 
 def _events_for(
-    request: AgentRequest, assistant: Assistant, today: date, language: Language
+    request: AgentRequest, owner_id: int, assistant: Assistant, today: date, language: Language
 ) -> Iterator[AgentEvent]:
-    """Which use case this run is: a decision on a delete card, a receipt to read, or a message (typed, or a form's
-    Save)."""
+    """Which use case this run is, for `owner_id` (the signed-in person): a decision on a delete card, a receipt to
+    read, or a message (typed, or a form's Save)."""
+    thread = request.thread_id
     if request.decision is not None:
         approved = request.decision.name == a2ui.ActionName.APPROVE_DELETE
-        return assistant.decide(request.thread_id, request.decision.surface_id, approved=approved, language=language)
+        return assistant.decide(owner_id, thread, request.decision.surface_id, approved=approved, language=language)
     assert request.text is not None  # read_request sets exactly one of the two
     if request.receipt_id is not None:
-        return assistant.read_receipt(request.thread_id, request.receipt_id, request.text, today, language)
-    # AG-UI clients name their threads themselves, so an unknown id starts a new conversation.
-    return assistant.run_turn(request.thread_id, request.text, today, language)
+        return assistant.read_receipt(owner_id, thread, request.receipt_id, request.text, today, language)
+    # AG-UI clients name their threads themselves, so an id the person doesn't have yet starts a new conversation.
+    return assistant.run_turn(owner_id, thread, request.text, today, language)
 
 
 class _Writer:
@@ -166,8 +167,11 @@ def _message_for_people(error: AppError, language: Language) -> str:
     return text(language, ChatText.SERVICE_FAILED if isinstance(error, ExternalServiceError) else ChatText.RUN_FAILED)
 
 
-def stream(request: AgentRequest, assistant: Assistant, today: date, language: Language) -> Iterator[BaseEvent]:
-    """The whole AG-UI run for a checked request: RUN_STARTED, the translated events, then RUN_FINISHED.
+def stream(
+    request: AgentRequest, owner_id: int, assistant: Assistant, today: date, language: Language
+) -> Iterator[BaseEvent]:
+    """The whole AG-UI run for a checked request from `owner_id`: RUN_STARTED, the translated events, then
+    RUN_FINISHED.
 
     A failed run doesn't raise: once streaming has begun, the status can't change, so it ends with a
     RUN_ERROR event instead (and the turn isn't saved). Its message is written in `language`.
@@ -175,7 +179,7 @@ def stream(request: AgentRequest, assistant: Assistant, today: date, language: L
     yield RunStartedEvent(thread_id=request.thread_id, run_id=request.run_id)
     writer = _Writer(request.data_version, language)
     try:
-        for event in _events_for(request, assistant, today, language):
+        for event in _events_for(request, owner_id, assistant, today, language):
             yield from writer.write(event)
     # RUN_ERROR ends the run. The client keeps whatever text already arrived and shows the error. Its code is the
     # problem kind (AppError.slug, as in a problem's "type"), never a class name.

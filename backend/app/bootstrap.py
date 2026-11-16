@@ -20,6 +20,7 @@ from app.core.cqrs import MessageBus
 from app.core.files import FileStore
 from app.core.identity import IdentityProvider
 from app.core.llm import LanguageModel
+from app.core.rate_limit import RateLimiter
 from app.core.sealing import Sealer
 from app.infrastructure import db
 from app.infrastructure.config import API_PREFIX, settings
@@ -57,8 +58,11 @@ class Services:
     # Where uploaded files' bytes are kept (the receipts module's receipts).
     files: FileStore
     mcp_server: MCPServer
-    # The MCP token, if MCP over HTTP is enabled (see MCP_TOKEN in .env.example).
-    mcp_token: str | None
+    # Personal access tokens (D191): the account routes make them; MCP over HTTP and the stdio server resolve one to
+    # the person it acts for.
+    access_tokens: accounts_module.AccessTokens
+    # The rate limit on the routes that call the language model (D194), per person.
+    model_quota: RateLimiter
     # Sign-in (Phase 22): the identity provider (its issuer is None when sign-in isn't configured), the sealer for
     # the ID tokens sessions keep, the session check main.py puts in front of the protected routes, how the cookies
     # are written, and the addresses the provider is given.
@@ -93,8 +97,7 @@ def build(
 
     - clock: the system clock;
     - llm: Gemini, with GEMINI_API_KEY and GEMINI_MODEL (checked on the first model call, not here);
-    - tools: this app's own MCP server, called in-process, or the one at MCP_URL if that's set (so a check that
-      injects only an engine still reaches a remote server's database when MCP_URL is in .env: pass tools too);
+    - tools: this app's own MCP server, called in-process (acting, on each run, for the person signed in);
     - engine: the database in DATABASE_URL (infrastructure/db.engine);
     - files: a folder on disk, UPLOADS_DIR (created on the first upload). A check that uses a copy of the database
       should pass its own too, so uploads don't land among the real ones;
@@ -106,13 +109,12 @@ def build(
     engine = db.engine if engine is None else engine
     bus = build_bus(clock, engine)
     mcp_server = mcp_module.create_server(bus)
-    token = settings.mcp_token.get_secret_value() if settings.mcp_token else None
     if llm is None:
         # The one place that picks the LLM provider: Gemini, behind the LanguageModel port.
         llm = GeminiModel(settings.gemini_api_key, settings.gemini_model)
     if tools is None:
-        # The assistant's tools: this app's own MCP server in-process, unless MCP_URL points elsewhere.
-        tools = assistant_module.McpExpenseTools(settings.mcp_url or mcp_server, token=token)
+        # The assistant's tools: this app's own MCP server, in-process. Each run binds them to the signed-in person.
+        tools = assistant_module.McpExpenseTools(mcp_server)
     files = LocalFileStore(settings.uploads_dir) if files is None else files
     identity = _identity_provider(clock) if identity is None else identity
     if sealer is None:
@@ -125,7 +127,8 @@ def build(
         tools=tools,
         files=files,
         mcp_server=mcp_server,
-        mcp_token=token,
+        access_tokens=accounts_module.create_access_tokens(bus, clock),
+        model_quota=RateLimiter(clock, settings.model_requests_per_minute, settings.model_requests_per_day),
         identity=identity,
         sealer=sealer,
         sessions=accounts_module.create_session_gate(bus, identity, clock),
@@ -183,7 +186,8 @@ def api_routers(services: Services) -> list[APIRouter]:
 
     The receipts and assistant routers are built from `services` (the file store, the tools and the model), and share
     one receipt reader: the receipts routes read a receipt on request, the assistant when one is attached in the
-    chat. The others are fixed routers that read the bus and the clock from `app.state` at request time
+    chat. The account router (the signed-in person's sessions and access tokens) gets the bus, the provider and the
+    tokens. The others are fixed routers that read the bus and the clock from `app.state` at request time
     (web/dependencies), which create_app sets from the same services.
     """
     reader = receipts_module.create_reader(services.bus, services.files, services.llm)
@@ -193,6 +197,7 @@ def api_routers(services: Services) -> list[APIRouter]:
         conversations_module.router,
         receipts_module.create_router(services.bus, services.files, reader),
         assistant_module.create_router(services.bus, services.tools, services.llm, reader),
+        accounts_module.create_account_router(services.bus, services.identity, services.access_tokens),
     ]
 
 

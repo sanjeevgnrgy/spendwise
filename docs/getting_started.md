@@ -98,8 +98,7 @@ http://127.0.0.1:8000 (one origin, D184). If the backend runs elsewhere, create 
 |---|---|
 | http://127.0.0.1:8000/health | `{"status":"ok"}` (needs no sign-in) |
 | http://127.0.0.1:8000/docs | Swagger UI with every route under `/api/v1` |
-| http://localhost:5173/api/v1/auth/login | the provider's login page; after signing in, back on the web app |
-| http://localhost:5173 | the Dashboard with numbers and charts |
+| http://localhost:5173 | the sign-in page; after signing in at the provider, the Dashboard with numbers and charts |
 | Assistant panel: *"Where did my money go this month?"* | a short reply and an insight card |
 
 Opening an API route such as `/api/v1/categories` in the browser's address bar now answers 403: a page's own calls
@@ -118,14 +117,12 @@ npx @modelcontextprotocol/inspector .\.venv\Scripts\python.exe backend\mcp_stdio
 
 Claude Desktop setup: [phases/phase-9-mcp-module.md](phases/phase-9-mcp-module.md).
 
-**Over HTTP**, set a token in `.env` and restart:
+Every MCP connection acts for one person, with a **personal access token** made on the Settings page (D191). For
+stdio, give it to the server in the environment: `$env:SPENDWISE_TOKEN = "spw_..."` before the commands above, or
+`"env": {"SPENDWISE_TOKEN": "spw_..."}` in Claude Desktop's config.
 
-```ini
-MCP_TOKEN=<make one: python -c "import secrets; print(secrets.token_urlsafe(32))">
-```
-
-Then connect to `http://127.0.0.1:8000/mcp/` with the header `Authorization: Bearer <token>`. Without `MCP_TOKEN`,
-`/mcp/` isn't served over HTTP at all; the assistant doesn't need it either way (it calls the MCP server in-process).
+**Over HTTP**, connect to `http://127.0.0.1:8000/mcp/` with the header `Authorization: Bearer <token>`. The assistant
+needs neither: it calls the MCP server in-process, for whoever is signed in.
 
 ## Everyday tasks
 

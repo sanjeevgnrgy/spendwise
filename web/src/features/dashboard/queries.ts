@@ -8,7 +8,7 @@ import { getMonthlySummary, getMonthlyTrend } from "./api"
 
 /**
  * TanStack Query keys for the Dashboard's totals, all filed under ["dashboard", ...]. Marking `all` out of date
- * (app/query-client.ts does, after any expense change) reloads every one of them.
+ * (app/_shell/query-client.ts does, after any expense change) reloads every one of them.
  */
 export const dashboardKeys = {
   all: ["dashboard"] as const,

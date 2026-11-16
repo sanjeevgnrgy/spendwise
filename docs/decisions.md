@@ -500,6 +500,7 @@ is natural. It's still a soft, model-judged guard.
 - shadcn/ui via `shadcn init -b radix -p nova` (Radix primitives, "Nova" preset: lucide icons, Geist font,
   neutral colours, CSS variables).
 - React Router 8 (`BrowserRouter` + nested `Routes`) and TanStack Table 9.
+- **Updated by D188:** Next.js 16 (App Router) replaces Vite and React Router; Tailwind runs as a PostCSS plugin.
 
 ### D79. TanStack Table 9's opt-in features
 - `tableFeatures({ rowSortingFeature, rowSelectionFeature, sortedRowModel: createSortedRowModel() })` and
@@ -1164,6 +1165,7 @@ is natural. It's still a soft, model-judged guard.
 - The tools still go through MCP, so the agent stays decoupled from the expenses module (D72).
 - **Why:** calling ourselves over HTTP was what forced sync routes and a connection per tool call.
 - **Updated by D175:** the port is `assistant/tools/port.py` and the adapter `assistant/tools/mcp_adapter.py`.
+- **Updated by D191:** `MCP_URL` is gone: the tools are always this app's MCP server, in-process, acting for the signed-in person.
 
 ### D144. MCP tools return typed results; the contract lives in the mcp module
 - Each tool returns a Pydantic model (`ExpenseSaved`, `ExpenseSearch`, `MonthSpending`, ...). The SDK publishes it as
@@ -1223,6 +1225,7 @@ is natural. It's still a soft, model-judged guard.
 - **Revisit when:** users exist (the planned auth phase); then the REST API and the web app get real login.
 - **Updated by D186:** the REST API now needs a session and the X-CSRF header (Phase 22); `/mcp/` keeps its bearer
   token, since its clients are programs, not browsers.
+- **Superseded by D191:** `/mcp/` is always served, and every request needs a personal access token, which decides whose expenses it may touch; `MCP_TOKEN` is gone.
 
 ### D151. A Clock instead of `date.today()`
 - `core/clock.py`: routes get it as `ClockDep`, handlers as `ctx.clock`. Created-at times come from it too.
@@ -1240,6 +1243,8 @@ is natural. It's still a soft, model-judged guard.
   feature, nothing from `app/` in a feature, nothing from features or `app/` in `shared/`.
 - Not Feature-Sliced Design's layers: plain feature folders, by choice.
 - **Why:** files were grouped by kind (`components/`, `hooks/`, `lib/`, `pages/`), and one `api.ts` held everything.
+- **Updated by D188:** `src/app/` is also Next.js's route folder: route files there, the composition in private
+  `_` folders. The lint rules are unchanged.
 
 ### D154. Server data through TanStack Query; the assistant says "data changed", the app decides what reloads
 - Each feature has query keys and hooks (`useExpenses`, `useMonthlySummary`, `useCategories`, mutations that
@@ -1365,6 +1370,8 @@ is natural. It's still a soft, model-judged guard.
 - The app's name (`APP_NAME`), every page (`PAGES`, for both the router and the sidebar), and the theme boot script
   (generated from `theme-constants.ts` and injected into `index.html` by Vite) are each defined once.
 - oxlint gains the jsx-a11y plugin and rules for `app/` and for relative imports out of `shared/`.
+- **Updated by D188:** the theme boot script is put into `<head>` by the root layout (`app/layout.tsx`), and
+  `PAGES` lists the menu only: the routes are Next.js's route files.
 
 ### D170. Not changed on purpose
 - **Text after a tool call** already starts with a paragraph break (the agent adds it), so the reviewer's "joined text"
@@ -1659,6 +1666,8 @@ is natural. It's still a soft, model-judged guard.
   [phases/phase-19-languages.md](phases/phase-19-languages.md#after-the-code-reviews).
 - **Updated by D179:** the server's texts (cards, chips, replies, errors, payment labels) and the assistant's replies
   now follow the language too.
+- **Updated by D189:** the auth feature's texts boot too (with `common` and `app`), because the session check and the
+  user menu are part of the frame.
 - **Revisit:** a language with more plural forms (the type already accepts `count_few` and the rest); right-to-left
   languages (mirrored layout, logical CSS); a region setting apart from the language, if English speakers outside
   India want `125,000.50` rather than `1,25,000.50`.
@@ -1924,6 +1933,8 @@ is natural. It's still a soft, model-judged guard.
   - the contract is byte-identical; the migrations check, the architecture scans, `tsc -b`, oxlint and the build pass.
 - **Revisit:** if the web app ever has to be served from a different site than the API, the cookie needs
   `SameSite=None` with credentialed CORS and a CSRF token; put a thin BFF at the web app's host instead.
+- **Updated by D188:** Next.js's rewrite replaces Vite's proxy. It sets `Host` to the backend's own address, and
+  answers 500 (not 502) when the backend is down; the client reads any 5xx without a problem as "can't reach".
 
 ### D185. Sign-in through a provider-neutral port and one standard OpenID Connect adapter
 - **What:**
@@ -2012,3 +2023,261 @@ is natural. It's still a soft, model-judged guard.
   layout follows D175.
 - **Not done now:** per-user data (Phase 23): until then everyone signed in shares one set of expenses, so the
   provider must let in only people who should see them.
+- **Updated by D190:** every module's data now points at `UserId` (`owner_id`).
+
+---
+
+## Next.js (before Phase 22, Part 3)
+
+> At the owner's choice, the web app moved from Vite to Next.js (App Router), for search engines: each page now has
+> server-rendered metadata, and there's a robots.txt and a sitemap. The signed-in app still renders in the browser
+> (it sits behind sign-in, where no crawler goes).
+> Refactor note: [phases/refactor-nextjs.md](phases/refactor-nextjs.md).
+
+### D188. The web app on Next.js: App Router routes, metadata on the server, the signed-in app in the browser
+- **What:**
+  - **Next.js 16.4.6 (App Router)** replaces Vite 8 and React Router 8; Tailwind 4 runs as a PostCSS plugin. React,
+    TanStack Query, i18next, shadcn/ui, the feature slices and the generated contract are unchanged.
+  - **Routes are files** under `src/app/(client)/`: `(app)/page.tsx` (the Dashboard), `(app)/expenses/`,
+    `(app)/budgets/`, `(app)/settings/`, each a server component that exports its `metadata` and draws its feature's
+    page. `(app)/layout.tsx` draws the frame (sidebar, top bar, chat). `PAGES` now only lists the menu.
+  - **One client boundary:** `(client)/layout.tsx` renders `ClientRoot` (`_shell/client-root.tsx`), which starts
+    i18next, then draws the crash guard, the providers and the page. It draws nothing on the server, so the code that
+    needs the browser (saved language and theme, window width) runs only there, as with Vite. Feature pages stay lazy
+    (`lazyWithRetry`), so their code and texts still load together.
+  - **For search engines:** the root layout's metadata (title template, description, icon, link preview, from
+    `_seo/seo.ts` and `PUBLIC_URL`); signed-in pages `noindex`; `robots.txt` allows only the public pages (today
+    `/sign-in`) and the sitemap lists them. Unknown addresses go to the root `not-found.tsx`: Next.js settles that
+    before rendering, so it's a real 404 (a catch-all route inside the client boundary answered 200, because its
+    not-found never rendered on the server).
+  - **`src/app/` holds Next's files at the top** (`layout.tsx`, `not-found.tsx`, `robots.ts`, `sitemap.ts`) and
+    everything else in private folders (`_shell/`, `_frame/`, `_views/`, `_i18n/`, `_seo/`, `_styles/`; a leading
+    underscore is never a route), at the owner's request.
+  - **The API on one origin, through Next.js** (updating D184): a `beforeFiles` rewrite sends `/api/v1/...` to
+    `API_PROXY_TARGET`. Next's proxy: `compress: false` (it would gzip and hold back the assistant's Server-Sent
+    Events); `experimental.proxyTimeout` 180 s (its default 30 s of silence would cut off `/parse` and receipt reading,
+    which wait up to 2 × 60 s on Gemini). It sets the backend's own address as `Host` and sends the browser's in
+    `X-Forwarded-Host`, so the backend's `Location` headers name its own address; the web app never reads them.
+    The rewrite target is compiled into the build: production sets `API_PROXY_TARGET` before `next build`.
+  - **"Can't reach SpendWise"** now covers any 5xx without a problem body: Next.js answers 500 in plain text when the
+    backend is down (Vite answered 502).
+  - **TypeScript 7 works with Next's build.** One catch: Next.js writes `"strict": false` into `tsconfig.json` when
+    `strict` is missing, while TypeScript 6+ defaults to strict, and i18next's typed keys need it. `strict` is now set
+    explicitly. One `tsconfig.json` replaces the three Vite-era files.
+  - `next dev` would write a `web/AGENTS.md`; `agentRules: false` turns that off, and the root AGENTS.md points to
+    the Next.js docs bundled in `node_modules/next/dist/docs`.
+- **Why:** the owner wants search engines to find SpendWise, and chose a full move to Next.js over pre-rendering public
+  pages with Vite, after being told that the signed-in pages gain nothing there (they sit behind sign-in).
+- **Trade-offs:**
+  - The web app now runs a Node server (`next start`) in production, beside uvicorn, behind one reverse proxy.
+  - Everything signed-in is still client-rendered, so SEO comes from metadata, robots, the sitemap and public pages.
+    A public page that should be fully rendered on the server (a landing page) belongs outside `(client)/`, with its
+    own server-side texts.
+  - Tab titles come from English metadata (they don't follow the language menu; before, the tab only ever said
+    "SpendWise").
+  - Unknown addresses show "Page not found" on its own, outside the frame.
+- **How it was verified:**
+  - `tsc -b`, `oxlint` (an override lets route files export `metadata`) and `next build` pass;
+  - through `next dev` and `next start`, against a backend with a fake model and a fake provider: robots.txt, the
+    sitemap, each page's server-rendered title, description and `noindex`; the API through the rewrite; signing in;
+    the assistant's stream unbuffered (chunks written a second apart arrived a second apart, with gzip offered); a
+    404 with `noindex` for unknown addresses; and 500 in plain text with the backend unreachable;
+  - in headless Edge (15 checks): signing in lands on the page asked for, with its data; titles; the sidebar and top
+    bar; client-side navigation without reloading; the 404 page; the saved dark theme applied before React; Hindi
+    (and `<html lang>`); an assistant reply streamed in the chat panel; no uncaught errors.
+- **Revisit:** a public landing page rendered on the server (outside `(client)/`, texts loaded server-side); per-page
+  titles in the chosen language (they'd need the language on the server, e.g. from a cookie).
+
+## Signing in: the web app (Phase 22, Part 3)
+
+> The sign-in page, the session check in front of the signed-in pages, and the user menu, built on Next.js (D188).
+> Phase note: [phases/phase-22-sign-in.md](phases/phase-22-sign-in.md#part-3-the-web-app).
+
+### D189. The web app asks the server who is signed in, and signs in and out by navigating
+- **What:**
+  - **An `auth` feature** (`features/auth/`): the sign-in page, `AuthGate`, `UserMenu`, and their texts. The page is
+    public (`/sign-in`, under `(client)/`, beside the signed-in `(app)/` group): indexable, allowed in robots.txt and
+    listed in the sitemap.
+  - **Who is signed in is a query**: `GET /auth/user` through TanStack Query (`authKeys.user`, fresh for five
+    minutes). Its 401 is an answer (`null`: nobody), not an error. Nothing about the session is kept in the browser:
+    the cookie stays HttpOnly, and the page never sees a token.
+  - **The gate is the signed-in group's layout:** `(client)/(app)/layout.tsx` draws `AuthGate` around the frame.
+    While it asks: a spinner, announced to screen readers. Nobody: `router.replace` to
+    `/sign-in?return_to=<the address>` (the start page left out: it's the default). The question failed (the backend
+    unreachable): "Couldn't check whether you're signed in", with Try again; only a 401 sends anyone to sign in.
+    Signed in: the frame and the page.
+  - **Signing in and out are navigations, not API calls.** Each button is a link to
+    `/api/v1/auth/login?option=<key>&return_to=<path>` (the server keeps only a path in the app). Sign out opens the
+    `logout_url` from `/auth/user`, which carries the session's handle (D186). The page unloads, so nothing of the
+    session stays in memory.
+  - **The buttons come from the server** (`GET /auth/options`): one "Continue with <label>" per option, or a single
+    "Sign in" when there are none (the provider's own page then offers the choices). A failure code in `?error=` (the
+    contract's `AUTH.failures`) shows its text, and an unknown code a generic one: never the provider's words (D180).
+  - **Any 401 means the session has ended** (it expired, the person signed out in another tab, or the provider ended
+    it through back-channel logout). The query client's `onError`, for queries and mutations, invalidates
+    `authKeys.user`; the gate then gets "nobody" and sends the person to sign in, back to the page they were on.
+    `/auth/user`'s own 401 isn't an error, so this can't loop.
+  - **The auth texts load at boot** with `common` and `app` (`_shell/namespaces.ts`), their English bundled: the gate
+    and the user menu belong to the frame, which is drawn before any page (updating D178).
+  - **The provider's picture** is shown only if its address is `http(s)`, and loaded with
+    `referrerPolicy="no-referrer"`; otherwise the person's initials.
+- **Why:** with the session on the server (D186), the browser can only ask who is signed in. A navigation is the
+  only way to reach the provider's login page, and lets the server set or clear an HttpOnly cookie on the way back.
+  Treating every 401 alike in the query client puts the rule in one place: it already sees every request's failure.
+- **Trade-offs:**
+  - A signed-in page first waits for `/auth/user` (one small request, then cached).
+  - After a failed sign-in, the page has lost `return_to` (the callback's redirect carries only `?error=`), so
+    signing in from there lands on the Dashboard.
+  - The new Hindi texts were written by an AI and need a native speaker's review.
+- **How it was verified:** offline, against a backend with a fake model and a fake provider (Google signs straight
+  in, GitHub comes back `access_denied`), through `next dev`, in headless Edge (33 checks): signed out, a page goes to
+  `/sign-in?return_to=...`; the buttons and their links; the page's title and that it's indexable, while signed-in
+  pages are `noindex`; cancelled and unknown failure codes; signing in back to the page asked for; the user menu, its
+  name, email and initials; `/sign-in` when signed in goes to the Dashboard; a failed session check and Try again;
+  options that fail to load and Try again; sign-out, after which pages ask to sign in again; a session ended on the
+  server mid-visit (back-channel logout), so the next query's 401 sends the person to sign in; Hindi; no uncaught
+  exceptions or console errors. The migration's 15 checks still pass with the gate in front; `tsc -b`, `oxlint` and
+  `next build` pass.
+- **Revisit:** carrying `return_to` through a failed sign-in (the backend would add it to the error redirect).
+
+## Each person's own data (Phase 23)
+
+> Everyone who signs in gets their own expenses, conversations and receipts, and every object is checked against its
+> owner where it's read: protection against broken object level authorization (BOLA). MCP clients act for a person
+> through personal access tokens. Phase note: [phases/phase-23-per-person-data.md](phases/phase-23-per-person-data.md).
+
+### D190. Every object has an owner, checked in the same statement that reads it
+- **What:**
+  - `expense`, `conversation_message`, `pending_approval` and `receipt_file` get a NOT NULL `owner_id`
+    (`core.ids.UserId`, no foreign key: D13). The indexes start with it, since every read is one person's.
+  - **Every command and query about a person's data carries `owner_id`**, filled only from the server's side: the
+    session (`principal.user_id`), a personal access token (D191) or the signed-in run. REST inputs are separate
+    models from the messages (`NewExpense`, `ExpenseFilters`), so a body or query string can't name an owner
+    (`extra="forbid"`: a 422).
+  - **The owner is in the same SQL statement as the id** (`WHERE id = ? AND owner_id = ?`) for every read, update and
+    delete; every list, search, count and total filters on the owner.
+  - **Another person's object is a 404 identical to a missing one** (status, type, text).
+  - A conversation is (owner, thread id): the same id from two people is two conversations. Delete cards are taken
+    only by their owner, and the 200-card cap counts per person.
+  - The assistant's tools are bound to the signed-in person for each run (`ExpenseTools.acting_for`): what the model
+    asks never decides whose data it touches.
+  - Categories stay shared and read-only (the owner's choice).
+  - Migration 0007 deletes the rows made before sign-in existed (the owner's choice: they belonged to nobody).
+- **Why:** with sign-in (Phase 22) the API knew who was asking, but every object was everyone's. Sequential ids make
+  guessing trivial, so the check must be on every object, not on every route; putting it in the statement means it
+  can't be forgotten in one caller, and an identical 404 means a guess doesn't even reveal that an object exists.
+- **Trade-offs:** every message about a person's data has one more field, and every handler passes it on. The old
+  data is gone (a copy of the database keeps it). The receipt files from before stay on disk until removed by hand.
+- **How it was verified:** two people in one database, through the real HTTP API with fakes at the ports: every
+  route, the assistant's tool calls (the model scripted to use the other person's ids and to invent an owner), delete
+  cards, receipts (direct, read by the model, attached in the chat), threads, MCP; 102 checks. One person's recorded
+  behaviour is unchanged (51 scenarios). Migration 0007 checked on a copy of the database.
+- **Revisit:** random ids (UUIDs) as defence in depth, if ids ever appear somewhere they could leak; per-person
+  categories, if people want their own.
+
+### D191. MCP acts for a person: personal access tokens, a caller set by the transport, and the account routes
+- **What:**
+  - **Personal access tokens** (`access_token`): made in Settings with a name and a lifetime (30, 90 or 365 days);
+    `spw_` plus 256 random bits; shown once, stored as SHA-256 with a four-character hint; at most 10 working ones
+    per person; revoking deletes. Expired tokens and those of a switched-off person stop working. Last use is written
+    at most hourly.
+  - **The caller** (`mcp/caller.py`): a context variable holding who an MCP request acts for, set from something the
+    request can't forge: HTTP from the bearer token (401 without a working one), stdio from `SPENDWISE_TOKEN` (checked
+    on every tool call, so revoking works without a restart), the assistant from the run. Every tool, and
+    `expenses://recent`, reads it (`current_caller()`); without one, they refuse. Nothing in an MCP message names a
+    caller.
+  - `/mcp/` is always mounted. **`MCP_TOKEN` and `MCP_URL` are removed**: the assistant always calls this app's MCP
+    server in-process.
+  - **The account routes** (`/account/sessions`, `/account/tokens`, behind the session and `X-CSRF` checks): a
+    person's live sessions (with the browser each signed in from, `user_session.user_agent`), signing one out or all
+    the others, and their tokens.
+- **Why:** with per-person data, an MCP client must be someone. A shared token only says "trusted"; a remote tools
+  server couldn't know who is signed in here. A context variable lets the SDK's own tool functions (whose signatures
+  are their schemas) learn the caller without an argument the model could fill.
+- **Trade-offs:** each HTTP request (and each stdio tool call) looks the token up: one indexed query. The context
+  variable relies on tasks and worker threads copying their context (asyncio and anyio both do,
+  [sources.md](sources.md#30-who-an-mcp-request-acts-for-context-variables-across-tasks-and-threads-phase-23)).
+- **How it was verified:** over HTTP through the real app (no token, a made-up one, a session cookie, two people's
+  tokens, expired, revoked, a switched-off owner); the stdio path with a working, a broken and no token; the
+  assistant's in-process calls for two people; the account routes with the other person's ids.
+- **Revisit:** token scopes (read-only tokens) if a client only needs to read.
+
+### D192. The web app per person: a page never outlives its person, and the Settings page
+- **What:**
+  - **A page is unloaded when the person behind it changes** (`features/auth/use-session-boundary.ts`, in `AuthGate`).
+    A page that has shown someone's data holds it in memory (the query cache, the chat, half-typed forms), so: the
+    session ended (expired, signed out in another tab) means a full navigation to the sign-in page; someone else now
+    signed in (another tab, the same browser) means a reload. Only a page that never showed anyone's data moves to
+    the sign-in page inside the app.
+  - **Tabs keep each other in step** (`use-session-sync.ts`): a page that learns who is signed in tells the browser's
+    other tabs (a `BroadcastChannel` message that carries nothing), and they ask the server again. What they do then
+    depends on the server's answer alone. The sign-in page listens too: signing in in another tab takes it on to the
+    page it remembered.
+  - **Links from the server are checked before they're followed:** the sign-out link and `?return_to=` lead only to
+    paths on this site (`ownSitePath`, `afterSignIn`).
+  - **The Settings page** (`features/account/`): the profile; where the person is signed in (each session's browser,
+    "This browser", Sign out per session, Sign out everywhere else, after confirming); their access tokens (make one:
+    shown once, with Copy; revoke, after confirming). A new token lives only in its dialog's state: closing the
+    dialog forgets it, and it's never written to browser storage. Whether a token has expired is the server's answer
+    (its clock), not the browser's.
+  - Sessions and tokens are new data scopes; the app's refresh rule reloads their lists after a change.
+  - `LabeledField` moved to `shared/components/`: the token form uses it too.
+- **Why:** the server decides what each person may see (D190), but a page that keeps showing one person's data after
+  another person signs in, in the same browser, would undo that on screen. Unloading drops everything at once, with
+  no list of caches to clear and nothing to forget.
+- **Trade-offs:** a change of person reloads the page (a second's wait). A browser without `BroadcastChannel` catches
+  up at its next request or refocus rather than at once.
+- **How it was verified:** in headless Edge, two tabs of one browser against a backend with two people: Ravi signing
+  in in tab B reloads tab A (left on Asha's expenses) for him, with nothing of hers left; signing out in B takes A to
+  the sign-in page, unloaded, remembering its page; signing in again in B takes A on. Four `return_to` attacks stay
+  on the site. The Settings page: profile, sessions (a second client listed, signed out from its row and with Sign
+  out everywhere else, its cookie then refused), tokens (made, shown once, used by an MCP client, listed by its hint,
+  absent from the page and storage afterwards, revoked and refused), in Hindi; the earlier sign-in and Next.js checks
+  still pass; no uncaught exceptions or console errors.
+- **Revisit:** showing where a session is (an approximate place from its address) if people ask; the server would
+  then store the address, which is personal data.
+
+### D193. Security headers on every page and every answer
+- **What:**
+  - **Pages** (Next.js, `web/security-headers.ts`, applied by `next.config.ts` to every path but the API's): a
+    Content-Security-Policy (`default-src 'self'`; scripts, styles, fonts and requests only from this site; pictures
+    from this site or `https:`, for the identity provider's profile pictures; `object-src 'none'`, `base-uri 'self'`,
+    `form-action 'self'`, `frame-ancestors 'none'`), `X-Frame-Options: DENY`, `X-Content-Type-Options: nosniff`,
+    `Referrer-Policy: same-origin`, a `Permissions-Policy` refusing camera, microphone, location, payment and USB,
+    `Cross-Origin-Opener-Policy: same-origin`, and, when `PUBLIC_URL` is https, HSTS and
+    `upgrade-insecure-requests`. Fixed at build time, like the rewrite.
+  - **The backend's answers** (`web/security_headers.py`, outside the error handling, so a 500 has them too):
+    nosniff, `DENY`, `same-origin` everywhere; HSTS over https; and under `/api/v1` and `/mcp`, **`no-store`** (added to
+    any Cache-Control a route set: the assistant's stream sets `no-cache`) and a CSP that allows nothing. The docs
+    pages (`/docs`, `/redoc`) load scripts, so they get no CSP.
+- **Why:** a person's data must never sit in a shared cache, where it could be handed to someone else; and the
+  headers limit what an injected script, a framing page or a stray `http://` link could do. They were the next gaps
+  listed in security.md.
+- **Trade-offs:** the pages' CSP allows inline scripts (`'unsafe-inline'`): Next.js writes its own bootstrap inline,
+  and the theme script runs before React. A nonce would remove that need but make every page render per request
+  (the bundled guide says so); its experimental Subresource Integrity option was left alone. External scripts,
+  plugins, framing, `<base>` and form hijacking stay blocked, and React escapes what it renders.
+- **How it was verified:** through the real app: every API answer (a 500 and the stream included) never stored, with
+  the API's CSP; the docs page without a CSP; MCP's answers never stored; no HSTS on http. In headless Edge against
+  the production build: the pages' headers as above, and no console errors (no CSP refusals) across the sign-in,
+  Settings and Next.js checks.
+- **Revisit:** a nonce-based CSP if the pages are rendered per request anyway; HSTS preloading once the domain is fixed.
+
+### D194. A per-person allowance on the routes that call the model
+- **What:** `POST /agent`, `/chat`, `/parse` and `/receipts/{id}/extraction` each spend Gemini quota, so each person
+  may make `MODEL_REQUESTS_PER_MINUTE` (10) of them in a minute and `MODEL_REQUESTS_PER_DAY` (300) in a day (UTC). One
+  more is a **429 problem with `Retry-After`** and a catalogued text ("Wait a minute", "Try again tomorrow"), and
+  never reaches the model. `core/rate_limit.py` counts (fixed windows, in memory, with the injected clock);
+  `web/rate_limits.py`'s `MODEL_QUOTA` dependency applies it after the session check. Uploading a receipt and every
+  other route aren't limited.
+- **Why:** listed as a gap: anyone signed in could spend the whole quota, by a loop or by accident.
+- **Trade-offs:** counted per server process: several workers would each count separately (a shared store such as
+  Redis would fix that). Fixed windows let up to twice a minute's allowance through at a window's edge, which is fine
+  for a quota guard. An Approve or Cancel on a delete card goes through `/agent` and counts, though it doesn't call
+  the model.
+- **How it was verified:** with limits of 3 a minute and 5 a day and a movable clock: three pass, the fourth is a 429
+  with a Retry-After of at most 60 s, in Hindi when asked; another person isn't held back; non-model routes aren't
+  limited; `/agent` answers a 429 problem, not a stream; `/chat` and receipt reading are limited, uploading isn't; a
+  minute later two pass again, then the day's limit says so with a Retry-After of hours; the next UTC day passes
+  again; refused requests never reached the model.
+- **Revisit:** a shared counter when there's more than one process; per-route costs if some calls are much dearer.

@@ -1,12 +1,16 @@
-"""The random values a sign-in and a session are made of, and how keys are stored (accounts module, domain).
+"""The random values a sign-in, a session and an access token are made of, and how keys are stored (accounts module,
+domain).
 
-Cookie keys, state, nonce and the PKCE verifier come from the operating system's secure random source (`secrets`):
-nobody can guess or predict them. A cookie's key is stored only as its SHA-256 hash, so the database alone never
-gives a working cookie away. Used by the sign-in use cases (application/) and the session check.
+Cookie keys, state, nonce, the PKCE verifier and access tokens come from the operating system's secure random source
+(`secrets`): nobody can guess or predict them. A cookie's key and an access token are stored only as their SHA-256
+hash, so the database alone never gives a working cookie or token away. Used by the sign-in use cases and the access
+tokens (application/), and the session check.
 """
 
 import hashlib
 import secrets
+
+from app.modules.accounts.values import ACCESS_TOKEN_BYTES, ACCESS_TOKEN_PREFIX
 
 # 32 random bytes (256 bits) for every key, state and nonce: 43 URL-safe characters.
 KEY_BYTES = 32
@@ -29,6 +33,11 @@ def new_verifier() -> str:
 def new_handle() -> str:
     """A session's new public handle: unguessable, so a sign-out link can't be forged."""
     return secrets.token_hex(HANDLE_BYTES)
+
+
+def new_access_token() -> str:
+    """A new personal access token: the recognisable prefix and 256 random bits (D191). Shown to its owner once."""
+    return ACCESS_TOKEN_PREFIX + secrets.token_urlsafe(ACCESS_TOKEN_BYTES)
 
 
 def hash_key(key: str) -> str:

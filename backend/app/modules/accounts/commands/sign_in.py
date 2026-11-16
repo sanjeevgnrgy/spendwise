@@ -18,6 +18,7 @@ from app.modules.accounts.values import (
     MAX_NAME_LENGTH,
     MAX_SUBJECT_LENGTH,
     MAX_URL_LENGTH,
+    MAX_USER_AGENT_LENGTH,
     SESSION_IDLE,
     SESSION_LIFETIME,
 )
@@ -37,6 +38,7 @@ class SignIn(Command[int]):
     handle: str = Field(min_length=HANDLE_LENGTH, max_length=HANDLE_LENGTH)
     provider_session_id: str | None = Field(default=None, max_length=MAX_SUBJECT_LENGTH)
     sealed_id_token: str | None = None
+    user_agent: str | None = Field(default=None, max_length=MAX_USER_AGENT_LENGTH)
 
 
 def sign_in(ctx: Context, command: SignIn) -> int:
@@ -62,6 +64,7 @@ def sign_in(ctx: Context, command: SignIn) -> int:
         issuer=command.issuer,
         provider_session_id=command.provider_session_id,
         sealed_id_token=command.sealed_id_token,
+        user_agent=command.user_agent,
         created_at=now,
         renewed_at=now,
         expires_at=now + SESSION_IDLE,

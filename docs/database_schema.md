@@ -14,6 +14,7 @@ erDiagram
     }
     expense {
         INTEGER id PK
+        INTEGER owner_id "the person; indexed with spent_on"
         INTEGER amount_minor "paise"
         VARCHAR_3 currency
         INTEGER category_id "indexed, no foreign key"
@@ -26,7 +27,8 @@ erDiagram
     }
     conversation_message {
         INTEGER id PK
-        VARCHAR_32 thread_id "indexed"
+        INTEGER owner_id "the person; indexed with thread_id, turn"
+        VARCHAR_32 thread_id
         INTEGER turn
         VARCHAR_30 kind
         JSON content "a provider-neutral message"
@@ -34,12 +36,14 @@ erDiagram
     }
     pending_approval {
         VARCHAR_64 approval_id PK "the card's surface id"
+        INTEGER owner_id "the person; indexed"
         VARCHAR_32 thread_id "indexed"
         JSON expense "snapshot shown on the card"
         DATETIME created_at "indexed"
     }
     receipt_file {
         INTEGER id PK
+        INTEGER owner_id "the person; indexed"
         VARCHAR_32 storage_key "unique; the file is in UPLOADS_DIR"
         VARCHAR_15 media_type "read from the file's bytes"
         INTEGER size_bytes
@@ -76,6 +80,7 @@ erDiagram
         DATETIME expires_at "indexed; idle"
         DATETIME absolute_expires_at
         DATETIME revoked_at "nullable"
+        VARCHAR_255 user_agent "nullable"
     }
     login_attempt {
         INTEGER id PK
@@ -86,9 +91,20 @@ erDiagram
         VARCHAR_2048 return_to
         DATETIME created_at "indexed"
     }
+    access_token {
+        INTEGER id PK
+        INTEGER user_id FK "indexed"
+        VARCHAR_50 name
+        VARCHAR_64 token_hash "unique; SHA-256 of the token"
+        VARCHAR_4 hint "its last characters"
+        DATETIME created_at
+        DATETIME expires_at
+        DATETIME last_used_at "nullable"
+    }
     category ||..o{ expense : "category_id (checked in code)"
     app_user ||--o{ user_identity : "user_id"
     app_user ||--o{ user_session : "user_id"
+    app_user ||--o{ access_token : "user_id"
 ```
 
 The dotted line is a link kept **in code**, not by the database: there are no foreign keys between modules (below).
@@ -105,6 +121,7 @@ The dotted line is a link kept **in code**, not by the database: there are no fo
 | `user_identity` | accounts | how each person signs in: a provider (issuer) and their id there (subject) |
 | `user_session` | accounts | signed-in browsers: the hash of each cookie's key, and the session's lifetimes |
 | `login_attempt` | accounts | sign-ins that have left for the provider and not come back yet |
+| `access_token` | accounts | personal access tokens for MCP clients: the hash of each, never the token |
 | `alembic_version` | (migrations) | which migration the database is at |
 
 ## `category`
@@ -120,12 +137,13 @@ The dotted line is a link kept **in code**, not by the database: there are no fo
 | Column | Type | Notes |
 |---|---|---|
 | `id` | INTEGER, primary key | shown everywhere as `#14` |
+| `owner_id` | INTEGER, not null | whose expense it is (SpendWise's user id, no foreign key: D13). Every read and change filters on it (D190); the index `ix_expense_owner_id_spent_on` (owner_id, spent_on) serves "my expenses this month" |
 | `amount_minor` | INTEGER, not null | **whole paise**: ₹450.50 is `45050`. Never a float |
 | `currency` | VARCHAR(3), not null | ISO 4217 code, default `INR` |
 | `category_id` | INTEGER, not null | index `ix_expense_category_id`. **No foreign key**: the expenses module asks the categories module whether the category exists |
 | `merchant` | VARCHAR(100), not null | trimmed of spaces |
 | `note` | VARCHAR(500), nullable | |
-| `spent_on` | DATE, not null | index `ix_expense_spent_on` ("this month" is the most common query) |
+| `spent_on` | DATE, not null | second column of `ix_expense_owner_id_spent_on` |
 | `payment_method` | VARCHAR(20), not null | `cash`, `upi`, `card`, `netbanking`, `wallet` or `other` |
 | `created_at` | DATETIME with time zone, not null | UTC, set from the app's clock |
 | `version` | INTEGER, not null, default 1 | raised by one on every update: **optimistic concurrency** |
@@ -137,7 +155,7 @@ table, another tab, an MCP client), deleting it would remove something the user 
 statement:
 
 ```sql
-DELETE FROM expense WHERE id = :id AND version = :version_on_the_card
+DELETE FROM expense WHERE id = :id AND owner_id = :owner AND version = :version_on_the_card
 ```
 
 If it deletes nothing, the expense changed (or is gone), and the user is told so. No lock is held while waiting for
@@ -148,7 +166,8 @@ the user, and nothing can slip in between the check and the delete.
 | Column | Type | Notes |
 |---|---|---|
 | `id` | INTEGER, primary key | also the order of messages |
-| `thread_id` | VARCHAR(32), not null | first column of the index `ix_conversation_message_thread_id_turn` (thread_id, turn): every read of a thread filters on both |
+| `owner_id` | INTEGER, not null | whose conversation it is. A thread is (owner_id, thread_id): the same id from two people is two conversations (D190) |
+| `thread_id` | VARCHAR(32), not null | with `owner_id` and `turn`, the index `ix_conversation_message_owner_id_thread_id_turn`: every read of a thread filters on all three |
 | `turn` | INTEGER, not null | 1 for the first user message of a thread, 2 for the next, … Only the last 10 turns are resent to the model |
 | `kind` | VARCHAR(30), not null | `user_text`, `assistant_text`, `tool_call`, `tool_result` or `reasoning` (also inside `content`) |
 | `content` | JSON, not null | the message, in SpendWise's own format, not any provider's |
@@ -172,11 +191,12 @@ provider's private data (Gemini's thought signature, needed to continue after a 
 | Column | Type | Notes |
 |---|---|---|
 | `approval_id` | VARCHAR(64), primary key | the Approve/Cancel card's surface id, what the browser sends back |
+| `owner_id` | INTEGER, not null | index; only the card's owner can answer it |
 | `thread_id` | VARCHAR(32), not null | index; a card can only be answered in its own conversation |
 | `expense` | JSON, not null | the expense exactly as the card showed it, including its `version` |
 | `created_at` | DATETIME with time zone, not null | index; cards expire after 15 minutes |
 
-At most 200 are kept (oldest forgotten first). Taking a card removes it, so each card decides once; if the decision
+At most 200 are kept per person (their oldest forgotten first). Taking a card removes it, so each card decides once; if the decision
 fails midway, the card is put back unchanged (same age).
 
 ## `receipt_file`
@@ -184,6 +204,7 @@ fails midway, the card is put back unchanged (same age).
 | Column | Type | Notes |
 |---|---|---|
 | `id` | INTEGER, primary key | the receipt's id (`POST /receipts` answers it) |
+| `owner_id` | INTEGER, not null | index; who uploaded it: only they can see it, have it read or attach it |
 | `storage_key` | VARCHAR(32), unique, not null | where the bytes are: a random key (a UUID's hex digits) the `FileStore` made, never a name the user sent |
 | `media_type` | VARCHAR(15), not null | `image/jpeg`, `image/png`, `image/webp` or `application/pdf`, read from the file's first bytes |
 | `size_bytes` | INTEGER, not null | at most 5 MB |
@@ -202,7 +223,7 @@ module, which D13 allows (it forbids them between modules).
 
 | Column | Type | Notes |
 |---|---|---|
-| `id` | INTEGER, primary key | SpendWise's own id for the person: what other data will point at (Phase 23), whatever provider they use |
+| `id` | INTEGER, primary key | SpendWise's own id for the person: what every other module's `owner_id` points at (D190), whatever provider they use |
 | `name`, `email`, `email_verified`, `avatar_url` | VARCHAR(200), VARCHAR(320), BOOLEAN, VARCHAR(2048) | the profile as the provider said at the last sign-in; never used to find a person. A picture is kept only as an http(s) URL |
 | `is_active` | BOOLEAN, not null | SpendWise's own off switch: off, the person can't sign in and their sessions stop working |
 | `created_at`, `updated_at` | DATETIME with time zone | UTC, from the app's clock |
@@ -230,7 +251,8 @@ A person can have several identities: that's how a later switch of provider can 
 | `sealed_id_token` | TEXT, nullable | the ID token, encrypted with `SESSION_ENCRYPTION_KEYS` (Fernet); signing out names it to the provider |
 | `renewed_at`, `expires_at` | DATETIME | renewed while used (written at most every 12 h); `expires_at` (indexed) is a day after the last renewal |
 | `absolute_expires_at` | DATETIME | 14 days after sign-in, whatever happens |
-| `revoked_at` | DATETIME, nullable | set by signing out, a new sign-in in the same browser, or the provider's back-channel logout |
+| `revoked_at` | DATETIME, nullable | set by signing out, a new sign-in in the same browser, the provider's back-channel logout, or signing it out from Settings |
+| `user_agent` | VARCHAR(255), nullable | the browser's User-Agent at sign-in, so the person can tell their sessions apart; shown only to them |
 
 A session is live when it isn't revoked, both expiries are in the future, its issuer is today's provider's, and its
 user is active: all checked in one query. Ended sessions are deleted at the next sign-in.
@@ -245,6 +267,17 @@ user is active: all checked in one query. Ended sessions are deleted at the next
 | `created_at` | DATETIME, indexed | attempts over 10 minutes old are forgotten; at most 500 are kept |
 
 Each attempt is read and deleted in one step when the provider sends the browser back, so it completes once.
+
+### `access_token`
+
+| Column | Type | Notes |
+|---|---|---|
+| `user_id` | INTEGER, foreign key to `app_user.id` | indexed; whose token it is |
+| `name` | VARCHAR(50) | what its owner called it |
+| `token_hash` | VARCHAR(64), unique | SHA-256 of the token; the token itself is shown once and never stored (D191) |
+| `hint` | VARCHAR(4) | its last characters, shown in Settings |
+| `created_at`, `expires_at` | DATETIME | it stops working at `expires_at`; revoking deletes the row |
+| `last_used_at` | DATETIME, nullable | written at most once an hour |
 
 ## Rules every table follows
 
@@ -270,6 +303,7 @@ The tables are created and changed only by **Alembic migrations** in `backend/mi
 | `0004_conversation_turn_index` | indexes `conversation_message` on (thread_id, turn) and drops the old thread_id index, which the new one makes redundant |
 | `0005_receipt_files` | adds `receipt_file` (Phase 21); downgrade drops it and leaves the files in `UPLOADS_DIR` |
 | `0006_accounts` | adds `app_user`, `user_identity`, `user_session` and `login_attempt` (Phase 22); downgrade drops them, which signs everyone out and forgets them |
+| `0007_owners` | **deletes the expenses, conversations, delete cards and receipt rows made before sign-in** (they belonged to nobody), then adds `owner_id` to those four tables with their new indexes, `access_token`, and `user_session.user_agent` (Phase 23). The receipt files stay in `UPLOADS_DIR`. Downgrade removes the additions; the deleted rows don't come back |
 
 - `.\run.ps1` runs `alembic upgrade head` before starting; `seed.py` and `mcp_stdio.py` do too. The app itself only
   checks, and refuses to start on an out-of-date database with the command to fix it.

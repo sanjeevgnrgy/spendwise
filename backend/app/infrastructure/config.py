@@ -12,7 +12,7 @@ constants), the migrations and the export script. docs/configuration.md lists ev
 from pathlib import Path
 from urllib.parse import urlsplit
 
-from pydantic import SecretStr, field_validator
+from pydantic import Field, SecretStr, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 from app.infrastructure.identity.options import OidcLoginOption
@@ -27,7 +27,7 @@ PROJECT_DIR = BACKEND_DIR.parent
 API_PREFIX = "/api/v1"
 # The version shown in the OpenAPI document. It describes the API contract, so it changes with it.
 API_VERSION = "1.0.0"
-# Where MCP clients reach the MCP server over HTTP, when it's enabled (see MCP_TOKEN).
+# Where MCP clients reach the MCP server over HTTP (each request with a personal access token, D191).
 MCP_PATH = "/mcp"
 
 
@@ -46,13 +46,11 @@ class Settings(BaseSettings):
     # SecretStr keeps the key out of logs and error messages if settings get printed.
     gemini_api_key: SecretStr | None = None
     gemini_model: str | None = None
-    # Where the assistant's expense tools run. Unset (the default): this app's own MCP server, called
-    # in-process, with no network hop. Set it only when the MCP server runs as a separate service.
-    mcp_url: str | None = None
-    # A shared secret for MCP over HTTP. Unset: /mcp/ isn't served over HTTP at all (stdio still works).
-    # Set: /mcp/ answers only requests with "Authorization: Bearer <token>", and the assistant sends it
-    # to MCP_URL. Anyone who can reach an open MCP endpoint could change or delete expenses.
-    mcp_token: SecretStr | None = None
+    # How many requests each person may make per minute, and per day, to the routes that call the language model
+    # (POST /agent, /chat, /parse and receipt reading): each one spends Gemini quota (D194). Counted in memory, per
+    # server process.
+    model_requests_per_minute: int = Field(default=10, ge=1)
+    model_requests_per_day: int = Field(default=300, ge=1)
     # A local SQLite file by default; point DATABASE_URL at Postgres later without code changes.
     database_url: str = f"sqlite:///{(BACKEND_DIR / 'spendwise.db').as_posix()}"
     # The folder uploaded files (receipts) are kept in, by random names. Git-ignored: it's your data, like the

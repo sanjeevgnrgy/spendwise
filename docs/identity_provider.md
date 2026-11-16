@@ -15,7 +15,7 @@ RP-Initiated Logout and Back-Channel Logout. The provider's name appears nowhere
 | shows the login page, and the Google / GitHub (later Apple) buttons on it | starts the sign-in, checks the answer, keeps the session (one HttpOnly cookie, D186) |
 | keeps the person's account, their linked social logins, MFA | keeps its own user (its own id), found by the provider's issuer and subject (D187) |
 | decides who may sign in at all (grants) | can also require a role (`OIDC_REQUIRED_ROLE`), and can switch a user off (`app_user.is_active`) |
-| branding of its pages | the web app's own sign-in page (Part 3), which sends people to the provider |
+| branding of its pages | the web app's own sign-in page (`/sign-in`), which sends people to the provider |
 
 What the provider must offer:
 
@@ -113,5 +113,5 @@ all would need one new adapter for the `IdentityProvider` port (`core/identity.p
    - **a time-limited email-match mode:** during the switch only, a first sign-in from the new issuer joins the user
      whose old identity has the same *verified* email. Outside that window SpendWise never matches people by email.
 
-Until Phase 23 makes data per-user, everyone shares one set of expenses, so a new user id loses nothing. After Phase
+Since Phase 23 a person's data points at their user id (`owner_id`), so a new user id starts with no data. After Phase
 23, link identities before switching.

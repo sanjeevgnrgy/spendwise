@@ -12,6 +12,7 @@ So those stay exactly as they are, and notes about the tool are `#` comments, no
 from mcp.server.mcpserver import MCPServer
 
 from app.core.cqrs import MessageBus
+from app.modules.mcp.caller import current_caller
 from app.modules.mcp.contracts import EXPENSE_ID_ARGUMENT, ExpenseFound, ToolName
 from app.modules.mcp.tools.support import READS_ONLY, ExpenseIdArg, require_arguments, tool_errors
 from app.modules.mcp.views import ExpenseViews
@@ -31,6 +32,7 @@ def register_get_expense(server: MCPServer, bus: MessageBus, views: ExpenseViews
     )
     def get_expense(expense_id: ExpenseIdArg) -> ExpenseFound:
         with tool_errors():
-            return ExpenseFound(expense=views.find(expense_id))
+            # Another person's expense is "not found" (caller.py, D191).
+            return ExpenseFound(expense=views.find(current_caller(), expense_id))
 
     require_arguments(get_expense, EXPENSE_ID_ARGUMENT)

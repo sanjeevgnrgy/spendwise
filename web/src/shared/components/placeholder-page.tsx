@@ -1,5 +1,5 @@
 // A shared component: the stand-in for a page that isn't built yet, and for an address with no page. Part of
-// shared/. Used by app/placeholder-pages.tsx (Budgets, Settings, and "Page not found").
+// shared/. Used by app/_views/placeholder-pages.tsx (Budgets, Settings, and "Page not found").
 
 import { useTranslation } from "react-i18next"
 

@@ -1,4 +1,4 @@
-"""The accounts module's tables: people, how they sign in, their sessions, and sign-ins under way.
+"""The accounts module's tables: people, how they sign in, their sessions, sign-ins under way, and access tokens.
 
 Private to this module: only its own handlers (the slices in commands/ and queries/, through repository.py) read or
 write them. The foreign keys stay inside the module (D13 forbids them only between modules). Created and changed by
@@ -18,8 +18,11 @@ from app.modules.accounts.values import (
     MAX_NAME_LENGTH,
     MAX_STATE_LENGTH,
     MAX_SUBJECT_LENGTH,
+    MAX_TOKEN_NAME_LENGTH,
     MAX_URL_LENGTH,
+    MAX_USER_AGENT_LENGTH,
     MAX_VERIFIER_LENGTH,
+    TOKEN_HINT_LENGTH,
 )
 
 
@@ -84,6 +87,9 @@ class UserSession(SQLModel, table=True):
     absolute_expires_at: datetime = Field(sa_type=DateTime(timezone=True))
     # Set when it's signed out or revoked; kept until it would have expired anyway.
     revoked_at: datetime | None = Field(default=None, sa_type=DateTime(timezone=True))
+    # The browser's User-Agent at sign-in (cut to MAX_USER_AGENT_LENGTH), so the person can tell their sessions apart
+    # in Settings. User data: shown only to them, never logged.
+    user_agent: str | None = Field(default=None, max_length=MAX_USER_AGENT_LENGTH)
 
 
 class LoginAttempt(SQLModel, table=True):
@@ -102,5 +108,25 @@ class LoginAttempt(SQLModel, table=True):
     created_at: datetime = Field(sa_type=DateTime(timezone=True), index=True)
 
 
+class AccessToken(SQLModel, table=True):
+    """A personal access token: an MCP client acts for its owner with it (D191). Private to accounts."""
+
+    __tablename__ = "access_token"
+
+    id: int | None = Field(default=None, primary_key=True)
+    user_id: int = Field(foreign_key="app_user.id", index=True)
+    # What its owner called it ("Claude Desktop"), to tell tokens apart.
+    name: str = Field(max_length=MAX_TOKEN_NAME_LENGTH)
+    # SHA-256 of the token: the token itself is shown once, when it's made, and never stored.
+    token_hash: str = Field(max_length=KEY_HASH_LENGTH, unique=True)
+    # Its last few characters, shown in the list so the person can match it to the one they copied.
+    hint: str = Field(max_length=TOKEN_HINT_LENGTH)
+    created_at: datetime = Field(sa_type=DateTime(timezone=True))
+    # It stops working at this moment (every token expires); revoking deletes the row.
+    expires_at: datetime = Field(sa_type=DateTime(timezone=True))
+    # When an MCP request last used it (written at most once per TOKEN_TOUCH_AFTER); None if never.
+    last_used_at: datetime | None = Field(default=None, sa_type=DateTime(timezone=True))
+
+
 # Every table this module owns, for the composition root (bootstrap.metadata(), used by the migrations).
-TABLES = (AppUser, UserIdentity, UserSession, LoginAttempt)
+TABLES = (AppUser, UserIdentity, UserSession, LoginAttempt, AccessToken)

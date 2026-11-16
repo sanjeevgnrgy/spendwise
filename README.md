@@ -11,7 +11,7 @@
   <img src="https://img.shields.io/badge/A2UI-1.0-4285F4" alt="A2UI" />
   <img src="https://img.shields.io/badge/React-19.3-61DAFB?logo=react&logoColor=black" alt="React" />
   <img src="https://img.shields.io/badge/TypeScript-7.0-3178C6?logo=typescript&logoColor=white" alt="TypeScript" />
-  <img src="https://img.shields.io/badge/Vite-8.3-646CFF?logo=vite&logoColor=white" alt="Vite" />
+  <img src="https://img.shields.io/badge/Next.js-16.4-000000?logo=nextdotjs&logoColor=white" alt="Next.js" />
   <img src="https://img.shields.io/badge/TanStack_Query-5.107-FF4154?logo=reactquery&logoColor=white" alt="TanStack Query" />
   <img src="https://img.shields.io/badge/Tailwind_CSS-4.3_+_shadcn%2Fui-06B6D4?logo=tailwindcss&logoColor=white" alt="Tailwind CSS and shadcn/ui" />
 </div>
@@ -194,14 +194,14 @@ and MCP clients: [docs/getting_started.md](docs/getting_started.md).
 
 | Service | Local URL | Purpose |
 |---|---|---|
-| **Web app (React)** | `http://localhost:5173` | Dashboard, Expenses page, the Assistant panel; it reaches the API at its own `/api/v1` (the dev server forwards it) |
+| **Web app (Next.js)** | `http://localhost:5173` | Dashboard, Expenses page, the Assistant panel; it reaches the API at its own `/api/v1` (the dev server forwards it) |
 | **Backend API (FastAPI)** | `http://127.0.0.1:8000/api/v1` | REST API (expenses, categories, summaries, the assistant), for tools and `curl`: needs a session cookie and `X-CSRF: 1` |
-| **Sign in** | `http://localhost:5173/api/v1/auth/login` | The identity provider's login page; set up with [docs/identity_provider.md](./docs/identity_provider.md) |
+| **Sign in** | `http://localhost:5173/sign-in` | The sign-in page: a button per way of signing in, each opening the identity provider's login page; set up with [docs/identity_provider.md](./docs/identity_provider.md) |
 | **API docs (Swagger UI)** | `http://127.0.0.1:8000/docs` | Try every route in the browser; ReDoc at `/redoc` |
 | **OpenAPI document** | `http://127.0.0.1:8000/openapi.json` | The contract the web app's types are generated from |
 | **Health check** | `http://127.0.0.1:8000/health` | `{"status": "ok"}` when the server and its database are up |
 | **AG-UI stream** | `POST http://127.0.0.1:8000/api/v1/agent` | The assistant's streamed runs (Server-Sent Events) |
-| **MCP over HTTP** | `http://127.0.0.1:8000/mcp/` | Only when `MCP_TOKEN` is set; send `Authorization: Bearer <token>` |
+| **MCP over HTTP** | `http://127.0.0.1:8000/mcp/` | Send `Authorization: Bearer <token>`, a personal access token made on the Settings page; acts for its owner |
 | **MCP over stdio** | `.\.venv\Scripts\python.exe backend\mcp_stdio.py` | For MCP Inspector and Claude Desktop; no web server needed |
 
 ---

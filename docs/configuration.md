@@ -9,7 +9,7 @@ All backend settings are one Pydantic `Settings` class in `backend/app/infrastru
 
 - read from the **environment**, then from **`.env` in the project folder**; a real environment variable wins;
 - names are case-insensitive (`GEMINI_MODEL` → `settings.gemini_model`);
-- an empty value (`MCP_URL=`) counts as **not set**, so the default applies;
+- an empty value (`GEMINI_MODEL=`) counts as **not set**, so the default applies;
 - unknown names in `.env` are ignored (it may hold settings for other tools);
 - secrets are `SecretStr`, so printing the settings never shows the key;
 - read **once at startup**: after changing `.env`, restart the server.
@@ -21,8 +21,7 @@ All backend settings are one Pydantic `Settings` class in `backend/app/infrastru
 | `GEMINI_API_KEY` | not set | The assistant (`/chat`, `/agent`) and `/parse`. Without it, those routes fail with a message saying the key is missing; everything else works. Get one at https://aistudio.google.com/apikey |
 | `GEMINI_MODEL` | not set | Which Gemini model answers, e.g. `gemini-3.5-flash-lite`. Model ids and free-tier limits: [gemini.md](gemini.md) |
 | `DATABASE_URL` | `sqlite:///<project>/backend/spendwise.db` | Any SQLAlchemy URL. Point it at a copy to experiment safely |
-| `MCP_TOKEN` | not set | Turns on MCP over HTTP at `/mcp/`, guarded by this shared secret (`Authorization: Bearer <token>`). Not set: no `/mcp/` over HTTP. Make one: `python -c "import secrets; print(secrets.token_urlsafe(32))"` |
-| `MCP_URL` | not set | Only if the expense tools run as a **separate** MCP server: its URL (keep the trailing slash). Not set: the assistant calls this app's own MCP server in-process. When set, `MCP_TOKEN` is sent to it |
+| `MODEL_REQUESTS_PER_MINUTE`, `MODEL_REQUESTS_PER_DAY` | `10`, `300` | How many requests to the routes that call the model (`/agent`, `/chat`, `/parse`, reading a receipt) each person may make per minute and per day (UTC); one more is a 429 (D194). Counted in memory, per server process |
 | `UPLOADS_DIR` | `<project>/backend/uploads` | The folder uploaded receipts are kept in, by random names (created on the first upload; git-ignored). It goes with the database: a copy of one needs a copy of the other |
 
 ### Sign-in
@@ -38,7 +37,7 @@ provider, and the values each one needs: [identity_provider.md](identity_provide
 | `OIDC_SCOPES` | `openid profile email` | Scopes every sign-in asks for, space-separated |
 | `OIDC_LOGIN_OPTIONS` | `[]` | The sign-in page's buttons, a JSON list of `{"key", "label", "extra_scopes", "extra_params"}`: what each adds to the request so the provider skips to that way of signing in. A parameter the flow sets itself (`state`, `redirect_uri`...) is refused at startup. Empty: one button, the provider's own page |
 | `OIDC_ROLE_CLAIM`, `OIDC_REQUIRED_ROLE` | not set | Where the tokens list roles (a claim's name or a dotted path) and the role a person must have. Unset: anyone the provider lets sign in may |
-| `PUBLIC_URL` | `http://localhost:5173` | The origin people open the web app at (no path). The redirect URI is `<PUBLIC_URL>/api/v1/auth/callback` and signing out ends at `<PUBLIC_URL>/sign-in`: register both at the provider exactly |
+| `PUBLIC_URL` | `http://localhost:5173` | The origin people open the web app at (no path). The redirect URI is `<PUBLIC_URL>/api/v1/auth/callback` and signing out ends at `<PUBLIC_URL>/sign-in`: register both at the provider exactly. When it's `https://`, the backend's answers also carry HSTS (D193) |
 | `SESSION_ENCRYPTION_KEYS` | `[]` | Fernet keys, a JSON list, newest first, that seal the ID token each session keeps. Rotate by putting a new one first and removing the old one 14 days later. Make one: `python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"` |
 | `COOKIE_SECURE` | `true` | The cookies' Secure flag and `__Host-` prefix. Browsers accept Secure cookies on `http://localhost`; turn it off only for one that doesn't, never in production |
 
@@ -47,7 +46,6 @@ Example `.env`:
 ```ini
 GEMINI_API_KEY=AIza...your key...
 GEMINI_MODEL=gemini-3.5-flash-lite
-# MCP_TOKEN=change-me-to-a-long-random-string
 OIDC_ISSUER=https://spendwise-abc.zitadel.cloud
 OIDC_CLIENT_ID=...
 OIDC_CLIENT_SECRET=...
@@ -84,24 +82,27 @@ These are deliberate design values, each defined once, next to the code it gover
 
 ## Web settings (`web/.env`)
 
-The browser code reads no settings: it calls the API on its own origin (`/api/v1/...`, D184). The dev server has one:
+The browser code reads no settings: it calls the API on its own origin (`/api/v1/...`, D184). The Next.js server
+has two, read in Node and never shipped to the browser (D188):
 
 | Setting | Default | Used for |
 |---|---|---|
-| `API_PROXY_TARGET` | `http://127.0.0.1:8000` | Where the dev server (`npm run dev`, also `npm run preview`) forwards `/api/v1/...`: the backend. Read by `vite.config.ts`, in Node; never shipped to the browser |
+| `API_PROXY_TARGET` | `http://127.0.0.1:8000` | Where Next.js forwards `/api/v1/...`: the backend. Read by `next.config.ts` when `next dev` starts, and **compiled into the build** by `next build`: for production, set it before building (`next start` doesn't read it) |
+| `PUBLIC_URL` | `http://localhost:5173` | The address people open the app at: link previews, the sitemap and robots.txt are built on it (`app/_seo/seo.ts`). The same value as the backend's `PUBLIC_URL`; robots.txt and the sitemap are generated at build time, so set it before building too. When it's `https://`, the pages also get HSTS and `upgrade-insecure-requests` (D193); set it before `next build` |
 
-`vite.config.ts` reads `web/.env` when the dev server starts (a real environment variable wins): restart
-`npm run dev` after a change. Anything in a `VITE_` variable would be baked into the JavaScript every visitor
-downloads, so none is used, and a secret never goes in one.
+Next.js reads `web/.env` (a real environment variable wins). Restart `npm run dev` after a change, and rebuild
+for production. Anything in a `NEXT_PUBLIC_` variable would be baked into the JavaScript every visitor downloads, so
+none is used, and a secret never goes in one.
 
 App-wide constants, each defined once:
 
 | Value | Where |
 |---|---|
-| the app's name | `src/shared/config/app.ts` (also put into `index.html`'s `<title>` at build time) |
+| the app's name and one-line description | `src/shared/config/app.ts` (also the pages' metadata, `app/_seo/seo.ts`) |
 | page addresses | `src/shared/config/routes.ts` |
 | the languages (English, Hindi), each one's locale for numbers and dates, writing direction and date picker locale, the default (and fallback) language, where the choice is saved (`spendwise-language`) | `src/shared/i18n/languages.ts` |
-| theme storage key, the dark class, the boot script | `src/shared/theme/theme-constants.ts` (the boot script is injected into `index.html` by `vite.config.ts`) |
+| theme storage key, the dark class, the boot script | `src/shared/theme/theme-constants.ts` (the root layout, `app/layout.tsx`, puts the boot script into `<head>`) |
+| the proxy's timeout (`PROXY_TIMEOUT_MS = 180 s`), no compression | `next.config.ts` (D188) |
 | what kinds of data a change touches | `src/shared/config/data-scopes.ts` |
 
 ## The generated contract
@@ -122,4 +123,17 @@ regeneration shows up as a TypeScript error, or a value that doesn't match.
 | | |
 |---|---|
 | `.\run.ps1 --port 8001` | extra arguments go to uvicorn (then set `API_PROXY_TARGET=http://127.0.0.1:8001` in `web/.env`) |
-| `npm run dev -- --port 5175` | the web dev server on another port; nothing else to change (the API is reached through it) |
+| `npx next dev --port 5175` | the web dev server on another port (then set `PUBLIC_URL` on both sides, since sign-in sends people back to it) |
+| `npm run build`, then `npm run start` | the production build, served on :5173 (`API_PROXY_TARGET` and `PUBLIC_URL` are taken when building) |
+
+## MCP clients
+
+MCP over HTTP (`/mcp/`) needs no setting: every request carries a **personal access token**, made on the Settings
+page, and acts for its owner (D191). The stdio server (`backend\mcp_stdio.py`) reads its token from the environment
+the MCP client starts it with, not from `.env`:
+
+| Variable | Where | Used for |
+|---|---|---|
+| `SPENDWISE_TOKEN` | the MCP client's config for the stdio server (e.g. Claude Desktop's `env`) | the person the stdio server acts for; checked on every tool call, so a revoked or expired token stops it at once |
+
+`MCP_TOKEN` and `MCP_URL` are gone (Phase 23): a line left in `.env` is ignored.

@@ -11,6 +11,7 @@ from mcp.server.mcpserver import MCPServer
 
 from app.core.cqrs import MessageBus
 from app.modules import categories, expenses
+from app.modules.mcp.caller import current_caller
 from app.modules.mcp.contracts import ResourceUri
 from app.modules.mcp.views import ExpenseViews, to_view
 
@@ -27,16 +28,19 @@ def register_resources(server: MCPServer, bus: MessageBus, views: ExpenseViews) 
     not one query per row.
     """
 
-    # The categories as the categories module returns them, so a model can use their exact names.
+    # The categories as the categories module returns them, so a model can use their exact names. They're shared by
+    # everyone (no caller needed).
     @server.resource(ResourceUri.CATEGORIES, mime_type=JSON_MIME_TYPE)
     def categories_resource() -> str:
         """The expense categories that exist (id, name, icon)."""
         return json.dumps([c.model_dump() for c in bus.ask(categories.ListCategories())])
 
-    # The newest RECENT_ROWS expenses, shown like the tools show them (ExpenseView).
+    # The caller's newest RECENT_ROWS expenses, shown like the tools show them (ExpenseView). Without a caller (or
+    # with a token that stopped working) the read fails: nobody's expenses are shown (caller.py, D191).
     @server.resource(ResourceUri.RECENT, mime_type=JSON_MIME_TYPE)
     def recent_expenses_resource() -> str:
         """The most recent expenses, newest first."""
+        newest = expenses.ExpenseFilters(limit=RECENT_ROWS)
+        rows = bus.ask(expenses.ListExpenses(owner_id=current_caller(), filters=newest)).items
         names = views.category_names()
-        rows = bus.ask(expenses.ListExpenses(limit=RECENT_ROWS)).items
         return json.dumps([to_view(e, names).model_dump(mode="json") for e in rows])

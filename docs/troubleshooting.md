@@ -52,23 +52,31 @@ the project folder (the repo root, where `run.ps1` is) unless noted.
 
 ## Signing in (Phase 22)
 
-### Every API call answers 401 "Sign in to continue."
-- **Cause:** since Phase 22 every route but `/health` and the sign-in routes needs a session (D186). Without the
-  sign-in settings nobody can sign in at all: the server log says "Sign-in isn't configured, so nobody can sign in" at
-  startup. Until Part 3, the web app has no sign-in page either, so it shows this error everywhere.
+### Every page goes to the sign-in page, and "Sign in" comes back with "Sign-in isn't available right now."
+- **Cause:** since Phase 22 every route but `/health` and the sign-in routes needs a session (D186), so the web app
+  sends you to sign in. Without the sign-in settings nobody can sign in at all: the server log says "Sign-in isn't
+  configured, so nobody can sign in" at startup, and the page offers a single "Sign in" that fails with `unavailable`.
 - **Fix:** set up a provider ([identity_provider.md](identity_provider.md)) and the `OIDC_*` settings and
-  `SESSION_ENCRYPTION_KEYS` in `.env`, restart the backend, then sign in. Until the web app's sign-in page exists
-  (Part 3), open `http://localhost:5173/api/v1/auth/login` in the browser: it ends back on the web app, signed in.
+  `SESSION_ENCRYPTION_KEYS` in `.env`, restart the backend, then sign in on the sign-in page.
+
+### The page says "Couldn't check whether you're signed in"
+- **Cause:** the web app couldn't ask the backend who is signed in (`GET /api/v1/auth/user` failed without an
+  answer): the backend isn't running, or it answered 5xx. It doesn't send you to sign in, because your session may
+  well be fine.
+- **Fix:** start the backend (`.\run.ps1`) and press Try again. If it keeps failing, the backend's terminal has the
+  error.
 
 ### `curl`, Swagger UI or a script gets 403 "This request didn't come from the app, so it was refused."
 - **Cause:** every API call needs the header `X-CSRF: 1` (D186). Browsers can't add it to a request another site
   starts, which is the point; `curl` and Swagger UI's "Try it out" don't send it either.
-- **Fix:** send `-H "X-CSRF: 1"` and the session cookie ([api_endpoints.md](api_endpoints.md#calling-the-api-from-a-script)).
+- **Fix:** send `-H "X-CSRF: 1"` and the session cookie
+  ([api_endpoints.md](api_endpoints.md#calling-the-api-from-a-script)).
   In the web app, call the API through `api`, or spread `apiHeaders()` into a `fetch`. Swagger UI can show the routes
   but not call protected ones.
 
 ### Signing in ends on `/sign-in?error=...`
-The server log has the details (at WARNING); the page only gets the code.
+The server log has the details (at WARNING); the page only gets the code, and shows its text ("Sign-in was
+cancelled.", "Sign-in isn't available right now.").
 
 | `error` | Usual causes |
 |---|---|
@@ -196,10 +204,13 @@ is in the backend terminal (D180).
 
 ### Red toast "Can't reach SpendWise right now"
 - **Cause:** the backend isn't running, or runs on another port. The web app calls the API on its own address and
-  the dev server forwards it (D184); when the backend can't be reached, the dev server answers 502 and its terminal
-  shows `http proxy error: /api/v1/... ECONNREFUSED`. The toast doesn't name an address (D180).
+  Next.js forwards it (D184, D188); when the backend can't be reached, Next.js answers 500 in plain text and its
+  terminal shows `Failed to proxy http://127.0.0.1:8000/api/v1/... ECONNREFUSED`. The toast doesn't name an address
+  (D180).
 - **Fix:** start it with `.\run.ps1`. On another port, set `API_PROXY_TARGET` in `web/.env` (for example
   `http://127.0.0.1:8001`) and restart `npm run dev`.
+- **Only with `npm run start` (the production build):** the rewrite's target is compiled into the build, so
+  `API_PROXY_TARGET` set afterwards changes nothing. Set it, then `npm run build` again.
 - **Pages load forever instead:** the backend's port is open but nothing answers. See "The server won't start" below.
 
 ### A page or the app says "Something went wrong. Try again; if it keeps happening, reload the page."
@@ -256,8 +267,8 @@ is in the backend terminal (D180).
 
 ### Assistant panel: the assistant added an expense but the page didn't update
 - **Cause:** the pages reload when the agent sends a `STATE_SNAPSHOT` (the assistant then reports "data changed", and
-  `app/providers.tsx` invalidates the expenses and Dashboard queries). That happens only after a tool that may change
-  data **succeeded** (a ✓ chip such as "Expense saved"). A red ✗ chip means the backend refused it.
+  `app/_shell/providers.tsx` invalidates the expenses and Dashboard queries). That happens only after a tool that
+  may change data **succeeded** (a ✓ chip such as "Expense saved"). A red ✗ chip means the backend refused it.
 - **Check:** in the raw stream (`curl.exe -N`, see [phases/phase-15-tool-progress.md](phases/phase-15-tool-progress.md)),
   a `STATE_SNAPSHOT` should follow that tool's `TOOL_CALL_RESULT`. If it doesn't, the tool may be marked
   `read_only_hint=True`: check which annotations (`READS_ONLY`, `ADDS_DATA`, `CHANGES_DATA`, from
@@ -358,8 +369,27 @@ is in the backend terminal (D180).
 - **Fix:** check the expense dates (the seed script dates its samples relative to the day it ran).
 
 ### `npm run dev`: "Cannot find module" or a blank page after pulling changes
-- **Cause:** `package.json` changed but `node_modules` wasn't updated.
+- **Cause:** `package.json` changed but `node_modules` wasn't updated (after the move to Next.js, D188, `vite` is gone
+  and `next` is new).
 - **Fix:** run `npm install` in `web/`, then `npm run dev` again.
+
+### `tsc -b` or `next build` fails with "Type '"ui.close"' is not assignable to ..." (every translated text)
+- **Cause:** `"strict"` is off in `web/tsconfig.json`. i18next's typed keys need strict mode. TypeScript 6+ is strict
+  by default, but Next.js writes `"strict": false` into `tsconfig.json` on its first run when the option is missing.
+  (`esModuleInterop` isn't the cause: TypeScript 7 always has it on, and refuses `false`.)
+- **Fix:** keep `"strict": true` in `web/tsconfig.json`; Next.js leaves an explicit value alone.
+
+### An address that doesn't exist answers 200 instead of 404
+- **Cause:** a `notFound()` raised under `(client)/` only reaches the browser: `ClientRoot` draws nothing on the
+  server, so Next.js never sees it while the status can still change (its docs: the status stays 200 once streaming
+  has started).
+- **Fix:** let unknown addresses fall through to the root `app/not-found.tsx` (no catch-all route). Next.js decides an
+  address matches no route before rendering, so that is always a 404 with `noindex`.
+
+### `next dev` created `web/AGENTS.md`
+- **Cause:** Next.js 16 writes a short file for AI agents, pointing them at its bundled docs.
+- **Fix:** `agentRules: false` in `next.config.ts` turns it off; the repository's rules live in the root `AGENTS.md`,
+  which carries the same pointer. Delete the file if an older checkout made one.
 
 ### A shadcn component looks wrong, or I want to change it
 - shadcn/ui components are source files in `web/src/shared/ui/` (`components.json` points shadcn there). Edit them like
@@ -405,11 +435,11 @@ is in the backend terminal (D180).
 - **Fix:** press **Try again**; it loads the code afresh (`lazyWithRetry`). After a rebuild, reloading the page also
   works.
 
-### An MCP client can't connect to `http://127.0.0.1:8000/mcp/`: 404, 401, 421 or 403
-- **404:** MCP over HTTP is off until `MCP_TOKEN` is set in `.env` (D150). Set it, restart, and use
-  `http://127.0.0.1:8000/mcp/` (with the trailing slash; `/mcp` answers with a redirect some clients don't follow).
-- **401:** the client must send `Authorization: Bearer <MCP_TOKEN>` (in MCP Inspector, as a custom header). Stdio
-  (`backend\mcp_stdio.py`) needs no token.
+### An MCP client can't connect to `http://127.0.0.1:8000/mcp/`: 401, 421 or 403
+- **401:** the client must send `Authorization: Bearer <token>`, a personal access token made on the Settings page
+  (D191; in MCP Inspector, as a custom header). A token that was revoked, has expired, or whose owner is switched off
+  gets 401 too. `MCP_TOKEN` is gone: a line in `.env` does nothing. Use `http://127.0.0.1:8000/mcp/` (with the
+  trailing slash; `/mcp` answers with a redirect some clients don't follow).
 - **421 "Invalid Host header" or 403:** the SDK only accepts local Host and Origin headers; connect to 127.0.0.1 or
   localhost, not another hostname.
 
@@ -419,10 +449,39 @@ is in the backend terminal (D180).
   unknown category, come with a clear message instead.
 
 ### `/chat` replies "Sorry, I can't reach the expense tools right now"
-- **Cause:** by default the tools run in-process, so this means `MCP_URL` is set in `.env` and that server didn't answer
-  (wrong URL or port, server down, or a wrong `MCP_TOKEN`: it answers 401).
-- **Fix:** remove `MCP_URL` from `.env` (and restart) unless the tools really run as a separate service. The terminal
-  logs where it tried.
+- **Cause:** the tools run in-process, so a call failed or took over 15 seconds (often a locked SQLite database while
+  another process writes). `MCP_URL` no longer exists (Phase 23).
+- **Fix:** the server's terminal logs why ("expense tools unreachable"). Try again; if it repeats, look for another
+  process holding the database (the stdio server, a script).
+
+### Every MCP tool call says "This MCP connection isn't signed in"
+- **Cause:** the stdio server has no working token: `SPENDWISE_TOKEN` is missing from the environment the MCP client
+  starts it with, or the token was revoked or has expired. Its log says so at start ("SPENDWISE_TOKEN is missing or
+  doesn't work").
+- **Fix:** make a token on the Settings page and put it in the client's config for the server (Claude Desktop:
+  `"env": {"SPENDWISE_TOKEN": "spw_..."}`), then restart the client.
+
+### The assistant says "You're sending requests to the assistant too quickly" (429)
+- **Cause:** each person may make `MODEL_REQUESTS_PER_MINUTE` requests a minute (10 by default) and
+  `MODEL_REQUESTS_PER_DAY` a day (300) to the routes that call the model (D194). The answer's `Retry-After` says how
+  many seconds to wait; the day's limit resets at midnight UTC.
+- **Fix:** wait, or raise the limits in `.env` and restart. A script that loops over `/parse` hits it first.
+
+### A page reloaded by itself, or went to the sign-in page, while I wasn't doing anything
+- **Cause:** someone signed in or out in another tab of the same browser (D192). A page that has shown one person's
+  data never goes on showing it to another: it reloads for whoever is signed in now, or leaves for the sign-in page.
+- **Fix:** nothing to fix. To use two accounts at once, use two browser profiles (or a private window): they don't
+  share cookies.
+
+### My expenses and conversations are gone after updating
+- **Cause:** migration 0007 (Phase 23) deletes the rows made before sign-in existed: they belonged to nobody, so they
+  could never be shown again (the owner's choice, D190). Categories are kept.
+- **Fix:** if you kept a copy of `backend\spendwise.db` from before, the old rows are still in it. To start with sample
+  data instead, sign in once, then run `.\.venv\Scripts\python.exe backend\seed.py --sample-for you@example.com`.
+
+### `seed.py --sample-for` says "No one has signed in as ... yet"
+- **Cause:** expenses belong to a person, and SpendWise knows people only once they've signed in.
+- **Fix:** sign in through the web app with that email first, then run it again.
 
 ### `/chat` doesn't see a tool I just added to the MCP server
 - **Cause:** the assistant lists the tools once, on the first chat, and caches them.

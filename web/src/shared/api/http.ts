@@ -1,7 +1,7 @@
 // The one HTTP client for the SpendWise API. Its types are generated from the backend's OpenAPI
 // document (schema.gen.ts), so a request or response that doesn't match the API is a compile error.
 // Part of shared/ (it knows no feature). Every feature's api.ts calls the backend through `api` and `unwrap`;
-// ApiError is also read by app/query-client.ts (its retry rule) and the assistant's stream.
+// ApiError is also read by app/_shell/query-client.ts (its retry rule) and the assistant's stream.
 
 import createClient from "openapi-fetch"
 
@@ -42,9 +42,11 @@ api.use({
 /** One of the client's own error messages: a key of the common "errors" texts. */
 type ClientMessage = keyof CommonTexts["errors"]
 
-// What a proxy in front of the backend answers when it can't reach it (Vite's dev server sends 502). The backend's
-// own 502s (a service it depends on failed) are always problems, so they're never mistaken for these.
-const GATEWAY_FAILURES: ReadonlySet<number> = new Set([502, 503, 504])
+// The lowest server-error status. A 5xx without a problem body comes from whatever is in front of the backend, which
+// couldn't reach it: Next.js answers 500 "Internal Server Error" in plain text, a reverse proxy 502, 503 or 504. The
+// backend's own 5xx answers (a bug, a service it depends on failing) are always problems, so they're never mistaken
+// for these (D188).
+const SERVER_ERROR = 500
 
 /**
  * A failed API call. `message` is for people (the backend's own `detail`, which the server writes for people, or one
@@ -78,23 +80,23 @@ export class ApiError extends UserFacingError {
 
   /**
    * An ApiError from an error answer's body. Every backend error is an RFC 9457 problem:
-   * {"type", "title", "status", "detail", ...}; its `detail` becomes the message. A gateway failure that isn't one
-   * came from the proxy in front of the backend, so it's unreachableError(); any other body gives a plain "Request
-   * failed (status)".
+   * {"type", "title", "status", "detail", ...}; its `detail` becomes the message. A server error that isn't one came
+   * from the server in front of the backend, which couldn't reach it, so it's unreachableError(); any other body gives
+   * a plain "Request failed (status)".
    */
   static fromProblem(body: unknown, status: number): ApiError {
     if (isObject(body) && typeof body.detail === "string") {
       return new ApiError(body.detail, status, typeof body.type === "string" ? body.type : undefined)
     }
-    if (GATEWAY_FAILURES.has(status)) return unreachableError()
+    if (status >= SERVER_ERROR) return unreachableError()
     return ApiError.ofText("requestFailed", status, { status })
   }
 }
 
 /**
- * The error when no answer came from the backend: the page's server can't be reached, or the proxy in front of the
- * backend answered for it (502/503/504). Its status is 0, "no answer", so queries still retry it. It doesn't name an
- * address (the browser console's failed request, or the dev server's terminal, does, for developers).
+ * The error when no answer came from the backend: the page's server can't be reached, or the server in front of the
+ * backend answered for it (a 5xx without a problem). Its status is 0, "no answer", so queries still retry it. It
+ * doesn't name an address (the browser console's failed request, or the web server's terminal, does, for developers).
  */
 export function unreachableError(): ApiError {
   return ApiError.ofText("unreachable", 0, { app: APP_NAME })

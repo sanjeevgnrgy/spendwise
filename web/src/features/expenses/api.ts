@@ -15,7 +15,7 @@ export type Expense = Schemas["ExpenseRead"]
 /** GET /expenses's answer: up to `limit` expenses, newest first (`items`), and how many match in all (`total`). */
 export type ExpenseList = Schemas["ExpenseList"]
 /** The body of POST /expenses. The backend checks the real rules (amount > 0, a known category...). */
-export type NewExpense = Schemas["CreateExpense"]
+export type NewExpense = Schemas["NewExpense"]
 /** The body of PATCH /expenses/{id}: only the fields to change. Only `note` may be null, which clears it. */
 export type ExpenseChanges = Schemas["ExpenseChanges"]
 /** How an expense was paid: "cash", "upi", "card"... (the backend's list, generated). */

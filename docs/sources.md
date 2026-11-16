@@ -605,6 +605,9 @@ upload route, `domain/file_types.py`), `assistant/api/agui_request.py` (the rece
 
 ## 26. Vite 8.3.8's proxy, openapi-fetch 0.17.0's base URL, simple requests (Phase 22)
 
+> **Later:** the web app moved to Next.js (D188); the Vite facts below describe Part 1 as it was built. Next's
+> proxy: entry 28.
+
 Checked on 2026-11-14.
 
 **Package:** `web/node_modules/vite/dist/node/chunks/node.js` (8.3.8)
@@ -700,6 +703,103 @@ first key and decrypts with any of them, which is how keys rotate; a token that'
 
 **Used in:** `backend/app/infrastructure/identity/` (the adapter), `backend/app/modules/accounts/` (sessions, login
 attempts, return paths), `backend/app/web/auth.py` (cookies, `X-CSRF`), `docs/identity_provider.md`, D185–D187.
+
+## 28. Next.js 16.4.6: rewrites, its proxy, not-found, TypeScript (the move to Next.js)
+
+Checked on 2026-11-15.
+
+**Package:** `web/node_modules/next/dist/` (16.4.6)
+- `server/lib/router-utils/proxy-request.js`: an external rewrite is proxied with `changeOrigin: true` (the backend
+  gets its own address as `Host`), the browser's host in `x-forwarded-host`, and `proxyTimeout` of
+  `config.experimental.proxyTimeout`, else 30 000 ms (`server/lib/router-server.js` passes it).
+- `server/lib/router-server.js`: unless `compress` is `false`, every response goes through the `compression`
+  middleware, proxied ones included.
+- `server/config-shared.js`: an `agentRules` option; `next dev` otherwise writes `AGENTS.md` beside `package.json`
+  (`server/lib/generate-agent-files.js`).
+- The bundled docs (`dist/docs/01-app/03-api-reference/03-file-conventions/not-found.md` and
+  `04-functions/not-found.md`): "Before streaming starts, Next.js returns a 404 status code. After streaming starts,
+  the status code remains 200"; `notFound()` works by throwing during rendering; the root `app/not-found.js` handles
+  addresses that match no route; Next.js injects `<meta name="robots" content="noindex">` for 404s.
+- `peerDependencies`: React `^18.2.0 || ^19.0.0`, so React 19.3 is supported.
+
+**Observed** (`next dev` and `next start` on spare ports, a backend with a fake model and a fake provider behind):
+- `.next/routes-manifest.json` holds the rewrite's destination as it was when `next build` ran: `next start` with a
+  different `API_PROXY_TARGET` still proxied to the built one.
+- With the backend unreachable: `500 Internal Server Error`, a plain-text body, and the log line
+  `Failed to proxy http://127.0.0.1:8000/api/v1/... Error: connect ECONNREFUSED`.
+- With `compress: false`, the `/agent` stream's chunks, written a second apart, arrived a second apart through both
+  servers, with gzip offered; no `content-encoding`.
+- A catch-all route under the client boundary answered 200 with no `noindex` (its `notFound()` travelled in the page
+  data and never rendered on the server); unmatched addresses on the root `not-found.tsx` answer 404 with `noindex`.
+- On its first run Next.js rewrote `tsconfig.json`: it added `allowJs`, `incremental`, `esModuleInterop: true`, its
+  `.next/types` includes, and `"strict": false` (the option had been missing). With `strict` off, every i18next
+  typed key failed to check (154 errors); with `"strict": true` (TypeScript 7's default, which the Vite setup had
+  relied on), none. TypeScript 7 refuses `esModuleInterop: false` (TS5108: the option was removed).
+- TypeScript 7.0.2 works with `next build`'s type-check.
+
+**Used in:** `web/next.config.ts`, `web/tsconfig.json`, `web/src/app/not-found.tsx`, `web/src/shared/api/http.ts`
+(a 5xx without a problem), D188.
+
+---
+
+## 29. The sign-in pages: `useSearchParams` and Suspense, the `<output>` element (Phase 22, Part 3)
+
+Checked on 2026-11-15.
+
+**Package:** `web/node_modules/next/dist/docs/01-app/03-api-reference/04-functions/use-search-params.md` (16.4.6):
+"If a route is prerendered, calling `useSearchParams` will cause the Client Component tree up to the closest
+`Suspense` boundary to be client-side rendered", and "We recommend wrapping the Client Component that uses
+`useSearchParams` in a `<Suspense/>` boundary". The `/sign-in` route is prerendered (static), and its page reads
+`?error=` and `?return_to=`, so its route file draws the page inside `<Suspense>`.
+
+**Standard:** ARIA in HTML (https://www.w3.org/TR/html-aria/#el-output): the `<output>` element's implicit role is
+`status`, so screen readers announce changes in it politely. oxlint's `jsx-a11y/prefer-tag-over-role` asks for it
+over `role="status"` (as `RefreshNotice` already does).
+
+**Used in:** `web/src/app/(client)/sign-in/page.tsx`, `web/src/features/auth/components/session-screens.tsx` and
+`sign-in-options.tsx`, D189.
+
+---
+
+## 30. Who an MCP request acts for: context variables across tasks and threads (Phase 23)
+
+Checked on 2026-11-15.
+
+**Package:** `.venv/Lib/site-packages/` (mcp 2.3.0, anyio 4.16.0)
+- `mcp/server/mcpserver/utilities/func_metadata.py`: a tool function that isn't async runs through
+  `anyio.to_thread.run_sync`.
+- `anyio/_backends/_asyncio.py`: `run_sync_in_worker_thread` copies the caller's context (`copy_context()`) and runs
+  the function in it; a task group's `start`/`start_soon` spawns the task in the caller's context (asyncio's
+  `create_task` copies the current context). So a context variable set around an HTTP request, or before an
+  in-process client connects, reaches the sync tool function that serves it.
+
+**Observed** (through the real app, with two people's tokens): over Streamable HTTP in stateless mode, each request's
+tools saw that request's caller; the in-process client set inside `asyncio.run` passed it to the server's tasks; a
+stdio-style process caller set before the server ran reached every call.
+
+**Used in:** `backend/app/modules/mcp/caller.py`, `mcp/http.py`, `assistant/tools/mcp_adapter.py`,
+`backend/mcp_stdio.py`, D191.
+
+---
+
+## 31. Security headers: Next.js's CSP without nonces, the event stream's Cache-Control (Phase 23)
+
+Checked on 2026-11-15.
+
+**Package:** `web/node_modules/next/dist/docs/01-app/02-guides/content-security-policy.md` (Next.js 16.4.6): with
+nonces, every page must be rendered dynamically ("Static optimization and Incremental Static Regeneration (ISR) are
+disabled"); "For applications that do not require nonces, you can set the CSP header directly in your
+`next.config.js`", with `script-src 'self' 'unsafe-inline'` (and `'unsafe-eval'` in development); Subresource
+Integrity is experimental.
+
+**Package:** `.venv/Lib/site-packages/fastapi/routing.py`: an `EventSourceResponse` route sets
+`Cache-Control: no-cache` and `X-Accel-Buffering: no` itself, so the backend's middleware adds `no-store` to it
+rather than replacing it.
+
+**Observed:** in headless Edge, the pages under that CSP raised no refusals (the console stayed clean) across the
+sign-in, Settings and Next.js checks.
+
+**Used in:** `web/security-headers.ts`, `backend/app/web/security_headers.py`, D193.
 
 ---
 

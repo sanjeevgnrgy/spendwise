@@ -1,7 +1,7 @@
 // A component of the dashboard feature: the "Recent expenses" card. Used by the Dashboard page, which loads the
 // newest few through the expenses feature's useExpenses.
 
-import { Link } from "react-router"
+import Link from "next/link"
 
 import { useCategoryName } from "@/features/categories"
 import type { Expense } from "@/features/expenses"
@@ -29,7 +29,7 @@ export function RecentExpenses({ expenses }: { expenses: Expense[] }) {
         <CardDescription>{t("recent.latest", { count: expenses.length })}</CardDescription>
         <CardAction>
           <Button variant="ghost" size="sm" asChild>
-            <Link to={ROUTES.expenses}>{t("recent.viewAll")}</Link>
+            <Link href={ROUTES.expenses}>{t("recent.viewAll")}</Link>
           </Button>
         </CardAction>
       </CardHeader>

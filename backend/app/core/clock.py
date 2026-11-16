@@ -9,7 +9,19 @@ through web/dependencies.ClockDep.
 """
 
 from datetime import UTC, date, datetime
-from typing import Protocol
+from typing import Annotated, Protocol
+
+from pydantic import AfterValidator
+
+
+def as_utc(moment: datetime) -> datetime:
+    """`moment` as an aware UTC time. SQLite gives stored times back without their zone; they were stored in UTC."""
+    return moment if moment.tzinfo is not None else moment.replace(tzinfo=UTC)
+
+
+# A moment read back from the database, always aware UTC, so its JSON carries the zone ("+00:00") and a browser
+# shows it in the person's own time, not the server's.
+UtcDateTime = Annotated[datetime, AfterValidator(as_utc)]
 
 
 class Clock(Protocol):

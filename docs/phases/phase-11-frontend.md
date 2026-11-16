@@ -10,6 +10,9 @@
 > **Phase 22:** CORS is gone. The web app calls the API on its own origin (`/api/v1/...`), and the dev server
 > forwards those calls to the backend; `VITE_API_URL` became the dev server's `API_PROXY_TARGET`
 > ([decisions.md](../decisions.md) D184, [phase-22-sign-in.md](phase-22-sign-in.md)).
+>
+> **Next.js (before Phase 22, Part 3):** the web app moved from Vite and React Router to Next.js 16 (App Router);
+> routes are files under `src/app/` ([decisions.md](../decisions.md) D188, [refactor-nextjs.md](refactor-nextjs.md)).
 
 **Goal:** a React web app in `web/` with a sidebar layout, light/dark theme, and a full Expenses page (sortable
 table, filters, row selection, add dialog, inline edit, delete with confirmation, toasts), talking to the backend,

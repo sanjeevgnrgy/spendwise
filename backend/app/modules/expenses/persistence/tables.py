@@ -7,7 +7,7 @@ TABLES to the migrations. The table itself is created and changed by Alembic mig
 
 from datetime import date, datetime
 
-from sqlalchemy import DateTime
+from sqlalchemy import DateTime, Index
 from sqlmodel import Field, SQLModel
 
 from app.core.money import DEFAULT_CURRENCY
@@ -17,14 +17,22 @@ from app.modules.expenses.values import MAX_MERCHANT_LENGTH, MAX_NOTE_LENGTH
 # ("netbanking") is 10 characters.
 CURRENCY_LENGTH = 3
 PAYMENT_METHOD_LENGTH = 20
+# Every read is one person's expenses, most often by date ("this month"), so one index serves both: the owner, then
+# the day. Migration 0007 adds it (it replaces the index on spent_on alone).
+OWNER_DAY_INDEX = "ix_expense_owner_id_spent_on"
 
 
 # A SQLModel table class: its docstring stays as it is; notes go in comments.
 class Expense(SQLModel, table=True):
     """The expenses table. Private to this module: other modules never import it."""
 
+    __table_args__ = (Index(OWNER_DAY_INDEX, "owner_id", "spent_on"),)
+
     # None until the row is inserted; the database assigns it (see repository.add's flush).
     id: int | None = Field(default=None, primary_key=True)
+    # Whose expense it is: SpendWise's user id (core.ids.UserId), a plain id with no foreign key, since the users
+    # table belongs to the accounts module. Every read and change filters on it (D190).
+    owner_id: int
     # Whole paise, never a float of rupees: 450.50 rupees is stored as 45050.
     amount_minor: int
     currency: str = Field(default=DEFAULT_CURRENCY, max_length=CURRENCY_LENGTH)
@@ -33,8 +41,8 @@ class Expense(SQLModel, table=True):
     category_id: int = Field(index=True)
     merchant: str = Field(max_length=MAX_MERCHANT_LENGTH)
     note: str | None = Field(default=None, max_length=MAX_NOTE_LENGTH)
-    # Indexed because "expenses this month" is the most common query.
-    spent_on: date = Field(index=True)
+    # Indexed with the owner (OWNER_DAY_INDEX): "my expenses this month" is the most common query.
+    spent_on: date
     # A PaymentMethod value ("upi"), stored as plain text; the contract's enum checks it on the way in.
     payment_method: str = Field(max_length=PAYMENT_METHOD_LENGTH)
     # Always UTC, stored with its time zone; converting to the user's time zone is the frontend's job.

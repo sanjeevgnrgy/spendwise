@@ -19,12 +19,14 @@ class WebText(StrEnum):
     INVALID_REQUEST = "problems.invalidRequest"
     SIGN_IN_REQUIRED = "problems.signInRequired"
     NOT_FROM_APP = "problems.notFromApp"
+    TOO_FAST = "problems.tooFast"
+    DAILY_LIMIT = "problems.dailyLimit"
 
 
 EN: dict[WebText, TextValue] = {
     # All a client is ever told about a bug: the details go to the server log only.
     WebText.UNEXPECTED: "Something went wrong on the server.",
-    # A service we depend on (the model, a remote MCP server) failed; its own words go to the server log only.
+    # A service we depend on (the model) failed; its own words go to the server log only.
     WebText.SERVICE_FAILED: "A service the app depends on didn't answer properly. Try again in a moment.",
     # A 422's detail; which values were wrong is in the problem's "errors" list, for the client's developer.
     WebText.INVALID_REQUEST: "Some of the values sent aren't valid.",
@@ -32,4 +34,7 @@ EN: dict[WebText, TextValue] = {
     WebText.SIGN_IN_REQUIRED: "Sign in to continue.",
     # A 403 from the X-CSRF check: the request didn't come from the app's own pages.
     WebText.NOT_FROM_APP: "This request didn't come from the app, so it was refused.",
+    # 429s from the assistant's rate limit (D194): a minute's allowance, then a day's (the counts reset at midnight UTC).
+    WebText.TOO_FAST: "You're sending requests to the assistant too quickly. Wait a minute and try again.",
+    WebText.DAILY_LIMIT: "You've reached today's limit for the assistant. Try again tomorrow.",
 }

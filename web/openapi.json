@@ -329,7 +329,7 @@
           "content": {
             "application/json": {
               "schema": {
-                "$ref": "#/components/schemas/CreateExpense"
+                "$ref": "#/components/schemas/NewExpense"
               }
             }
           }
@@ -1067,10 +1067,240 @@
           }
         }
       }
+    },
+    "/api/v1/account/sessions": {
+      "get": {
+        "tags": [
+          "account"
+        ],
+        "summary": "List Sessions",
+        "operationId": "list_sessions_api_v1_account_sessions_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/SessionRead"
+                  },
+                  "type": "array",
+                  "title": "Response List Sessions Api V1 Account Sessions Get"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/account/sessions/{session_id}": {
+      "delete": {
+        "tags": [
+          "account"
+        ],
+        "summary": "Sign Out Session",
+        "operationId": "sign_out_session_api_v1_account_sessions__session_id__delete",
+        "parameters": [
+          {
+            "name": "session_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "maximum": 9223372036854775807,
+              "minimum": 1,
+              "title": "Session Id"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/account/sessions/sign-out-others": {
+      "post": {
+        "tags": [
+          "account"
+        ],
+        "summary": "Sign Out Other Sessions",
+        "operationId": "sign_out_other_sessions_api_v1_account_sessions_sign_out_others_post",
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          }
+        }
+      }
+    },
+    "/api/v1/account/tokens": {
+      "get": {
+        "tags": [
+          "account"
+        ],
+        "summary": "List Tokens",
+        "operationId": "list_tokens_api_v1_account_tokens_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/AccessTokenRead"
+                  },
+                  "type": "array",
+                  "title": "Response List Tokens Api V1 Account Tokens Get"
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "account"
+        ],
+        "summary": "Create Token",
+        "operationId": "create_token_api_v1_account_tokens_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/NewAccessToken"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CreatedAccessToken"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/account/tokens/{token_id}": {
+      "delete": {
+        "tags": [
+          "account"
+        ],
+        "summary": "Revoke Token",
+        "operationId": "revoke_token_api_v1_account_tokens__token_id__delete",
+        "parameters": [
+          {
+            "name": "token_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "maximum": 9223372036854775807,
+              "minimum": 1,
+              "title": "Token Id"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
     }
   },
   "components": {
     "schemas": {
+      "AccessTokenRead": {
+        "properties": {
+          "id": {
+            "type": "integer",
+            "title": "Id"
+          },
+          "name": {
+            "type": "string",
+            "title": "Name"
+          },
+          "hint": {
+            "type": "string",
+            "title": "Hint"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Created At"
+          },
+          "expires_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Expires At"
+          },
+          "last_used_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Used At"
+          },
+          "expired": {
+            "type": "boolean",
+            "title": "Expired",
+            "default": false
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "name",
+          "hint",
+          "created_at",
+          "expires_at",
+          "last_used_at"
+        ],
+        "title": "AccessTokenRead"
+      },
       "ActivityMessage": {
         "properties": {
           "subagentRunId": {
@@ -1440,75 +1670,63 @@
         "title": "Context",
         "description": "A named piece of ambient information given to the agent for the run,\ndistinct from the conversation."
       },
-      "CreateExpense": {
+      "CreatedAccessToken": {
         "properties": {
-          "amount": {
-            "anyOf": [
-              {
-                "type": "number"
-              },
-              {
-                "type": "string"
-              }
-            ],
-            "title": "Amount",
-            "examples": [
-              "450.50"
-            ]
-          },
-          "currency": {
-            "type": "string",
-            "pattern": "^[A-Z]{3}$",
-            "title": "Currency",
-            "default": "INR",
-            "examples": [
-              "INR"
-            ]
-          },
-          "category_id": {
+          "id": {
             "type": "integer",
-            "maximum": 9.223372036854776e+18,
-            "minimum": 1.0,
-            "title": "Category Id"
+            "title": "Id"
           },
-          "merchant": {
+          "name": {
             "type": "string",
-            "maxLength": 100,
-            "minLength": 1,
-            "title": "Merchant"
+            "title": "Name"
           },
-          "note": {
+          "hint": {
+            "type": "string",
+            "title": "Hint"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Created At"
+          },
+          "expires_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Expires At"
+          },
+          "last_used_at": {
             "anyOf": [
               {
                 "type": "string",
-                "maxLength": 500
+                "format": "date-time"
               },
               {
                 "type": "null"
               }
             ],
-            "title": "Note"
+            "title": "Last Used At"
           },
-          "spent_on": {
+          "expired": {
+            "type": "boolean",
+            "title": "Expired",
+            "default": false
+          },
+          "token": {
             "type": "string",
-            "format": "date",
-            "title": "Spent On"
-          },
-          "payment_method": {
-            "$ref": "#/components/schemas/PaymentMethod"
+            "title": "Token"
           }
         },
-        "additionalProperties": false,
         "type": "object",
         "required": [
-          "amount",
-          "category_id",
-          "merchant",
-          "spent_on",
-          "payment_method"
+          "id",
+          "name",
+          "hint",
+          "created_at",
+          "expires_at",
+          "last_used_at",
+          "token"
         ],
-        "title": "CreateExpense",
-        "description": "Record an expense. Returns its id. Also the body of POST /expenses."
+        "title": "CreatedAccessToken"
       },
       "DataSource": {
         "properties": {
@@ -2149,6 +2367,96 @@
         ],
         "title": "MonthlyTrend"
       },
+      "NewAccessToken": {
+        "properties": {
+          "name": {
+            "type": "string",
+            "maxLength": 50,
+            "minLength": 1,
+            "title": "Name"
+          },
+          "lifetime_days": {
+            "$ref": "#/components/schemas/TokenLifetime",
+            "default": 90
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "name"
+        ],
+        "title": "NewAccessToken"
+      },
+      "NewExpense": {
+        "properties": {
+          "amount": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "string"
+              }
+            ],
+            "title": "Amount",
+            "examples": [
+              "450.50"
+            ]
+          },
+          "currency": {
+            "type": "string",
+            "pattern": "^[A-Z]{3}$",
+            "title": "Currency",
+            "default": "INR",
+            "examples": [
+              "INR"
+            ]
+          },
+          "category_id": {
+            "type": "integer",
+            "maximum": 9.223372036854776e+18,
+            "minimum": 1.0,
+            "title": "Category Id"
+          },
+          "merchant": {
+            "type": "string",
+            "maxLength": 100,
+            "minLength": 1,
+            "title": "Merchant"
+          },
+          "note": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 500
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Note"
+          },
+          "spent_on": {
+            "type": "string",
+            "format": "date",
+            "title": "Spent On"
+          },
+          "payment_method": {
+            "$ref": "#/components/schemas/PaymentMethod"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "amount",
+          "category_id",
+          "merchant",
+          "spent_on",
+          "payment_method"
+        ],
+        "title": "NewExpense",
+        "description": "A new expense. Also the body of POST /expenses."
+      },
       "ParseRequest": {
         "properties": {
           "text": {
@@ -2662,6 +2970,48 @@
         "title": "RunAgentInput",
         "description": "A request to run an agent. Also echoed back as RUN_STARTED.input. Only\nthreadId, runId and messages are required: those are the three the SDKs\nalready agree on, and for tools and context an absent key and an empty\narray mean the same thing, so requiring them would catch nothing a\nproducer could get wrong."
       },
+      "SessionRead": {
+        "properties": {
+          "id": {
+            "type": "integer",
+            "title": "Id"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Created At"
+          },
+          "last_active_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Last Active At"
+          },
+          "user_agent": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "User Agent"
+          },
+          "current": {
+            "type": "boolean",
+            "title": "Current",
+            "default": false
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "created_at",
+          "last_active_at",
+          "user_agent"
+        ],
+        "title": "SessionRead"
+      },
       "SignedInUser": {
         "properties": {
           "id": {
@@ -2877,6 +3227,15 @@
           "messages"
         ],
         "title": "ThreadRead"
+      },
+      "TokenLifetime": {
+        "type": "integer",
+        "enum": [
+          30,
+          90,
+          365
+        ],
+        "title": "TokenLifetime"
       },
       "Tool": {
         "properties": {

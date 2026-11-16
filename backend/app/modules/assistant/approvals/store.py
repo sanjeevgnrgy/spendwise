@@ -22,18 +22,29 @@ def forget_expired(ctx: Context) -> None:
 
 
 def store_card(
-    ctx: Context, thread_id: str, approval_id: str, expense: ExpenseSnapshot, created_at: datetime
+    ctx: Context, owner_id: int, thread_id: str, approval_id: str, expense: ExpenseSnapshot, created_at: datetime
 ) -> None:
-    """Save one card's record, dated `created_at`, then trim the table to the newest MAX_PENDING cards."""
+    """Save one of `owner_id`'s cards, dated `created_at`, then keep only their newest MAX_PENDING cards."""
     forget_expired(ctx)
     # merge: insert, or replace the same card's record.
     ctx.session.merge(
         PendingApproval(
-            approval_id=approval_id, thread_id=thread_id, expense=expense.model_dump(mode="json"), created_at=created_at
+            approval_id=approval_id,
+            owner_id=owner_id,
+            thread_id=thread_id,
+            expense=expense.model_dump(mode="json"),
+            created_at=created_at,
         )
     )
     # Write the new row now, so the trim below counts it.
     ctx.session.flush()
-    # Keep at most MAX_PENDING: forget the oldest beyond that.
-    keep = select(PendingApproval.approval_id).order_by(col(PendingApproval.created_at).desc()).limit(MAX_PENDING)
-    ctx.session.execute(delete(PendingApproval).where(col(PendingApproval.approval_id).not_in(keep)))
+    # Keep at most MAX_PENDING per person: forget their oldest beyond that. Per person, so one person's unanswered
+    # cards can never push out another's (D190).
+    theirs = col(PendingApproval.owner_id) == owner_id
+    keep = (
+        select(PendingApproval.approval_id)
+        .where(theirs)
+        .order_by(col(PendingApproval.created_at).desc())
+        .limit(MAX_PENDING)
+    )
+    ctx.session.execute(delete(PendingApproval).where(theirs, col(PendingApproval.approval_id).not_in(keep)))

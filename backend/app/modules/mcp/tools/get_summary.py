@@ -18,6 +18,7 @@ from app.core.cqrs import MessageBus
 from app.core.money import CURRENCY_PATTERN, DEFAULT_CURRENCY
 from app.core.months import YearMonth
 from app.modules import expenses
+from app.modules.mcp.caller import current_caller
 from app.modules.mcp.contracts import MonthSpending, ToolName
 from app.modules.mcp.tools.support import READS_ONLY, tool_errors
 from app.modules.mcp.views import ExpenseViews
@@ -44,9 +45,12 @@ def register_get_summary(server: MCPServer, bus: MessageBus, _views: ExpenseView
         ] = DEFAULT_CURRENCY,
     ) -> MonthSpending:
         with tool_errors():
+            # The caller's spending only (caller.py, D191).
+            owner = current_caller()
             this_month = YearMonth.parse(month)
-            summary = bus.ask(expenses.GetMonthlySummary(month=this_month, currency=currency))
-            previous = bus.ask(expenses.GetMonthlySummary(month=this_month.shift(-1), currency=currency))
+            summary = bus.ask(expenses.GetMonthlySummary(owner_id=owner, month=this_month, currency=currency))
+            earlier = this_month.shift(-1)
+            previous = bus.ask(expenses.GetMonthlySummary(owner_id=owner, month=earlier, currency=currency))
             return MonthSpending(
                 **summary.model_dump(exclude={"total"}),
                 previous_month=expenses.MonthTotal(

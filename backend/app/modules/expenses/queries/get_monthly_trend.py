@@ -12,6 +12,7 @@ from sqlalchemy import extract, func
 from sqlmodel import col, select
 
 from app.core.cqrs import Context, Query
+from app.core.ids import UserId
 from app.core.money import DEFAULT_CURRENCY, CurrencyCode
 from app.core.months import YearMonth
 from app.modules.expenses.models import Totalled
@@ -37,8 +38,9 @@ class MonthlyTrend(BaseModel):
 
 # Asked by GET /summary/trend, with `until` set to the clock's today.
 class GetMonthlyTrend(Query[MonthlyTrend]):
-    """Totals for the last `months` months, ending with the month that contains `until`."""
+    """The owner's totals for the last `months` months, ending with the month that contains `until`."""
 
+    owner_id: UserId
     months: int = Field(ge=1, le=MAX_TREND_MONTHS)
     until: date
     currency: CurrencyCode = DEFAULT_CURRENCY
@@ -59,7 +61,7 @@ def get_monthly_trend(ctx: Context, query: GetMonthlyTrend) -> MonthlyTrend:
     month_of = extract("month", col(Expense.spent_on))
     statement = (
         select(year_of, month_of, func.count(col(Expense.id)), func.sum(Expense.amount_minor))
-        .where(*in_month_range(first.first_day(), last.shift(1).first_day(), query.currency))
+        .where(*in_month_range(query.owner_id, first.first_day(), last.shift(1).first_day(), query.currency))
         .group_by(year_of, month_of)
     )
     # int(): a database may hand back the year and month as decimals (Postgres's EXTRACT does).

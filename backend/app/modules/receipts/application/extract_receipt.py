@@ -123,13 +123,14 @@ class ReceiptExtractor:
     files: FileStore
     llm: StructuredOutputModel
 
-    def extract(self, receipt_id: int, today: date) -> ReceiptExtraction:
-        """What the receipt says, checked, as a suggestion to confirm.
+    def extract(self, owner_id: int, receipt_id: int, today: date) -> ReceiptExtraction:
+        """What one of `owner_id`'s receipts says, checked, as a suggestion to confirm.
 
-        Raises NotFoundError (404) for an unknown receipt or one whose file is gone, and LlmError (502) if the model
-        fails or answers in the wrong shape.
+        Raises NotFoundError (404) for a receipt they don't have (unknown, or another person's: nobody's file is read
+        for anyone else, D190) or one whose file is gone, and LlmError (502) if the model fails or answers in the
+        wrong shape.
         """
-        stored = self.bus.ask(GetReceipt(receipt_id=receipt_id))
+        stored = self.bus.ask(GetReceipt(owner_id=owner_id, receipt_id=receipt_id))
         attachment = Attachment(data=self._bytes_of(stored), media_type=stored.media_type)
         # The real category names, so the model can only suggest one that exists (or null: none yet is fine here).
         names = [category.name for category in self.bus.ask(categories.ListCategories())]

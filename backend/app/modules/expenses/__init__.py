@@ -9,12 +9,15 @@ Inside, each command and each query is one file holding the message, its handler
 (ExpenseRead, ExpenseList, the totals' base), domain/rules.py (business rules) and persistence/ (the table and
 the write side's repository). This file only re-exports the contract names from those files.
 
+Every command and query about expenses names its owner (`owner_id`, a core.ids.UserId): one person's expenses are
+never visible to, or changeable by, anyone else (D190).
+
 Who uses it: the MCP server (every command and query, behind its tools), the assistant (PaymentMethod
 and payment_method_label for its forms, MAX_NOTE_LENGTH for a receipt's note), the receipts module (PaymentMethod,
 in what a receipt is read into) and seed.py (CreateExpense, ListExpenses).
 """
 
-from app.modules.expenses.commands.create_expense import CreateExpense
+from app.modules.expenses.commands.create_expense import CreateExpense, NewExpense
 from app.modules.expenses.commands.delete_expense import DeleteExpense
 from app.modules.expenses.commands.update_expense import ExpenseChanges, UpdateExpense
 from app.modules.expenses.i18n import ExpenseText, payment_method_label
@@ -22,7 +25,7 @@ from app.modules.expenses.models import ExpenseList, ExpenseRead
 from app.modules.expenses.queries.get_expense import GetExpense
 from app.modules.expenses.queries.get_monthly_summary import CategoryTotal, GetMonthlySummary, MonthlySummary
 from app.modules.expenses.queries.get_monthly_trend import GetMonthlyTrend, MonthlyTrend, MonthTotal
-from app.modules.expenses.queries.list_expenses import ListExpenses
+from app.modules.expenses.queries.list_expenses import ExpenseFilters, ListExpenses
 from app.modules.expenses.values import MAX_LIST_LIMIT, MAX_NOTE_LENGTH, ExpenseId, PaymentMethod
 
 __all__ = [
@@ -32,6 +35,7 @@ __all__ = [
     "CreateExpense",
     "DeleteExpense",
     "ExpenseChanges",
+    "ExpenseFilters",
     "ExpenseId",
     "ExpenseList",
     "ExpenseText",
@@ -43,6 +47,7 @@ __all__ = [
     "MonthTotal",
     "MonthlySummary",
     "MonthlyTrend",
+    "NewExpense",
     "PaymentMethod",
     "UpdateExpense",
     "payment_method_label",

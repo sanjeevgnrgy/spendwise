@@ -1,7 +1,7 @@
 // A shared component: the "nothing here yet" filler for a card, with an optional link onward. Part of shared/, so
 // it knows no feature (the caller passes the link). Used by the Dashboard's charts and recent list.
 
-import { Link } from "react-router"
+import Link from "next/link"
 
 import { Button } from "@/shared/ui/button"
 
@@ -19,7 +19,7 @@ export function EmptyState({ message, action }: EmptyStateProps) {
       <p>{message}</p>
       {action && (
         <Button variant="outline" size="sm" asChild>
-          <Link to={action.to}>{action.label}</Link>
+          <Link href={action.to}>{action.label}</Link>
         </Button>
       )}
     </div>

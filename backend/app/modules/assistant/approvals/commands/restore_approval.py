@@ -5,6 +5,7 @@ sends it when something fails after TakeApproval; module.py registers restore_ap
 """
 
 from app.core.cqrs import Command, Context
+from app.core.ids import UserId
 from app.modules.assistant.approvals.models import ApprovalId, PendingCard
 from app.modules.assistant.approvals.store import store_card
 from app.modules.conversations import ThreadId
@@ -12,8 +13,9 @@ from app.modules.conversations import ThreadId
 
 # Sent by Assistant.decide (application/assistant.py) when something fails after the card was taken.
 class RestoreApproval(Command[None]):
-    """Put a taken card back, unchanged (same snapshot, same age), after the decision failed midway."""
+    """Put a taken card back, unchanged (same owner, snapshot and age), after the decision failed midway."""
 
+    owner_id: UserId
     thread_id: ThreadId
     approval_id: ApprovalId
     card: PendingCard
@@ -22,4 +24,5 @@ class RestoreApproval(Command[None]):
 def restore_approval(ctx: Context, command: RestoreApproval) -> None:
     """Handler for RestoreApproval: put a taken card back, with its original snapshot and time."""
     # The original time, so a card that keeps failing still expires TTL_MINUTES after it was shown.
-    store_card(ctx, command.thread_id, command.approval_id, command.card.expense, command.card.created_at)
+    card = command.card
+    store_card(ctx, command.owner_id, command.thread_id, command.approval_id, card.expense, card.created_at)

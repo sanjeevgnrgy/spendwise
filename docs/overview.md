@@ -48,7 +48,7 @@ bearer token ([api_endpoints.md](api_endpoints.md#mcp-tools-and-resources)).
 | AI model | **Google Gemini** (Interactions API, streaming, function calling), behind a provider-neutral port | Free tier for development; replaceable ([gemini.md](gemini.md)) |
 | Agent tools | **MCP** (Model Context Protocol), Python SDK 2.3 | One set of tools for the assistant and any other AI client |
 | Agent ↔ UI | **AG-UI** 1.0 (events over SSE), **A2UI** 1.0 (UI as data) | Live tool progress, cards and forms the agent describes but can't script ([assistant_architecture.md](assistant_architecture.md)) |
-| Web app | **React** 19, **TypeScript** 7, **Vite** 8 | |
+| Web app | **Next.js** 16 (App Router), **React** 19, **TypeScript** 7 | Server-rendered metadata, robots.txt and a sitemap for search engines (D188) |
 | UI | **Tailwind CSS** 4, **shadcn/ui** (Radix), **Recharts** 3 (via shadcn charts), lucide icons | |
 | Web data | **TanStack Query** 5, **openapi-fetch** with types from **openapi-typescript**, **@ag-ui/core** + zod | Caching, cancellation, a typed client generated from the backend, validated streams |
 | Tables | **TanStack Table** 9 | Sorting and row selection |

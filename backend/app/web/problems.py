@@ -20,7 +20,7 @@ from starlette.datastructures import Headers
 from starlette.exceptions import HTTPException
 from starlette.types import ASGIApp, Message, Receive, Scope, Send
 
-from app.core.errors import AppError, AuthenticationError, ExternalServiceError
+from app.core.errors import AppError, AuthenticationError, ExternalServiceError, TooManyRequestsError
 from app.core.i18n import Language, text
 from app.web.dependencies import get_language, language_of
 from app.web.i18n import WebText
@@ -38,6 +38,8 @@ VALIDATION_SLUG = "validation"
 HTTP_SLUG = "http"
 # The MCP endpoint's 401 (a missing or wrong bearer token) is the same kind of problem as a missing session.
 UNAUTHORIZED_SLUG = AuthenticationError.slug
+# Tells a client when a refused (429) request is worth sending again, in seconds.
+RETRY_AFTER = "Retry-After"
 
 
 def problem_response(
@@ -124,7 +126,9 @@ def register_error_handlers(app: FastAPI) -> None:
         # FastAPI only calls this for an AppError; the fallback just narrows the type for the type checker.
         error = exc if isinstance(exc, AppError) else AppError()
         detail = detail_for_people(error, get_language(request))
-        return problem_response(error.status, error.slug, error.title, detail, request.url.path)
+        # A 429 says when to try again (RFC 9110 §10.2.3), so a client can wait rather than retry at once.
+        headers = {RETRY_AFTER: str(error.retry_after_seconds)} if isinstance(error, TooManyRequestsError) else None
+        return problem_response(error.status, error.slug, error.title, detail, request.url.path, headers=headers)
 
     async def invalid_request(request: Request, exc: Exception) -> JSONResponse:
         """A 422 with every invalid value under "errors", for the client's developer; the detail is for people."""

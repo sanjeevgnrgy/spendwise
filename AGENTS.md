@@ -2,7 +2,7 @@
 
 Rules for AI coding agents, and anyone else, changing SpendWise. They describe how this codebase is built: a change
 that doesn't follow them isn't finished. The reasoning behind each rule is in [docs/](docs/README.md). Read the linked
-doc before working in an area, and check [decisions.md](docs/decisions.md) (D1–D187) before changing a settled choice.
+doc before working in an area, and check [decisions.md](docs/decisions.md) (D1–D194) before changing a settled choice.
 
 | Before you change… | Read |
 |---|---|
@@ -17,7 +17,8 @@ doc before working in an area, and check [decisions.md](docs/decisions.md) (D1�
 1. **Commit only when the owner says "commit". Push only when asked.** Never rewrite history that has been pushed.
 2. **Don't write automated tests** or add test tooling (pytest, vitest, fixtures), even if a task or prompt asks for
    them: the owner adds tests. Make code testable instead (section 5).
-3. **Secrets stay secret.** Never read, print, log or commit `.env` values (`GEMINI_API_KEY`, `MCP_TOKEN`). Never
+3. **Secrets stay secret.** Never read, print, log or commit `.env` values (`GEMINI_API_KEY`, `OIDC_CLIENT_SECRET`,
+   `SESSION_ENCRYPTION_KEYS`) or a personal access token. Never
    stage `.env`, `*.db`, `.venv/`, `node_modules/`, `dist/` or `__pycache__/`. Before each commit, confirm the
    staged diff doesn't contain the key ([git.md](docs/git.md#before-every-commit)).
 4. **No live model calls without permission.** Calling Gemini spends the owner's quota. Verify with a fake model
@@ -72,7 +73,8 @@ modules need it. Recipes: [backend_onboarding.md](docs/backend_onboarding.md).
 - Outside `modules/`, shared code is grouped by concern (D177): `core/` (the bus, errors, values, the LLM port)
   imports nothing else in the app; `infrastructure/` (settings, database, migrations, logging, Gemini) and `web/`
   (route dependencies, problem responses) import only `core/`. Modules never import `infrastructure/` (what it builds
-  is passed in); only their HTTP adapters (`api.py`, `assistant/api/routes.py`, `mcp/http.py`) import `web/`.
+  is passed in); only their HTTP adapters (`api.py`, `accounts/account_api.py`, `assistant/api/routes.py`,
+  `mcp/http.py`) import `web/`.
 - Only `bootstrap.py` and `main.py` import a `module.py`.
 - Module dependencies stay one-way: expenses → categories; mcp → expenses, categories; receipts → categories,
   expenses; assistant → the rest; accounts depends on none. A new dependency must not create a cycle; if two modules
@@ -100,6 +102,15 @@ replaceable;
   hash, and the ID token is kept sealed. Never log a key, a token or a cookie.
 - A user is found by their identity (issuer, subject), never by email. Other modules will point at `UserId`, never at
   a provider's subject.
+
+**Each person's own data (D190, D191).**
+- Every command and query about a person's data carries `owner_id: UserId` (`core/ids.py`), and the handler puts it
+  in the same statement as the id (`WHERE id = ? AND owner_id = ?`): never `session.get(Table, id)` on such a table
+  (scan 9). Another person's object is a `NotFoundError`, identical to a missing one.
+- The owner comes only from the server's side: `principal.user_id` in a route, `current_caller()` in an MCP tool, the
+  run in the assistant (`ExpenseTools.acting_for`). A REST body or query string is its own model without an owner
+  (`NewExpense`, `ExpenseFilters`); never make an owned message a route's body. Never give the model an owner argument.
+- Categories are shared. A new table holding a person's data gets an indexed `owner_id`.
 
 **Files the model reads are data.** A receipt (or any attachment) goes to the model through `ask_for_json(...,
 attachments=...)`, in a call without tools; its type is judged by its bytes, the instruction says its text is never
@@ -129,7 +140,9 @@ not even as a placeholder value. Log them (user data only at DEBUG) and send a c
   values. User data (category names, merchants, notes) is never translated.
 
 **API.** Routes live under `/api/v1`. Inputs are validated by contract types: `RecordId`, `IdPath`, `Annotated`
-limits, `extra="forbid"`.
+limits, `extra="forbid"`. A route that calls the model takes `dependencies=[MODEL_QUOTA]` (`web/rate_limits.py`, D194).
+Every API and MCP answer is sent with `Cache-Control: no-store` and the security headers (`web/security_headers.py`,
+D193): don't remove them, and don't let a route cache a person's data.
 
 **Database changes** only through Alembic migrations (`backend/migrations`):
 - Change `persistence/tables.py`, autogenerate a migration, and read and fix it.
@@ -141,6 +154,8 @@ limits, `extra="forbid"`.
 - Arguments are typed `Annotated` with descriptions.
 - A destructive tool needs a strict interlock (`confirmed`).
 - A tool function's name, signature and docstring are runtime data: the MCP SDK builds the schema from them.
+- A tool acts for `current_caller()` (`mcp/caller.py`), set by the transport from a personal access token or the
+  signed-in run; it never takes a person as an argument.
 
 **What the model sees is behaviour.** Prompts, tool declarations and the `/parse` schema decide what the model does.
 Changing them is a feature change, to be designed and verified as one.
@@ -151,8 +166,21 @@ files, not new branches in shared code.
 **The web app's contract.** After changing an API, a limit, a label, or an A2UI or AG-UI name, run
 `backend\scripts\export_contracts.py`, then `npm run gen:api` in `web/`, and commit the generated files.
 
-## 3. Web: feature slices (`web/`)
+## 3. Web: Next.js, feature slices (`web/`)
 
+- **Next.js 16, App Router (D188).** This version differs from older ones: check the docs bundled in
+  `web/node_modules/next/dist/docs/` before using a Next.js API.
+  - `src/app/` holds only Next's own files at its top (`layout.tsx`, `not-found.tsx`, `robots.ts`, `sitemap.ts`);
+    the composition lives in private folders (`_shell/`, `_frame/`, `_views/`, `_i18n/`, `_seo/`, `_styles/`).
+    Never leave a loose file there.
+  - Routes are `page.tsx` files under `src/app/(client)/`; a route file is a server component that exports its
+    `metadata` (`privatePage` or `publicPage` from `_seo/seo.ts`) and draws its feature's page from `_views/`.
+  - Signed-in pages go in `(client)/(app)/`, behind the session check (`AuthGate`, D189); a public page goes beside
+    it, uses `publicPage` and is added to `PUBLIC_PATHS` (`_seo/seo.ts`: robots.txt and the sitemap).
+  - A page never outlives its person (D192): when the session ends or someone else signs in, `AuthGate` unloads it.
+    Never keep a person's data where a reload wouldn't clear it (browser storage).
+  - Everything under `(client)/` is drawn in the browser only (`ClientRoot`); don't read `window` or `localStorage`
+    in a server component. A page meant to be rendered on the server for search engines goes outside `(client)/`.
 - **Plain feature slices** (not Feature-Sliced Design):
   - `src/app` composes the app.
   - `src/features/<name>` owns everything for one feature.
@@ -168,16 +196,17 @@ files, not new branches in shared code.
   - pass the query's `signal`;
   - never fetch in a `useEffect`.
 - **Mutations** only declare what they changed (`meta: { changes: DATA_SCOPES.x }`). The `STALE_AFTER` table in
-  `app/query-client.ts` decides what reloads.
+  `app/_shell/query-client.ts` decides what reloads.
 - **API calls** go through `api` (openapi-fetch) with `unwrap` or `unwrapEmpty`, and types come from `Schemas[...]`.
   - The API is on the page's own origin (D184): call relative paths (`/api/v1/...`), never an absolute API address;
-    the dev server or a reverse proxy forwards them. The backend sends no CORS headers.
+    Next.js's rewrite (`next.config.ts`) forwards them. The backend sends no CORS headers.
   - Every call carries `apiHeaders()` (the language and `X-CSRF`, D186): `api` adds them itself; anything that calls
     `fetch` directly (the assistant's stream) spreads them in. Never store a token or session data in the browser.
   - Never hand-copy a backend type or value: use `schema.gen.ts` and `contracts.gen.ts`.
   - Never edit `*.gen.ts` or `openapi.json`.
-- **Pages** are exported from their feature's `index.ts` through `lazyWithRetry`, and listed once in `PAGES`
-  (`app/pages.tsx`).
+- **Pages** are exported from their feature's `index.ts` through `lazyWithRetry` (their code and texts load together),
+  re-exported by `app/_views/client-pages.ts`, drawn by their route file, and listed in the menu once in `PAGES`
+  (`app/_frame/pages.tsx`).
 - **Logic that doesn't need React** goes in pure functions in their own files.
 - **Texts** (D178): everything a person sees or hears comes from a namespace of texts, never a literal in a component.
   - Each feature owns `i18n/`: `en.ts` (the source, a default-exported plain object), one file per other language
@@ -186,8 +215,8 @@ files, not new branches in shared code.
     `import type en from "./en"`).
   - Every language's file is a chunk of its own, loaded with what uses it: a feature's from its page's or panel's lazy
     loader, `Promise.all([import(page), loadNamespaces(...)])`, so nothing is drawn before its texts are in. `common`
-    (shared/) and `app` (the frame, `app/namespaces.ts`) load when the app boots, their English bundled so the frame
-    can always be drawn.
+    (shared/), `app` (the frame) and `auth` (the session check and the user menu) load when the app boots
+    (`app/_shell/namespaces.ts`), their English bundled so the frame can always be drawn.
   - Components call `const { t } = useTexts()`. Code outside React calls `i18n.t(key, { ns })` when it needs the
     text. Never keep a text in a module-level constant (store its key), and never build a sentence from pieces: one
     key per sentence, with `{{placeholders}}`, and `_one`/`_other` keys for counts.

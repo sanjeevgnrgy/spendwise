@@ -219,3 +219,8 @@ greater than 0")`. The MCP tool only translates the MCP call into that service c
 `ToolError` the client can read). Because the REST router, the assistant and the MCP module are all adapters over
 the same services, every rule is written once and applies to all three.
 </details>
+
+> **Later changes (Phase 23, D191):** every MCP connection acts for one person. Over HTTP, `MCP_TOKEN` was replaced by
+> personal access tokens made on the Settings page; the stdio server needs one too, in its environment. For Claude
+> Desktop, add `"env": {"SPENDWISE_TOKEN": "spw_..."}` to the `spendwise` entry above. See
+> [phase-23-per-person-data.md](phase-23-per-person-data.md).

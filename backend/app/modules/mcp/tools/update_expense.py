@@ -18,6 +18,7 @@ from pydantic import Field
 from app.core.cqrs import MessageBus
 from app.core.errors import BusinessRuleError
 from app.modules import expenses
+from app.modules.mcp.caller import current_caller
 from app.modules.mcp.contracts import CLEAR_NOTE_ARGUMENT, EXPENSE_ID_ARGUMENT, ExpenseUpdated, ToolName
 from app.modules.mcp.tools.support import (
     CHANGES_DATA,
@@ -57,6 +58,8 @@ def register_update_expense(server: MCPServer, bus: MessageBus, views: ExpenseVi
         clear_note: Annotated[bool, Field(description="true to remove the note.")] = False,
     ) -> ExpenseUpdated:
         with tool_errors():
+            # Only the caller's own expense can change; another person's is "not found" (caller.py, D191).
+            owner = current_caller()
             sent = {
                 "amount": given(str(amount)),
                 "merchant": given(merchant),
@@ -74,7 +77,10 @@ def register_update_expense(server: MCPServer, bus: MessageBus, views: ExpenseVi
             if not changes:
                 # Saying "updated" when nothing changed would mislead the caller (and the user).
                 raise BusinessRuleError("Nothing to change: pass at least one field to update.")
-            bus.execute(expenses.UpdateExpense(expense_id=expense_id, changes=expenses.ExpenseChanges(**changes)))
-            return ExpenseUpdated(updated=views.find(expense_id))
+            update = expenses.UpdateExpense(
+                owner_id=owner, expense_id=expense_id, changes=expenses.ExpenseChanges(**changes)
+            )
+            bus.execute(update)
+            return ExpenseUpdated(updated=views.find(owner, expense_id))
 
     require_arguments(update_expense, EXPENSE_ID_ARGUMENT, CLEAR_NOTE_ARGUMENT)

@@ -11,6 +11,7 @@ from datetime import datetime
 from pydantic import BaseModel
 
 from app.core.cqrs import Context, Query
+from app.core.ids import UserId
 from app.core.errors import NotFoundError
 from app.core.i18n import translatable
 from app.core.llm import (
@@ -47,8 +48,9 @@ class ThreadRead(BaseModel):
 
 # Asked by GET /threads/{id} (api.py).
 class GetThread(Query[ThreadRead]):
-    """The whole conversation, readable. Raises NotFoundError for an unknown thread."""
+    """The owner's whole conversation, readable. Raises NotFoundError if they have no such thread."""
 
+    owner_id: UserId
     thread_id: ThreadId
 
 
@@ -68,9 +70,9 @@ def _readable(message: Message) -> str | None:
 def get_thread(ctx: Context, query: GetThread) -> ThreadRead:
     """The whole thread, readable: each message as text, oldest first, without the model's reasoning.
 
-    Raises NotFoundError if the thread has no messages (an unknown id).
+    Raises NotFoundError if the owner's thread has no messages: an unknown id, or another person's (D190).
     """
-    rows = thread_rows(ctx, query.thread_id)
+    rows = thread_rows(ctx, query.owner_id, query.thread_id)
     if not rows:
         raise NotFoundError(translatable(ConversationText.THREAD_NOT_FOUND, thread_id=query.thread_id))
     shown = []

@@ -4,20 +4,18 @@ Private to accounts: the commands in commands/ call these. Like every handler's 
 bus's session; the bus commits. Times come from the bus's clock (`now`), never the system's.
 """
 
-from datetime import UTC, datetime
-
 from sqlalchemy import delete, or_
 from sqlmodel import col, select
 
+from app.core.clock import as_utc
 from app.core.cqrs import Context
 from app.modules.accounts.domain.rules import Profile
 from app.modules.accounts.persistence.tables import AppUser, LoginAttempt, UserIdentity, UserSession
 from app.modules.accounts.values import LOGIN_ATTEMPT_TTL, MAX_LOGIN_ATTEMPTS
 
 
-def utc(moment: datetime) -> datetime:
-    """`moment` as an aware UTC time. SQLite gives stored times back without their zone; they were stored in UTC."""
-    return moment if moment.tzinfo is not None else moment.replace(tzinfo=UTC)
+# `moment` as an aware UTC time (SQLite gives stored times back without their zone): core's rule, by its old name.
+utc = as_utc
 
 
 def find_user_id(ctx: Context, issuer: str, subject: str) -> int | None:

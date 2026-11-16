@@ -80,6 +80,22 @@ export function formatDate(value: string | Date): string {
   return day ? day.toLocaleDateString(locale(), { day: "numeric", month: "short", year: "numeric" }) : ""
 }
 
+/**
+ * A moment with its time zone ("2026-11-15T10:30:00Z", as the API sends timestamps) -> "15 Nov 2026, 4:00 pm", in this
+ * device's time zone; text that isn't a moment -> "".
+ */
+export function formatDateTime(value: string): string {
+  const moment = new Date(value)
+  if (Number.isNaN(moment.getTime())) return ""
+  return moment.toLocaleString(locale(), {
+    day: "numeric",
+    month: "short",
+    year: "numeric",
+    hour: "numeric",
+    minute: "2-digit",
+  })
+}
+
 /** "2026-11" -> "November 2026" (long) or "Nov" (short, for chart axes). */
 export function formatMonth(isoMonth: string, style: "long" | "short" = "long"): string {
   const [year, month] = isoMonth.split("-").map(Number)

@@ -1,6 +1,6 @@
-// Everything about themes that both the app and index.html need. Part of shared/theme. No imports on purpose:
-// vite.config.ts reads this file too, and puts THEME_BOOT_SCRIPT into index.html's <head>. Used by the theme's
-// context and provider, and by vite.config.ts.
+// Everything about themes that both the app and the document's <head> need. Part of shared/theme. No imports on
+// purpose: the root layout (app/layout.tsx, rendered on the server) puts THEME_BOOT_SCRIPT into <head>. Used by the
+// theme's context and provider, and by the root layout.
 
 /** The themes: light, dark, or follow the operating system. */
 export const THEMES = ["light", "dark", "system"] as const

@@ -330,10 +330,122 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/account/sessions": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List Sessions */
+        get: operations["list_sessions_api_v1_account_sessions_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/account/sessions/{session_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /** Sign Out Session */
+        delete: operations["sign_out_session_api_v1_account_sessions__session_id__delete"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/account/sessions/sign-out-others": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Sign Out Other Sessions */
+        post: operations["sign_out_other_sessions_api_v1_account_sessions_sign_out_others_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/account/tokens": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List Tokens */
+        get: operations["list_tokens_api_v1_account_tokens_get"];
+        put?: never;
+        /** Create Token */
+        post: operations["create_token_api_v1_account_tokens_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/account/tokens/{token_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /** Revoke Token */
+        delete: operations["revoke_token_api_v1_account_tokens__token_id__delete"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
     schemas: {
+        /** AccessTokenRead */
+        AccessTokenRead: {
+            /** Id */
+            id: number;
+            /** Name */
+            name: string;
+            /** Hint */
+            hint: string;
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /**
+             * Expires At
+             * Format: date-time
+             */
+            expires_at: string;
+            /** Last Used At */
+            last_used_at: string | null;
+            /**
+             * Expired
+             * @default false
+             */
+            expired?: boolean;
+        };
         /**
          * ActivityMessage
          * @description Structured progress that is not conversation content, materialised as a
@@ -480,34 +592,33 @@ export interface components {
         } & {
             [key: string]: unknown;
         };
-        /**
-         * CreateExpense
-         * @description Record an expense. Returns its id. Also the body of POST /expenses.
-         */
-        CreateExpense: {
+        /** CreatedAccessToken */
+        CreatedAccessToken: {
+            /** Id */
+            id: number;
+            /** Name */
+            name: string;
+            /** Hint */
+            hint: string;
             /**
-             * Amount
-             * @example 450.50
+             * Created At
+             * Format: date-time
              */
-            amount: number | string;
+            created_at: string;
             /**
-             * Currency
-             * @default INR
-             * @example INR
+             * Expires At
+             * Format: date-time
              */
-            currency?: string;
-            /** Category Id */
-            category_id: number;
-            /** Merchant */
-            merchant: string;
-            /** Note */
-            note?: string | null;
+            expires_at: string;
+            /** Last Used At */
+            last_used_at: string | null;
             /**
-             * Spent On
-             * Format: date
+             * Expired
+             * @default false
              */
-            spent_on: string;
-            payment_method: components["schemas"]["PaymentMethod"];
+            expired?: boolean;
+            /** Token */
+            token: string;
         };
         /**
          * DataSource
@@ -754,6 +865,42 @@ export interface components {
             /** Months */
             months: components["schemas"]["MonthTotal"][];
         };
+        /** NewAccessToken */
+        NewAccessToken: {
+            /** Name */
+            name: string;
+            /** @default 90 */
+            lifetime_days?: components["schemas"]["TokenLifetime"];
+        };
+        /**
+         * NewExpense
+         * @description A new expense. Also the body of POST /expenses.
+         */
+        NewExpense: {
+            /**
+             * Amount
+             * @example 450.50
+             */
+            amount: number | string;
+            /**
+             * Currency
+             * @default INR
+             * @example INR
+             */
+            currency?: string;
+            /** Category Id */
+            category_id: number;
+            /** Merchant */
+            merchant: string;
+            /** Note */
+            note?: string | null;
+            /**
+             * Spent On
+             * Format: date
+             */
+            spent_on: string;
+            payment_method: components["schemas"]["PaymentMethod"];
+        };
         /** ParseRequest */
         ParseRequest: {
             /**
@@ -951,6 +1098,28 @@ export interface components {
         } & {
             [key: string]: unknown;
         };
+        /** SessionRead */
+        SessionRead: {
+            /** Id */
+            id: number;
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /**
+             * Last Active At
+             * Format: date-time
+             */
+            last_active_at: string;
+            /** User Agent */
+            user_agent: string | null;
+            /**
+             * Current
+             * @default false
+             */
+            current?: boolean;
+        };
         /** SignedInUser */
         SignedInUser: {
             /** Id */
@@ -1033,6 +1202,11 @@ export interface components {
             /** Messages */
             messages: components["schemas"]["ThreadMessage"][];
         };
+        /**
+         * TokenLifetime
+         * @enum {integer}
+         */
+        TokenLifetime: 30 | 90 | 365;
         /**
          * Tool
          * @description A tool the agent may call.
@@ -1460,7 +1634,7 @@ export interface operations {
         };
         requestBody: {
             content: {
-                "application/json": components["schemas"]["CreateExpense"];
+                "application/json": components["schemas"]["NewExpense"];
             };
         };
         responses: {
@@ -1868,6 +2042,155 @@ export interface operations {
             };
         };
     };
+    list_sessions_api_v1_account_sessions_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SessionRead"][];
+                };
+            };
+        };
+    };
+    sign_out_session_api_v1_account_sessions__session_id__delete: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                session_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    sign_out_other_sessions_api_v1_account_sessions_sign_out_others_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    list_tokens_api_v1_account_tokens_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AccessTokenRead"][];
+                };
+            };
+        };
+    };
+    create_token_api_v1_account_tokens_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["NewAccessToken"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CreatedAccessToken"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    revoke_token_api_v1_account_tokens__token_id__delete: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                token_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
 }
 type FlattenedDeepRequired<T> = {
     [K in keyof T]-?: FlattenedDeepRequired<T[K] extends unknown[] | undefined | null ? Extract<T[K], unknown[]>[number] : T[K]>;
@@ -1891,6 +2214,7 @@ export const reasoningMessageRoleValues: ReadonlyArray<FlattenedDeepRequired<com
 export const resumeEntryStatusValues: ReadonlyArray<FlattenedDeepRequired<components>["schemas"]["ResumeEntry"]["status"]> = ["resolved", "cancelled"];
 export const systemMessageRoleValues: ReadonlyArray<FlattenedDeepRequired<components>["schemas"]["SystemMessage"]["role"]> = ["system"];
 export const textPartTypeValues: ReadonlyArray<FlattenedDeepRequired<components>["schemas"]["TextPart"]["type"]> = ["text"];
+export const tokenLifetimeValues: ReadonlyArray<FlattenedDeepRequired<components>["schemas"]["TokenLifetime"]> = [30, 90, 365];
 export const toolMessageRoleValues: ReadonlyArray<FlattenedDeepRequired<components>["schemas"]["ToolMessage"]["role"]> = ["tool"];
 export const urlSourceTypeValues: ReadonlyArray<FlattenedDeepRequired<components>["schemas"]["UrlSource"]["type"]> = ["url"];
 export const userMessageRoleValues: ReadonlyArray<FlattenedDeepRequired<components>["schemas"]["UserMessage"]["role"]> = ["user"];

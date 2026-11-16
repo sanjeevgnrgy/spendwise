@@ -38,18 +38,20 @@ ELLIPSIS = "…"
 def receipt_turn(
     extractor: receipts.ReceiptExtractor,
     tools: ExpenseTools,
+    owner_id: int,
     receipt_id: int,
     message: str,
     today: date,
     language: Language,
 ) -> Iterator[AgentEvent]:
-    """Read the receipt and offer it as the expense form, pre-filled; the reply is in `language`.
+    """Read one of `owner_id`'s receipts and offer it as the expense form, pre-filled; the reply is in `language`.
 
     `message` is what the user typed with it (possibly nothing). Yields the reply, then the form, then a
     TurnFinished. The category names come from the tools, as the agent's forms' do, so the form offers what
     add_expense accepts; if the tools can't be reached, nothing could be saved, so the receipt isn't read (no model
-    call) and the reply says so. Raises NotFoundError for an unknown receipt and LlmError if the model can't read
-    it: the stream turns either into a RUN_ERROR, and the turn isn't saved.
+    call) and the reply says so. Raises NotFoundError for a receipt the owner doesn't have (unknown, or another
+    person's, D190) and LlmError if the model can't read it: the stream turns either into a RUN_ERROR, and the turn
+    isn't saved.
     """
     said = [message, RECEIPT_SAID.format(receipt_id=receipt_id)]
     try:
@@ -58,7 +60,7 @@ def receipt_turn(
         logger.warning("tools unavailable, not reading receipt %s: %s", receipt_id, exc)
         yield from _finish(said, text(language, ChatText.TOOLS_UNAVAILABLE))
         return
-    extraction = extractor.extract(receipt_id, today)
+    extraction = extractor.extract(owner_id, receipt_id, today)
     values = _form_values(extraction, language)
     found = extraction.total is not None or extraction.merchant is not None
     logger.info("receipt %s offered as a form (%s)", receipt_id, "details found" if found else "nothing found")

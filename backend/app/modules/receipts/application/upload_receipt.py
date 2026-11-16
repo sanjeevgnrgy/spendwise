@@ -20,15 +20,16 @@ class ReceiptUploader:
     bus: MessageBus
     files: FileStore
 
-    def upload(self, data: bytes) -> int:
-        """Keep the file and return the new receipt's id.
+    def upload(self, owner_id: int, data: bytes) -> int:
+        """Keep the file as `owner_id`'s receipt and return the new receipt's id.
 
         Raises BusinessRuleError (422) if the file is empty, over MAX_RECEIPT_BYTES or not a JPEG, PNG, WEBP or PDF.
         """
         media_type = check_receipt_file(data)
         key = self.files.save(data)
         try:
-            return self.bus.execute(StoreReceipt(storage_key=key, media_type=media_type, size_bytes=len(data)))
+            receipt = StoreReceipt(owner_id=owner_id, storage_key=key, media_type=media_type, size_bytes=len(data))
+            return self.bus.execute(receipt)
         except BaseException:
             # Without its row the file could never be found again: don't keep it.
             self.files.delete(key)

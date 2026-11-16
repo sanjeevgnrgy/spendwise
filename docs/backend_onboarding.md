@@ -334,8 +334,7 @@ services = bootstrap.build(clock=FixedClock(), llm=ScriptedModel(), engine=engin
 client = TestClient(create_app(services))      # the real routes, bus and MCP server, with your fakes
 ```
 
-`build()` also takes `tools=` (any `ExpenseTools`); pass it if your `.env` sets `MCP_URL`, or the default tools talk to
-that server (and its database). It takes `files=` (any `FileStore`: `save`, `read`, `delete`); pass one when you use a
+`build()` also takes `tools=` (any `ExpenseTools`, bound per run with `acting_for`). It takes `files=` (any `FileStore`: `save`, `read`, `delete`); pass one when you use a
 copy of the database, or uploads land in the real `UPLOADS_DIR`. It takes `identity=` (any `IdentityProvider`,
 `core/identity.py`) and `sealer=` (any `Sealer`): with a fake provider, a check signs in through the real routes.
 Every module's route needs a session and `X-CSRF: 1`, so a check signs in first:
@@ -404,3 +403,17 @@ Automated tests aren't part of the repository yet. Until they are, before asking
 - [ ] A migration for every table change, with a working downgrade
 - [ ] User data not logged at INFO
 - [ ] Docs and the web contract updated
+
+## A person's data: the owner rule (D190)
+
+Every command and query about a person's data carries `owner_id: UserId` (`core/ids.py`), and the handler puts it in
+the **same statement** as the id: `select(Expense).where(Expense.id == ..., Expense.owner_id == ...)`, never
+`session.get(Expense, id)` (scan 9 in architecture.md looks for that). Another person's object is a `NotFoundError`
+with the same text as a missing one.
+
+- The owner comes from the server's side only: a route takes `principal: CurrentUserDep` and passes
+  `principal.user_id`; an MCP tool calls `current_caller()` (`mcp/caller.py`) inside `tool_errors()`; the assistant's
+  use cases get it from the run.
+- A REST body or query string is its own model without an owner (`NewExpense`, `ExpenseFilters`); the route builds the
+  message from it and the principal. Never make a message with an `owner_id` field the body of a route.
+- A new table that holds a person's data gets an `owner_id` column, indexed first in the indexes its reads use.

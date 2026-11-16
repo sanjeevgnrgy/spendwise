@@ -8,6 +8,7 @@ import { toast } from "sonner"
 
 import { CategorySelect } from "@/features/categories"
 import { DEFAULT_CURRENCY } from "@/shared/api/contracts.gen"
+import { LabeledField } from "@/shared/components/labeled-field"
 import { messageOf } from "@/shared/lib/errors"
 import { todayIso } from "@/shared/lib/format"
 import { Button } from "@/shared/ui/button"
@@ -27,7 +28,6 @@ import { emptyDraft, isComplete, toNewExpense } from "../../expense-form"
 import { useTexts } from "../../i18n"
 import { useCreateExpense } from "../../queries"
 import { useExpenseDraft, type ExpenseDraftState } from "../../use-expense-draft"
-import { LabeledField } from "../fields/labeled-field"
 import { PaymentMethodSelect } from "../fields/payment-method-select"
 
 // A blank draft dated today. A function, so "today" is worked out each time the form starts again, not once.

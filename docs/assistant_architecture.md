@@ -111,7 +111,7 @@ those tools to the model, and runs every call through MCP (`call_tool`).
 | | |
 |---|---|
 | **In-process (default)** | The MCP SDK's `Client` connects to this app's `MCPServer` object directly: same protocol and tools, no network, no request to our own port |
-| **Remote** | With `MCP_URL` set, the same client speaks Streamable HTTP to another server, sending `MCP_TOKEN` as a bearer token |
+| **For one person** | Each run binds the tools to the signed-in person (`acting_for`); the MCP server's caller is set to them around every call, so the tools read and change only their expenses, whatever the model asks (D191) |
 | **Typed results** | Each tool returns a Pydantic model (`ExpenseSaved`, `MonthSpending`, ...): the client gets `structuredContent` for cards, and the text for the model |
 | **"Did data change?"** | From each tool's MCP annotations (`read_only_hint`): a tool that may change data and succeeded raises `dataVersion`, so the pages reload |
 | **Errors** | A tool error ("Unknown category 'Snacks'") goes back to the model as an error result, so it can fix its call. If the tools are unreachable mid-turn, the model is told so and tells the user |

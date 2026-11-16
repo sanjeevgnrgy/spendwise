@@ -16,6 +16,7 @@ from pydantic import Field
 
 from app.core.cqrs import MessageBus
 from app.modules import expenses
+from app.modules.mcp.caller import current_caller
 from app.modules.mcp.contracts import ExpenseSearch, ToolName
 from app.modules.mcp.tools.support import READS_ONLY, given, tool_errors
 from app.modules.mcp.views import ExpenseViews, to_view
@@ -47,17 +48,17 @@ def register_list_expenses(server: MCPServer, bus: MessageBus, views: ExpenseVie
     ) -> ExpenseSearch:
         with tool_errors():
             category_name = given(category)
-            found = bus.ask(
-                expenses.ListExpenses(
-                    start_date=given(start_date),
-                    end_date=given(end_date),
-                    category_id=views.category_id(category_name) if category_name else None,
-                    merchant=given(merchant),
-                    search=given(search),
-                    # The database stops after MAX_ROWS and counts the rest, instead of sending every row.
-                    limit=MAX_ROWS,
-                )
+            filters = expenses.ExpenseFilters(
+                start_date=given(start_date),
+                end_date=given(end_date),
+                category_id=views.category_id(category_name) if category_name else None,
+                merchant=given(merchant),
+                search=given(search),
+                # The database stops after MAX_ROWS and counts the rest, instead of sending every row.
+                limit=MAX_ROWS,
             )
+            # Only the caller's expenses are ever listed (caller.py, D191).
+            found = bus.ask(expenses.ListExpenses(owner_id=current_caller(), filters=filters))
             names = views.category_names()
             return ExpenseSearch(
                 count=found.total,

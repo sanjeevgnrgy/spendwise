@@ -61,104 +61,121 @@ class Assistant:
     llm: ToolCallingModel
     receipts: receipts.ReceiptExtractor
 
-    def _next_turn(self, thread_id: str) -> int:
-        """The number the thread's next turn gets: 1 for a new thread."""
-        return (self.bus.ask(conversations.GetLastTurn(thread_id=thread_id)) or 0) + 1
+    def _next_turn(self, owner_id: int, thread_id: str) -> int:
+        """The number the owner's thread's next turn gets: 1 for a new thread."""
+        return (self.bus.ask(conversations.GetLastTurn(owner_id=owner_id, thread_id=thread_id)) or 0) + 1
 
-    def _save(self, thread_id: str, turn: int, finished: TurnFinished) -> None:
-        """Store a finished turn's messages as turn number `turn` of the thread, in one transaction."""
+    def _save(self, owner_id: int, thread_id: str, turn: int, finished: TurnFinished) -> None:
+        """Store a finished turn's messages as turn number `turn` of the owner's thread, in one transaction."""
         # Saved only when the turn completed, so a failed run leaves no half-turn behind.
-        self.bus.execute(conversations.AppendTurn(thread_id=thread_id, turn=turn, messages=finished.messages))
+        save = conversations.AppendTurn(owner_id=owner_id, thread_id=thread_id, turn=turn, messages=finished.messages)
+        self.bus.execute(save)
 
-    def _request_approval(self, thread_id: str, expense: ExpenseView) -> str:
-        """Record a new delete card for this thread, showing `expense`, and return its id.
+    def _request_approval(self, owner_id: int, thread_id: str, expense: ExpenseView) -> str:
+        """Record a new delete card for the owner's thread, showing `expense`, and return its id.
 
         The web panel calls this (as its `request_approval`) just before it sends the card. The id is random,
         so it can't be guessed from another card's; the record is committed at once, on its own.
         """
         approval_id = f"{APPROVAL_PREFIX}_{uuid4().hex}"
+        snapshot = ExpenseSnapshot.of(expense)
         self.bus.execute(
-            RequestApproval(thread_id=thread_id, approval_id=approval_id, expense=ExpenseSnapshot.of(expense))
+            RequestApproval(owner_id=owner_id, thread_id=thread_id, approval_id=approval_id, expense=snapshot)
         )
         return approval_id
 
     def _answer(
-        self, thread_id: str, text: str, today: date, surface: Surface, language: Language
+        self, owner_id: int, thread_id: str, text: str, today: date, surface: Surface, language: Language
     ) -> Iterator[AgentEvent]:
-        """Answer one message in a thread on `surface`, saving the turn when it finishes. Yields its events.
+        """Answer one message in the owner's thread on `surface`, saving the turn when it finishes. Yields its
+        events.
 
-        `language` is the request's: the model is asked to reply in it, and the server writes its own texts in it.
+        The agent's tools act for the owner: whatever the model asks (even an id that's another person's, say
+        from text injected into a message), it reads and changes only their expenses (D191). `language` is the
+        request's: the model is asked to reply in it, and the server writes its own texts in it.
         """
-        turn = self._next_turn(thread_id)
+        turn = self._next_turn(owner_id, thread_id)
         # Only the last few turns are sent. Older ones stay stored, but the model no longer sees them.
         # Whole turns, so a tool call is never cut off from its result.
-        history = self.bus.ask(conversations.GetHistory(thread_id=thread_id, from_turn=turn - MAX_HISTORY_TURNS))
-        for event in Agent(llm=self.llm, tools=self.tools).run(text, today, history, surface, language):
+        since = turn - MAX_HISTORY_TURNS
+        history = self.bus.ask(conversations.GetHistory(owner_id=owner_id, thread_id=thread_id, from_turn=since))
+        agent = Agent(llm=self.llm, tools=self.tools.acting_for(owner_id))
+        for event in agent.run(text, today, history, surface, language):
             if isinstance(event, TurnFinished):
-                self._save(thread_id, turn, event)
+                self._save(owner_id, thread_id, turn, event)
             yield event
 
-    def run_turn(self, thread_id: str, text: str, today: date, language: Language) -> Iterator[AgentEvent]:
-        """Answer one message in the web panel, in `language` (an unknown thread starts a new conversation).
+    def run_turn(
+        self, owner_id: int, thread_id: str, text: str, today: date, language: Language
+    ) -> Iterator[AgentEvent]:
+        """Answer one of the owner's messages in the web panel, in `language`. A thread they don't have yet starts
+        a new conversation, even if another person uses the same id: threads are per person (D190).
 
         There, forms and cards are shown, and every delete waits for the user's Approve on a card
         recorded in this thread.
         """
-        panel = WebPanel(request_approval=lambda expense: self._request_approval(thread_id, expense))
-        return self._answer(thread_id, text, today, panel, language)
+        panel = WebPanel(request_approval=lambda expense: self._request_approval(owner_id, thread_id, expense))
+        return self._answer(owner_id, thread_id, text, today, panel, language)
 
     def read_receipt(
-        self, thread_id: str, receipt_id: int, message: str, today: date, language: Language
+        self, owner_id: int, thread_id: str, receipt_id: int, message: str, today: date, language: Language
     ) -> Iterator[AgentEvent]:
         """A receipt attached in the web panel (with `message`, possibly empty): read it and offer it as the expense
         form, pre-filled, saving the turn when it finishes. No agent loop: a person confirms the form first.
 
-        Raises NotFoundError for an unknown receipt and LlmError if it can't be read (receipt_turn.py).
+        Raises NotFoundError for a receipt the owner doesn't have and LlmError if it can't be read (receipt_turn.py).
         """
-        turn = self._next_turn(thread_id)
-        for event in receipt_turn(self.receipts, self.tools, receipt_id, message, today, language):
+        turn = self._next_turn(owner_id, thread_id)
+        tools = self.tools.acting_for(owner_id)
+        for event in receipt_turn(self.receipts, tools, owner_id, receipt_id, message, today, language):
             if isinstance(event, TurnFinished):
-                self._save(thread_id, turn, event)
+                self._save(owner_id, thread_id, turn, event)
             yield event
 
-    def decide(self, thread_id: str, approval_id: str, approved: bool, language: Language) -> Iterator[AgentEvent]:
+    def decide(
+        self, owner_id: int, thread_id: str, approval_id: str, approved: bool, language: Language
+    ) -> Iterator[AgentEvent]:
         """Approve or Cancel on a delete card. WHAT gets deleted is the server's snapshot of that card.
 
         The whole decision (take the card, check, delete, save the turn) is carried out before the first
         event goes out. Nothing is left half done if the browser disconnects while reading, and on an error
-        the card is put back at once, in this same thread. The reply is written in `language`.
+        the card is put back at once, in this same thread. Only the owner's own card is found (another person's is
+        unknown, D190), and the delete runs with tools acting for them. The reply is written in `language`.
         """
-        card = self.bus.execute(TakeApproval(thread_id=thread_id, approval_id=approval_id))
+        card = self.bus.execute(TakeApproval(owner_id=owner_id, thread_id=thread_id, approval_id=approval_id))
         try:
-            turn = self._next_turn(thread_id)
-            events = list(approval_turn(card.expense if card else None, approved, self.tools, language))
+            turn = self._next_turn(owner_id, thread_id)
+            tools = self.tools.acting_for(owner_id)
+            events = list(approval_turn(card.expense if card else None, approved, tools, language))
             finished = events[-1]
             assert isinstance(finished, TurnFinished)
-            self._save(thread_id, turn, finished)
+            self._save(owner_id, thread_id, turn, finished)
         except Exception:
             if card is not None:
                 # The decision failed midway: put the card back as it was, so pressing Approve again works.
                 # If the expense was deleted after all, Approve's check will find it gone.
                 logger.warning("approval %s not completed; putting the card back", approval_id)
-                self.bus.execute(RestoreApproval(thread_id=thread_id, approval_id=approval_id, card=card))
+                restore = RestoreApproval(owner_id=owner_id, thread_id=thread_id, approval_id=approval_id, card=card)
+                self.bus.execute(restore)
             raise
         yield from events
 
     def chat(
-        self, message: str, thread_id: str | None, today: date, language: Language
+        self, owner_id: int, message: str, thread_id: str | None, today: date, language: Language
     ) -> tuple[str, TurnFinished]:
         """POST /chat: the whole reply at once, in text only. Unlike AG-UI, the server names threads here.
 
         The model is asked to reply in `language`, and the server writes its own texts in it. Returns the thread id
-        and the finished turn. Raises NotFoundError for a thread id it doesn't know.
+        and the finished turn. Raises NotFoundError for a thread id the owner doesn't have (another person's
+        included: it isn't revealed, D190).
         """
         if thread_id is None:
             thread_id = new_thread_id()
-        elif self.bus.ask(conversations.GetLastTurn(thread_id=thread_id)) is None:
+        elif self.bus.ask(conversations.GetLastTurn(owner_id=owner_id, thread_id=thread_id)) is None:
             # A typo'd id should be an error, not a silent new conversation.
             raise NotFoundError(translatable(conversations.ConversationText.THREAD_NOT_FOUND, thread_id=thread_id))
         finished = None
-        for event in self._answer(thread_id, message, today, TextChat(), language):
+        for event in self._answer(owner_id, thread_id, message, today, TextChat(), language):
             if isinstance(event, TurnFinished):
                 finished = event
         if finished is None:  # can't happen: the agent always ends with one

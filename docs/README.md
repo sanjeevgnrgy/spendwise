@@ -25,7 +25,7 @@ it's built that way.
 | [assistant_architecture.md](assistant_architecture.md) | The agent loop, tools over MCP, AG-UI streaming, A2UI cards and forms, approvals, memory, cost |
 | [how_spendwise_works.md](how_spendwise_works.md) | The main flows as diagrams: adding an expense, the Dashboard, asking, deleting with approval, staying in sync |
 | [architecture-review.md](architecture-review.md) | Every finding of the architecture review and the two code reviews, and how each was resolved |
-| [decisions.md](decisions.md) | Every design decision (D1–D183), with why, and when to revisit it |
+| [decisions.md](decisions.md) | Every design decision (D1–D194), with why, and when to revisit it |
 
 ## Developer guides
 
@@ -79,7 +79,9 @@ it, and design questions with their answers (collapsed). Later changes are noted
 | [phases/phase-19-languages.md](phases/phase-19-languages.md) | Translating a web app: namespaces and keys, plurals and placeholders, loading a language on demand, numbers and dates per locale, English and Hindi |
 | [phases/phase-20-languages-server.md](phases/phase-20-languages-server.md) | The server's side of translation: Accept-Language, typed catalogs checked at startup, errors written where the response is built, CLDR money and dates, telling the model which language to reply in |
 | [phases/phase-21-receipts.md](phases/phase-21-receipts.md) | Receipt scanning: the receipts module (uploads checked by their bytes, files kept apart from the database, Gemini reading an image or a PDF into a schema, the receipt's text treated as data), and a receipt attached in the chat offered as the expense form to confirm |
-| [phases/phase-22-sign-in.md](phases/phase-22-sign-in.md) | Signing in (in progress): the backend-for-frontend pattern (the session on the server, one HttpOnly cookie in the browser), standard OpenID Connect so the identity provider can be replaced; Part 1, one origin with no CORS; Part 2, the backend: the sign-in port and OIDC adapter, the accounts module, server-side sessions, the X-CSRF header |
+| [phases/phase-22-sign-in.md](phases/phase-22-sign-in.md) | Signing in (in progress): the backend-for-frontend pattern (the session on the server, one HttpOnly cookie in the browser), standard OpenID Connect so the identity provider can be replaced; Part 1, one origin with no CORS; Part 2, the backend: the sign-in port and OIDC adapter, the accounts module, server-side sessions, the X-CSRF header; Part 3, the web app: the sign-in page, the session check in front of the signed-in pages, the user menu |
+| [phases/phase-23-per-person-data.md](phases/phase-23-per-person-data.md) | Each person's own data: an owner on every row, checked in the same statement that reads it (protection against BOLA), the assistant's tools bound to the signed-in person, MCP acting for a person through personal access tokens, the account routes (sessions, tokens), migration 0007; pages that never outlive their person, the Settings page; security headers; rate limits on the model-backed routes |
+| [phases/refactor-nextjs.md](phases/refactor-nextjs.md) | The move to Next.js for search engines: App Router routes with server-rendered metadata, robots.txt and a sitemap, the signed-in app behind one client boundary, the API rewrite and its proxy settings, a real 404 |
 | [phases/refactor-solid.md](phases/refactor-solid.md) | SOLID in practice (surfaces instead of flags, tool and component registries, narrow ports), testability seams and how behaviour was recorded, scalability work and limits |
 | [phases/refactor-architecture.md](phases/refactor-architecture.md) | CQRS and the unit of work, ports and adapters, feature slices, migrations, the generated contract; then the code-review fixes (versions, transactional SQLite) |
 

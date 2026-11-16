@@ -11,6 +11,7 @@ from sqlalchemy import func
 from sqlmodel import col, select
 
 from app.core.cqrs import Context, Query
+from app.core.ids import UserId
 from app.core.money import DEFAULT_CURRENCY, CurrencyCode
 from app.core.months import YearMonth
 from app.modules import categories
@@ -40,14 +41,16 @@ class MonthlySummary(Totalled):
 # Asked by GET /summary and by MCP's get_summary (for the month asked about and the one before). The
 # month is a YearMonth value, so the handler can work out where it ends.
 class GetMonthlySummary(Query[MonthlySummary]):
-    """One month's total, and the total per category (one currency at a time: totals can't mix them)."""
+    """One month's total of the owner's expenses, and the total per category (one currency at a time: totals
+    can't mix them)."""
 
+    owner_id: UserId
     month: YearMonth
     currency: CurrencyCode = DEFAULT_CURRENCY
 
 
 def get_monthly_summary(ctx: Context, query: GetMonthlySummary) -> MonthlySummary:
-    """One month's spending in one currency: the total, and the total per category, biggest first.
+    """One month of the owner's spending in one currency: the total, and the total per category, biggest first.
 
     The database groups by category and adds up (GROUP BY, COUNT, SUM); Python only names the
     categories, sorts the few groups and adds them up for the month. A category that no longer exists
@@ -55,7 +58,7 @@ def get_monthly_summary(ctx: Context, query: GetMonthlySummary) -> MonthlySummar
     """
     statement = (
         select(Expense.category_id, func.count(col(Expense.id)), func.sum(Expense.amount_minor))
-        .where(*in_month_range(query.month.first_day(), query.month.shift(1).first_day(), query.currency))
+        .where(*in_month_range(query.owner_id, query.month.first_day(), query.month.shift(1).first_day(), query.currency))
         .group_by(col(Expense.category_id))
     )
     # Names come from the categories module, through its query: its table isn't ours to read.

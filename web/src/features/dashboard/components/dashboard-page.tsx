@@ -1,6 +1,7 @@
-// A component of the dashboard feature: the Dashboard page, the feature's main export (app/pages.tsx routes to
-// it, through the lazy DashboardPage in index.ts). It loads the month's summary, the trend, the newest expenses
-// and the category names together, and lays out the stat cards, the two charts and the recent list.
+// A component of the dashboard feature: the Dashboard page, the feature's main export (its route file,
+// app/(client)/(app)/page.tsx, draws it, through the lazy DashboardPage in index.ts). It loads the month's summary, the
+// trend, the newest expenses and the category names together, and lays out the stat cards, the two charts and the
+// recent list.
 
 import { useCategories } from "@/features/categories"
 import { useExpenses } from "@/features/expenses"

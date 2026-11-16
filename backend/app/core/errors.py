@@ -81,3 +81,15 @@ class ForbiddenError(AppError):
     status = 403
     slug = "forbidden"
     title = "Forbidden"
+
+class TooManyRequestsError(AppError):
+    """The person has used up an allowance (the model-backed routes' rate limit, D194): try again later."""
+
+    status = 429
+    slug = "too-many-requests"
+    title = "Too many requests"
+
+    def __init__(self, message: str | Translatable, retry_after_seconds: int) -> None:
+        """A refusal with `message` as its detail, and how many seconds until it's worth trying again."""
+        super().__init__(message)
+        self.retry_after_seconds = retry_after_seconds

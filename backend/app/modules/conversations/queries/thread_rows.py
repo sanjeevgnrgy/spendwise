@@ -10,11 +10,18 @@ from app.core.cqrs import Context
 from app.modules.conversations.persistence.tables import ConversationMessage
 
 
-def thread_rows(ctx: Context, thread_id: str, from_turn: int = 1) -> list[ConversationMessage]:
-    """The thread's rows from turn `from_turn` on, in the order they were stored (id order)."""
+def thread_rows(ctx: Context, owner_id: int, thread_id: str, from_turn: int = 1) -> list[ConversationMessage]:
+    """The owner's thread's rows from turn `from_turn` on, in the order they were stored (id order).
+
+    Another person's thread with the same id is never read: a thread is its owner and its id together (D190).
+    """
     statement = (
         select(ConversationMessage)
-        .where(ConversationMessage.thread_id == thread_id, ConversationMessage.turn >= from_turn)
+        .where(
+            ConversationMessage.owner_id == owner_id,
+            ConversationMessage.thread_id == thread_id,
+            ConversationMessage.turn >= from_turn,
+        )
         .order_by(col(ConversationMessage.id))
     )
     return list(ctx.session.exec(statement))

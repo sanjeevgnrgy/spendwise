@@ -5,16 +5,16 @@ calls into commands and queries for the expenses and categories modules.
 
 Inside: contracts.py (names and typed results), server.py (assembles the server), tools/ (the tools, one
 file each, and support.py: what they share), resources.py, views.py (expenses as the tools show them),
-http.py (the HTTP endpoint and its bearer token), module.py (for bootstrap).
+caller.py (who a request acts for), http.py (the HTTP endpoint and its access-token check), module.py (for
+bootstrap). Every tool acts for one person, its caller, and touches only their expenses (D191).
 
-Public interface, for other modules (the assistant): the contract below (tool and argument names,
-resource addresses, the typed results). Importing it loads no server code. The composition root
-builds the server through module.py.
+Public interface, for other modules (the assistant) and the stdio server: the contract below (tool and argument
+names, resource addresses, the typed results) and how to set the caller (acting_for, act_for_process). Importing it
+loads no server code. The composition root builds the server through module.py.
 """
 
+from app.modules.mcp.caller import CallerLookup, act_for_process, acting_for
 from app.modules.mcp.contracts import (
-    AUTHORIZATION_HEADER,
-    BEARER_SCHEME,
     CLEAR_NOTE_ARGUMENT,
     CONFIRM_ARGUMENT,
     EXPECTED_VERSION_ARGUMENT,
@@ -32,8 +32,6 @@ from app.modules.mcp.contracts import (
 )
 
 __all__ = [
-    "AUTHORIZATION_HEADER",
-    "BEARER_SCHEME",
     "CLEAR_NOTE_ARGUMENT",
     "CONFIRM_ARGUMENT",
     "EXPECTED_VERSION_ARGUMENT",
@@ -48,4 +46,7 @@ __all__ = [
     "MonthSpending",
     "ResourceUri",
     "ToolName",
+    "CallerLookup",
+    "act_for_process",
+    "acting_for",
 ]

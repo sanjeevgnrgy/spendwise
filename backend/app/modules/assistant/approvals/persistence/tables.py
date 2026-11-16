@@ -26,12 +26,15 @@ class PendingApproval(SQLModel, table=True):
 
     # The card's surface id: what the browser sends back with the click.
     approval_id: str = Field(primary_key=True, max_length=APPROVAL_ID_LENGTH)
-    # The conversation it belongs to: a card can only be answered in its own thread.
+    # Whose card it is (core.ids.UserId; no foreign key: the users table is the accounts module's). Only they can
+    # answer it, and the cap on remembered cards counts each person's alone (D190).
+    owner_id: int = Field(index=True)
+    # The conversation it belongs to: a card can only be answered in its own thread (of its owner's).
     thread_id: str = Field(index=True, max_length=THREAD_ID_MAX_LENGTH)
     # The expense exactly as the card showed it (ExpenseSnapshot, in approvals/models.py). Approve deletes only
     # that version.
     expense: dict[str, Any] = Field(sa_type=JSON)
-    # When the card was shown. Cards expire TTL_MINUTES after it, and beyond MAX_PENDING the oldest are
+    # When the card was shown. Cards expire TTL_MINUTES after it, and beyond MAX_PENDING a person's oldest are
     # forgotten (approvals/store.py); indexed for both. A card put back after a failed decision keeps this time.
     created_at: datetime = Field(index=True, sa_type=DateTime(timezone=True))
 

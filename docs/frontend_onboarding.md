@@ -1,15 +1,18 @@
 # Frontend Onboarding
 
-A working guide to the web app (`web/`): React 19, TypeScript 7, Vite 8, Tailwind 4 and shadcn/ui, organised as
-**feature slices**, with server data through **TanStack Query** and a client **generated from the backend**.
+A working guide to the web app (`web/`): Next.js 16 (App Router), React 19, TypeScript 7, Tailwind 4 and shadcn/ui,
+organised as **feature slices**, with server data through **TanStack Query** and a client **generated from the
+backend**. Next.js 16 differs from older versions: its docs ship in `node_modules/next/dist/docs/`.
 
 ## Running it
 
 ```powershell
 cd web
 npm install          # first time, and after package.json changes
-npm run dev          # http://localhost:5173; it forwards /api/v1 to the backend on :8000 (one origin, D184)
-npm run build        # type-check (tsc -b) and build into dist/
+npm run dev          # http://localhost:5173 (next dev); it forwards /api/v1 to the backend on :8000 (one origin)
+npx tsc -b           # type-check
+npm run build        # next build: type-check again, then build into .next/
+npm run start        # next start: serve that build on :5173 (set API_PROXY_TARGET before building, not after)
 npx oxlint           # lint, including the feature-slice import rules
 npm run gen:api      # regenerate API types from openapi.json (after the backend's export script)
 ```
@@ -18,24 +21,33 @@ npm run gen:api      # regenerate API types from openapi.json (after the backend
 
 ```
 src/
-  app/                  composes the app; the only place that knows every feature
-    main.tsx            entry: starts i18next, then root error boundary, providers, <App />
-    providers.tsx       TanStack Query, theme, tooltips, router, the assistant, toasts
-    query-client.ts     the cache, retry rules, and THE "expenses changed" refresh rule
-    pages.tsx           every page once: path, name, icon, element (router and menu both use it)
-    namespaces.ts       the texts loaded at boot (the frame's; shared/'s "common" is always added)
-    i18n/               the frame's own texts: menu, page names, top bar, error titles
-    app.tsx             the routes
-    layout/             sidebar, top bar, the page area (with its error boundary), the chat panel's place
+  app/                  Next's route folder, and the composition: the only place that knows every feature
+    layout.tsx          the root document (server): metadata, theme boot script, stylesheet
+    not-found.tsx       every unknown address: a 404, "Page not found" drawn in the browser
+    robots.ts, sitemap.ts   for search engines: only public pages
+    (client)/           pages drawn in the browser: layout.tsx renders ClientRoot
+      (app)/            the signed-in routes: layout.tsx (the session check, then the frame), page.tsx (Dashboard),
+                        expenses/, budgets/...
+      sign-in/          the public sign-in page
+    _shell/             client-root.tsx (starts i18next, then the root error boundary and providers), providers.tsx
+                        (TanStack Query, theme, tooltips, the assistant, toasts), query-client.ts (the cache, retry
+                        rules, THE "expenses changed" refresh rule), namespaces.ts (the texts loaded at boot)
+    _frame/             app-layout.tsx (top bar, page area, chat panel's place), app-sidebar.tsx, pages.tsx (the menu)
+    _views/             client-pages.ts (the pages the route files draw), placeholder-pages.tsx
+    _i18n/              the frame's own texts: menu, page names, top bar, error titles
+    _seo/               seo.ts: site address, metadata for public and signed-in pages
+    _styles/            index.css
   features/
     expenses/           Expenses page: table, edit row, add & delete dialogs, filters
     categories/         categories API + queries, CategorySelect, category names
     dashboard/          Dashboard page: stat cards, charts, recent list
     assistant/          chat panel, conversation model, AG-UI stream, A2UI renderer
+    auth/               sign-in page, the session check in front of the signed-in pages (AuthGate), user menu
+    account/            the Settings page: profile, where you're signed in, access tokens
   shared/               used by any feature; knows none of them
     api/                typed HTTP client (http.ts) + generated contract (*.gen.ts)
     ui/                 shadcn/ui components (generated source; edit freely)
-    components/         error boundary, section error, refresh notice, empty state, placeholder page
+    components/         error boundary, section error, refresh notice, empty state, placeholder page, labeled field
     config/             app name, routes, data scopes
     i18n/               languages and their locales, i18next setup, language menu, the "common" texts
     hooks/, lib/        use-mobile, use-debounced-value; formatting, guards, errors, ids
@@ -70,7 +82,8 @@ features/expenses/
     table/             the table, its columns and sort button, the toolbar, the edit row and its editor hook
     dialogs/           Add expense, Delete expenses
     filters/           the filters bar
-    fields/            form controls shared by the dialogs, the edit row and the filters
+    fields/            form controls shared by the dialogs, the edit row and the filters (a label and its
+                       control, LabeledField, is shared/components')
   i18n/
     en.ts              every text the feature shows, in English (the source, and the keys' type)
     hi.ts              the same keys in Hindi
@@ -129,12 +142,12 @@ export function useExpenses(filters: ExpenseFilters) {
 export function useCreateExpense() {
   return useMutation({ mutationFn: createExpense, meta: { changes: DATA_SCOPES.expenses } })
 }
-// app/query-client.ts: a MutationCache onSettled → refreshAfter(client, meta.changes)
+// app/_shell/query-client.ts: a MutationCache onSettled → refreshAfter(client, meta.changes)
 //   → invalidates every key that STALE_AFTER lists for that scope (expenses and the Dashboard)
 ```
 
-The assistant uses the same rule: on a `STATE_SNAPSHOT` it calls `onDataChanged`, which `app/providers.tsx` wires to
-`refreshAfter(queryClient, DATA_SCOPES.expenses)`. So no feature needs to know which pages show expenses, and a new
+The assistant uses the same rule: on a `STATE_SNAPSHOT` it calls `onDataChanged`, which `app/_shell/providers.tsx` wires
+to `refreshAfter(queryClient, DATA_SCOPES.expenses)`. So no feature needs to know which pages show expenses, and a new
 data scope without an entry in `STALE_AFTER` is a compile error.
 
 Never fetch in a `useEffect` by hand: use a query.
@@ -151,6 +164,24 @@ Never fetch in a `useEffect` by hand: use a query.
 `messageOf` shows only a message written for people: an `ApiError` (the server's `detail`), an `AgentRunError`, or a
 `UserFacingError` with one of our texts. Anything else (a crash) shows the common "Something went wrong" text, and
 `reportUnexpected` logs it to the console (D180). So throw `UserFacingError` for a message a person should read.
+
+## Signing in
+
+The session is a cookie the page can't read (HttpOnly), so the web app never handles a token: it asks the server who
+is signed in (`GET /auth/user`, the auth feature's `useSignedInUser`) and gets a person or `null` (D186, D189).
+
+- **Every page in `app/(client)/(app)/` is behind `AuthGate`** (that group's layout): nobody signed in goes to
+  `/sign-in?return_to=<the page>`. A new signed-in page needs nothing extra.
+- **A feature never handles a 401 itself.** The query client (`app/_shell/query-client.ts`) asks who is signed in
+  again after any query's or mutation's 401, and the gate sends the person to sign in.
+- **Signing in and out are navigations**, not API calls: the sign-in page's buttons are links to the backend's login
+  route, and the user menu's Sign out opens the `logout_url` from `/auth/user`.
+- Every API call carries `X-CSRF: 1` (`apiHeaders()`): `api` adds it; a direct `fetch` spreads `apiHeaders()` in.
+- **A page never outlives its person** (D192): when the session ends, or someone else signs in in another tab, the
+  gate unloads the page (a full navigation or a reload), so nothing of the previous person stays in memory. Keep a
+  person's data in memory or on the server, never in browser storage, and this keeps working by itself.
+- **Everything is the person's own on the server** (D190): a feature never sends an owner, and an id that isn't
+  theirs comes back as a 404. Links the server sends are followed only if they stay on this site (`ownSitePath`).
 
 ## The generated contract
 
@@ -204,9 +235,14 @@ How it works end to end: [assistant_architecture.md](assistant_architecture.md).
      return { default: page }
    })
    ```
-2. Add its address to `shared/config/routes.ts`.
-3. Add one entry to `PAGES` in `app/pages.tsx` (path, name, icon, element), and the page's name under `pages` in
-   `app/i18n/en.ts` and every other language's file. The router and the sidebar both follow.
+2. Re-export it from `app/_views/client-pages.ts` (the client boundary the route files draw pages through).
+3. Add its address to `shared/config/routes.ts`, and its route file, `app/(client)/(app)/budgets/page.tsx`: a server
+   component that exports `metadata` (`privatePage(en.pages.budgets)` from `app/_seo/seo.ts`, so it isn't indexed)
+   and returns `<BudgetsPage />`. Being in `(app)/`, it's behind the session check. A public page goes in
+   `app/(client)/` instead, beside `(app)/`, with `publicPage(title, path)`, and its path joins `PUBLIC_PATHS` in
+   `app/_seo/seo.ts` (robots.txt allows it, the sitemap lists it).
+4. Add one entry to `PAGES` in `app/_frame/pages.tsx` (path, name, icon) for the menu, and the page's name under
+   `pages` in `app/_i18n/en.ts` and every other language's file.
 
 ### Add a feature
 
@@ -216,7 +252,7 @@ with `meta.changes`), `components/`, and `i18n/` (copy another feature's three f
 Its page's lazy loader in `index.ts` loads its texts with its code:
 `Promise.all([import("./components/x-page"), loadNamespaces(xTexts)])`, plus any other feature's namespace the page
 draws (the Expenses page loads `categoriesTexts` for CategorySelect). If its changes should refresh other data, add a
-scope to `shared/config/data-scopes.ts` and its entry to `STALE_AFTER` in `app/query-client.ts` (the compiler
+scope to `shared/config/data-scopes.ts` and its entry to `STALE_AFTER` in `app/_shell/query-client.ts` (the compiler
 insists).
 
 ### Add an API call

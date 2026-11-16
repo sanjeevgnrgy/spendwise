@@ -158,3 +158,7 @@ Unreachable means no answer at all. If that happens before the loop, the agent c
 replies with an apology without calling Gemini. If it happens during a call, Gemini is told the tools are
 unreachable and passes that on to the user.
 </details>
+
+> **Later changes (Phase 23, D191):** `MCP_URL` and `MCP_TOKEN` are gone. The assistant always calls this app's MCP
+> server in-process, and each run binds the tools to the signed-in person. See
+> [phase-23-per-person-data.md](phase-23-per-person-data.md).

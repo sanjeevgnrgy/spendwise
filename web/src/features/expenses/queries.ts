@@ -17,7 +17,7 @@ const EXPENSES_ROOT = ["expenses"] as const
 
 /**
  * TanStack Query keys: every expense list is filed under ["expenses", ...]. Marking `all` out of date
- * (app/query-client.ts does) reloads every list on screen, whatever its filters.
+ * (app/_shell/query-client.ts does) reloads every list on screen, whatever its filters.
  */
 export const expenseKeys = {
   all: EXPENSES_ROOT,
@@ -30,7 +30,7 @@ export const expenseKeys = {
 }
 
 // Every mutation here says it changed expenses (`meta.changes`). What that makes out of date (these
-// lists, the Dashboard's totals...) is decided once, by the app (app/query-client.ts), not here.
+// lists, the Dashboard's totals...) is decided once, by the app (app/_shell/query-client.ts), not here.
 const CHANGES_EXPENSES = { changes: DATA_SCOPES.expenses }
 
 /**

@@ -110,6 +110,17 @@ export const AUTH = {
   }
 } as const
 
+export const ACCOUNT = {
+  "tokenNameLength": 50,
+  "maxTokens": 10,
+  "tokenLifetimeDays": [
+    30,
+    90,
+    365
+  ],
+  "defaultTokenLifetimeDays": 90
+} as const
+
 export const AGUI = {
   "customEvents": {
     "a2ui": "a2ui"

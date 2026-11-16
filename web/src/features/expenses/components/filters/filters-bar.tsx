@@ -5,12 +5,12 @@
 import { Search, X } from "lucide-react"
 
 import { ANY_CATEGORY, CategorySelect } from "@/features/categories"
+import { LabeledField } from "@/shared/components/labeled-field"
 import { Button } from "@/shared/ui/button"
 import { Input } from "@/shared/ui/input"
 
 import type { ExpenseFilters } from "../../api"
 import { useTexts } from "../../i18n"
-import { LabeledField } from "../fields/labeled-field"
 
 interface FiltersBarProps {
   /** The filters as they are now (the page's state). */

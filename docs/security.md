@@ -2,22 +2,22 @@
 
 What protects SpendWise today, why, and what's still missing before it could run anywhere but your own machine.
 
-**Scope today:** people sign in through an identity provider (Phase 22), but everyone signed in shares one set of
-expenses until Phase 23 makes data per-user, so the provider must let in only people who should see them. The
-backend listens on `127.0.0.1`, the web app on `localhost`. The last section lists what a deployment still needs.
+**Scope today:** people sign in through an identity provider (Phase 22), and each person's data is their own
+(Phase 23): every object is checked against its owner. The backend listens on `127.0.0.1`, the web app on
+`localhost`. The last section lists what a deployment still needs.
 
 ## Secrets
 
 | Measure | How |
 |---|---|
-| Kept out of code and git | `GEMINI_API_KEY`, `MCP_TOKEN`, `OIDC_CLIENT_SECRET` and `SESSION_ENCRYPTION_KEYS` live in `.env`, which is git-ignored; `.env.example` holds only names |
+| Kept out of code and git | `GEMINI_API_KEY`, `OIDC_CLIENT_SECRET` and `SESSION_ENCRYPTION_KEYS` live in `.env`, which is git-ignored; `.env.example` holds only names. Personal access tokens are shown once and stored only as their SHA-256 |
 | Never printed | settings hold them as `SecretStr` (masked when printed); the key is passed to the Gemini client explicitly and nowhere else |
-| Never in the browser | the web app has no secrets; anything in a `VITE_` variable would ship to every visitor, so none is used for secrets |
+| Never in the browser | the web app has no secrets; anything in a `NEXT_PUBLIC_` variable would ship to every visitor, so none is used; the Next.js server's own settings (`API_PROXY_TARGET`, `PUBLIC_URL`) aren't secrets either |
 | Checked before commits | each commit is checked so that the key's value doesn't appear in the staged changes, and no `.env` or `*.db` is staged |
 
 ## The browser and the API
 
-- **One origin, no CORS (D184):** the web app reaches the API on its own address (Vite's proxy in development, a
+- **One origin, no CORS (D184, D188):** the web app reaches the API on its own address (Next.js's rewrite, behind a
   reverse proxy in production), and the API sends no CORS headers. So the browser's same-origin policy keeps every
   other website from reading the API's answers, and refuses another site's requests that need a preflight (a JSON
   body, `PATCH`, `DELETE`) before they're sent. There's no allow-list to keep in step.
@@ -54,17 +54,70 @@ the backend is the client, and the browser never sees a token (D185, D186: the b
 | The provider's words reaching people | A failed sign-in goes to `/sign-in?error=<code>`, one of five codes; the details go to the server log only (D180) |
 | Sign-in half configured | Fail closed: while a setting is missing, nobody can sign in and every protected route answers 401 |
 | Flooding the sign-in with attempts | Attempts expire after 10 minutes and at most 500 are kept (the oldest go first) |
+| A page still showing data after the session ended | The web app keeps nothing of the session; any 401 makes it ask who is signed in and go to the sign-in page. Signing out is a navigation, so the page and its cached data are unloaded (D189) |
+| The provider's picture used against the page | It's shown only from an `http(s)` address, as an `<img>` (no script runs), with `referrerPolicy="no-referrer"`, so its host isn't told which page asked |
 
 Who may sign in at all is the provider's decision (with ZITADEL, a role in the project); `OIDC_REQUIRED_ROLE` lets
 SpendWise check a role too. The OpenID Connect and OAuth facts these rely on: [sources.md](sources.md#27-openid-connect-and-zitadel-phase-22).
+
+## Each person's own data (BOLA)
+
+Signing in says who is asking; it doesn't say which objects they may touch. Broken object level authorization, an
+API that serves any object whose id it's given, is OWASP's first API risk, and SpendWise's ids are sequential. So
+every object is checked against its owner, on the server, where it's read (D190):
+
+| Risk | Defence |
+|---|---|
+| Another person's id in a URL (`/expenses/12`, `/receipts/3`, `/threads/abc`) | the owner is in the same SQL statement as the id; another person's object is a 404 **identical** to a missing one, so a guess doesn't even reveal that it exists |
+| Naming an owner in a request (`owner_id` in a body or query string) | REST inputs are separate models from the messages and refuse unknown fields: a 422. The owner comes only from the session, a token or the signed-in run |
+| Finding, counting or adding up others' rows (search, filters, summaries) | every list, count and total filters on the owner first |
+| Reusing someone's conversation id | a thread is (owner, id): the same id is a new, empty conversation of one's own; `/chat` answers 404 |
+| Pressing someone's delete card | a card is taken only by its owner, in its thread; nothing is deleted or shown |
+| Telling the model to use someone else's ids (a message, text printed on a receipt) | the tools are bound to the signed-in person for each run; the model has no owner argument to fill |
+| One person filling a shared table to push out another's rows | the 200 delete-card cap counts per person |
+| Someone else's session or token id in Settings' routes | listed only for their owner; another person's is a 404 |
+
+The owner check is server-side only: nothing the browser does can widen it. The browser keeps its side too (D192):
+
+| Risk | Defence |
+|---|---|
+| One person's data still on screen (or in memory) after another signs in, in the same browser | the page is unloaded when its person changes: a full navigation to the sign-in page when the session ends, a reload when someone else signs in; tabs tell each other to ask the server again |
+| A link that leads off the site (`?return_to=https://evil.example`, a tampered sign-out link) | only paths on this site are followed (`ownSitePath`, `afterSignIn`); anything else goes to the start page |
+ A check that runs two people through
+every door is in the phase note ([phases/phase-23-per-person-data.md](phases/phase-23-per-person-data.md)).
+
+## Headers and caching (D193)
+
+| Where | Headers |
+|---|---|
+| every page (Next.js, `web/security-headers.ts`) | a Content-Security-Policy (this site's scripts, styles, fonts and requests only; pictures from this site or `https:`; `object-src 'none'`, `base-uri 'self'`, `form-action 'self'`, `frame-ancestors 'none'`), `X-Frame-Options: DENY`, `X-Content-Type-Options: nosniff`, `Referrer-Policy: same-origin`, a Permissions-Policy refusing camera, microphone, location, payment and USB, `Cross-Origin-Opener-Policy: same-origin`; over https, HSTS and `upgrade-insecure-requests` |
+| every backend answer (`web/security_headers.py`) | nosniff, `DENY`, `same-origin`; over https, HSTS |
+| the API and MCP's answers | also **`Cache-Control: no-store`** (a person's data never sits in a cache that could hand it to someone else) and `Content-Security-Policy: default-src 'none'; frame-ancestors 'none'` |
+
+## Rate limits (D194)
+
+The routes that call the model (`/agent`, `/chat`, `/parse`, reading a receipt) spend Gemini quota, so each person
+may make 10 such requests a minute and 300 a day (`MODEL_REQUESTS_PER_MINUTE`, `MODEL_REQUESTS_PER_DAY`). One more
+is a 429 problem with `Retry-After`, and never reaches the model. Counted per person, so one person can't use up
+another's allowance.
 
 ## MCP
 
 | Transport | Protection |
 |---|---|
-| stdio (`mcp_stdio.py`) | only the program that starts it (Inspector, Claude Desktop) can talk to it |
-| HTTP (`/mcp/`) | **off unless `MCP_TOKEN` is set**. Then: every request needs `Authorization: Bearer <token>`, compared in constant time (no timing leaks), scheme case-insensitive; and the SDK's **DNS-rebinding protection** refuses Host and Origin headers that aren't local (421/403), so a web page can't reach the tools through your browser |
-| in-process (the assistant) | no network at all: the assistant calls the MCP server object directly |
+| stdio (`mcp_stdio.py`) | only the program that starts it (Inspector, Claude Desktop) can talk to it, and it acts for the owner of the personal access token in `SPENDWISE_TOKEN`, checked on every tool call |
+| HTTP (`/mcp/`) | every request needs `Authorization: Bearer <personal access token>` (401 otherwise) and acts only for the token's owner; the SDK's **DNS-rebinding protection** refuses Host and Origin headers that aren't local (421/403), so a web page can't reach the tools through your browser |
+| in-process (the assistant) | no network at all: the assistant calls the MCP server object directly, for the signed-in person |
+
+Who a request acts for (its **caller**) is set by the transport, from the token or the run, never from the
+message: nothing in an MCP request can name a person (D191). Without a caller, every tool refuses.
+
+| Token risk | Defence |
+|---|---|
+| A copy of the database | only each token's SHA-256 is stored, with its last four characters as a hint; a hash can't be turned back into a token |
+| A forgotten or leaked token | every token expires (30, 90 or 365 days); revoking deletes it, and it stops working at once (stdio included); a switched-off person's tokens stop too; Settings shows when each was last used |
+| Guessing | 256 random bits; anything not shaped like a token isn't even looked up |
+| Seeing it again later | it's sent once, in the answer that makes it, with `Cache-Control: no-store`, and kept only in that dialog's state in the browser (never in its storage); closing the dialog forgets it |
 
 The MCP spec requires Streamable HTTP servers to validate `Origin` and recommends authentication
 ([sources.md](sources.md#10-mcp-python-sdk-230-in-process-clients-structured-output-http-security-refactor)).
@@ -132,11 +185,9 @@ Every backend and web dependency is pinned to an exact version (`requirements.tx
 
 | Gap | Why it matters | What to add |
 |---|---|---|
-| **No per-user data** | everyone signed in sees and changes the same expenses | an owner on every row (Phase 23); until then, let in only people who should see them (the provider's role check) |
-| **No sign-in page yet** | the API needs a session, but the web app can't start one (Part 3) | Phase 22, Part 3 |
 | **No HTTPS** | traffic, including the session cookie, would be readable | TLS at a reverse proxy; the cookie is Secure, so browsers send it only over HTTPS (and to `localhost`) |
-| **No security headers** | no Content-Security-Policy, HSTS, `X-Content-Type-Options`, `frame-ancestors` | set them at the proxy or in a middleware; a CSP also limits the damage of any future injection |
-| **No rate limiting** | the model-backed routes (`/chat`, `/agent`, `/parse`, `/receipts/{id}/extraction`) spend your Gemini quota | per-user/IP limits on those routes |
+| **One process's rate limit** | the model allowance (D194) is counted in memory: several server processes would each count separately | a shared counter (Redis) before running more than one |
+| **Inline scripts allowed** | the pages' CSP allows `'unsafe-inline'` scripts (Next.js's bootstrap), so it can't stop an injected inline script | a nonce-based CSP, if the pages are rendered per request anyway (D193) |
 | **No request-size limit** | an upload is spooled to a temporary file before the receipts route can refuse it, so a very large one uses disk and time | a body-size limit at the proxy (a little over 5 MB for `POST /receipts`) |
 | **Uploaded files are never deleted** | receipts accumulate in `UPLOADS_DIR` | a retention rule, or deleting a receipt once its expense is saved |
 | **SQLite file** | one machine, file permissions only | Postgres with a least-privilege database user |

@@ -1,5 +1,5 @@
 // Holds the assistant conversation above the pages, so it survives closing the panel and changing page. Public
-// (index.ts): app/providers.tsx wraps the app in it and decides what `onDataChanged` reloads. It stays in the
+// (index.ts): app/_shell/providers.tsx wraps the app in it and decides what `onDataChanged` reloads. It stays in the
 // main bundle; only the panel's code is loaded separately (components/lazy-chat-panel.tsx).
 
 import { useCallback, useEffect, useRef, type ReactNode } from "react"

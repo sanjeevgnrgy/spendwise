@@ -2,7 +2,8 @@
 
 A thread is a list of turns. A turn is one user message and everything up to the reply (tool calls,
 their results, the model's reasoning), stored together so a history never holds half a turn. Messages are
-stored provider-neutral (core/llm/messages.py).
+stored provider-neutral (core/llm/messages.py). A thread belongs to one person: every message names its owner
+(`owner_id`), and a thread is its owner and its id together, so nobody reads or continues another's (D190).
 
 Public interface: other modules import ONLY the contract names below, from `app.modules.conversations`,
 and send them through the bus. The table, handlers and router stay private; the composition root

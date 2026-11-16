@@ -8,14 +8,16 @@ commits; the handler never does.
 from pydantic import Field
 
 from app.core.cqrs import Command, Context
+from app.core.ids import UserId
 from app.modules.receipts.persistence.tables import ReceiptFile
 from app.modules.receipts.values import MAX_RECEIPT_BYTES, STORAGE_KEY_LENGTH, ReceiptMediaType
 
 
 # Sent by ReceiptUploader only: the file has been checked (domain/file_types.py) and saved; this records it.
 class StoreReceipt(Command[int]):
-    """Returns the new receipt's id."""
+    """Record a receipt `owner_id` uploaded. Returns the new receipt's id."""
 
+    owner_id: UserId
     storage_key: str = Field(min_length=STORAGE_KEY_LENGTH, max_length=STORAGE_KEY_LENGTH)
     media_type: ReceiptMediaType
     size_bytes: int = Field(ge=1, le=MAX_RECEIPT_BYTES)
@@ -24,6 +26,7 @@ class StoreReceipt(Command[int]):
 def store_receipt(ctx: Context, command: StoreReceipt) -> int:
     """Add the receipt's row, stamped with the clock's now (UTC), and return its new id."""
     row = ReceiptFile(
+        owner_id=command.owner_id,
         storage_key=command.storage_key,
         media_type=command.media_type,
         size_bytes=command.size_bytes,

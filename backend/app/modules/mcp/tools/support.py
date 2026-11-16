@@ -16,7 +16,7 @@ from pydantic import Field, ValidationError
 from sqlalchemy.exc import OperationalError
 
 from app.core.ids import RecordId
-from app.core.errors import BusinessRuleError, NotFoundError
+from app.core.errors import AuthenticationError, BusinessRuleError, NotFoundError
 from app.modules import expenses
 from app.modules.mcp.contracts import ToolName
 
@@ -63,12 +63,12 @@ def tool_errors() -> Iterator[None]:
 
     The SDK hides the text of unexpected exceptions from clients (it could leak internals) and only
     passes on a ToolError's message. Our expected errors (unknown category, amount <= 0, bad date,
-    missing expense) are safe and useful to show, so they become ToolErrors. A locked database becomes
+    missing expense, no signed-in caller) are safe and useful to show, so they become ToolErrors. A locked database becomes
     ToolError(BUSY); every other exception passes through unchanged.
     """
     try:
         yield
-    except (BusinessRuleError, NotFoundError, ValidationError) as exc:
+    except (AuthenticationError, BusinessRuleError, NotFoundError, ValidationError) as exc:
         raise ToolError(str(exc)) from exc
     except OperationalError as exc:
         # "Database is locked" (another process, e.g. the stdio server, is writing) is worth a retry. Any

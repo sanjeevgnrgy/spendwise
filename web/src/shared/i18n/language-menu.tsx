@@ -1,5 +1,5 @@
 // The language menu in the top bar: a button that opens the list of languages, each written in itself. Part of
-// shared/i18n. Used by app/layout/app-layout.tsx (through shared/i18n's index.ts).
+// shared/i18n. Used by app/_frame/app-layout.tsx (through shared/i18n's index.ts).
 
 import { Languages } from "lucide-react"
 import { useTranslation } from "react-i18next"

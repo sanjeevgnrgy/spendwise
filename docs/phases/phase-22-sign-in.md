@@ -9,15 +9,17 @@ by the owner's choice:
 - **Part 2 (done):** the backend. A provider-neutral sign-in port and a standard OpenID Connect adapter, the
   `accounts` module (users, their identities, server-side sessions, login attempts), the sign-in routes, every other
   route locked, and the `X-CSRF` header. Decisions: D185, D186, D187. See [Part 2: the backend](#part-2-the-backend).
-- **Part 3:** the web app. The sign-in page, a gate around the pages, the user menu, sign-out.
+- **Part 3 (done):** the web app. The sign-in page, a session check in front of the signed-in pages, the user menu,
+  sign-out. Decision: D189. See [Part 3: the web app](#part-3-the-web-app).
 - **Part 4:** a real provider. A live sign-in with ZITADEL, Google and GitHub (following
   [identity_provider.md](../identity_provider.md), and correcting it where the console differs), back-channel logout,
   and a production checklist.
 
-Between Part 2 and Part 3 the API needs a session but the web app has no sign-in page yet: sign in by opening
-`/api/v1/auth/login` (see [Verify it by hand (Part 2)](#verify-it-by-hand-part-2)).
+Between Part 2 and Part 3 the web app moved to Next.js (D188, [refactor-nextjs.md](refactor-nextjs.md)): Part 1's
+Vite proxy is now Next's rewrite, and Part 3 is built on Next.js.
 
-Until Phase 23 makes data per-user, everyone signed in shares one set of expenses, so access is limited to people the
+Phase 23 made data per-person ([phase-23-per-person-data.md](phase-23-per-person-data.md)); before it, everyone signed
+in shared one set of expenses, so access was limited to people the
 provider has granted it.
 
 > **How Part 1 was checked:** offline with a fake model, and through the real Vite proxy.
@@ -63,6 +65,35 @@ provider has granted it.
 >   with the client secret, and the hint scope sending people straight to Google or GitHub.
 >
 > **The two new Hindi texts were written by an AI** and need a native speaker's review.
+
+> **How Part 3 was checked:** offline, through `next dev`, against the real backend with a fake model and a fake
+> provider (Google signs straight in as a test person, GitHub comes back `access_denied`); no real provider yet.
+> - **In headless Edge** (33 checks, driven over the DevTools protocol with real mouse clicks):
+>   - signed out, `/expenses` goes to `/sign-in?return_to=%2Fexpenses`, which shows "Continue with Google" and
+>     "Continue with GitHub", each a link to the login route with the option and `return_to`;
+>   - the page's tab title, its server HTML indexable, and `/expenses`'s `noindex`;
+>   - GitHub refused: back with `?error=cancelled` and "Sign-in was cancelled." in an alert; an unknown code shows
+>     the generic text;
+>   - Google: signed in and back on `/expenses` with its data; the top bar's menu named for the person, with
+>     initials (no picture), opening on their name and email;
+>   - `/sign-in` while signed in goes to the Dashboard;
+>   - `/auth/user` blocked: "Couldn't check whether you're signed in", still on `/expenses`; unblocked, Try again
+>     shows the page;
+>   - `/auth/options` blocked: "Couldn't load the ways to sign in" with Try again, which brings the buttons back;
+>   - Sign out ends on the sign-in page with no error, and `/expenses` then asks to sign in again;
+>   - the session ended on the server mid-visit (a back-channel logout): the next page's query answers 401 and the
+>     person is sent to sign in (the start page isn't added as `return_to`);
+>   - in Hindi: the heading, the buttons, a failure text and `<html lang="hi">`;
+>   - no uncaught exceptions and no console errors.
+> - **Nothing else broke:** the migration's 15 browser checks (pages, titles, client-side navigation, the 404 page,
+>   theme, Hindi, the assistant's streamed reply) pass with the gate in front.
+> - **Looked at:** screenshots of the sign-in page in light and dark, at desktop and phone widths, and of the user
+>   menu. The initials first used the muted colour, which vanished on the button's hover colour; they now use the
+>   primary colour.
+> - `tsc -b`, `oxlint` and `next build` pass; the backend didn't change, and the generated contract is unchanged.
+>
+> **The new Hindi texts (the auth namespace and the "Sign in" page name) were written by an AI** and need a native
+> speaker's review.
 
 ## Two ideas behind it
 
@@ -216,6 +247,79 @@ answers 401: set up a provider first ([identity_provider.md](../identity_provide
 5. Open the `logout_url`: you go to the provider's sign-out page, then to `/sign-in` (a "Page not found" until Part
    3), and the Dashboard's calls answer 401 again.
 
+## Part 3: the web app
+
+### Design: the browser's side
+
+```
+signed out, at /expenses
+  AuthGate --GET /api/v1/auth/user (X-CSRF)--> 401 = nobody --> router.replace(/sign-in?return_to=%2Fexpenses)
+sign-in page --GET /api/v1/auth/options--> [Google, GitHub] --> links (navigations, Part 2's flow):
+  /api/v1/auth/login?option=google&return_to=%2Fexpenses --> provider --> /auth/callback --> 302 /expenses + cookie
+signed in
+  AuthGate --GET /api/v1/auth/user--> 200 {name, email, avatar_url, logout_url} --> the frame and the page
+  any query or mutation --> 401 --> ask /auth/user again --> nobody --> /sign-in?return_to=<the page>
+  user menu --> Sign out --> navigate to logout_url (/api/v1/auth/logout?sid=...) --> provider --> /sign-in
+```
+
+- **Who is signed in is a query** (`useSignedInUser`, `GET /auth/user`): its 401 means "nobody" (`null`), not an
+  error. The browser keeps nothing about the session; the cookie stays HttpOnly (D186, D189).
+- **The gate is a layout.** `(client)/(app)/layout.tsx` draws `AuthGate` around the frame, so every route in `(app)/`
+  is behind it and a new signed-in page needs nothing extra. It shows a spinner while it asks, sends nobody to
+  `/sign-in?return_to=<the address>`, and, when the question itself fails (the backend unreachable), says so with
+  Try again rather than sending the person to sign in.
+- **The sign-in page is public:** `(client)/sign-in/page.tsx`, beside the `(app)/` group, with `publicPage` metadata
+  (indexable, in robots.txt and the sitemap). It has no frame, so it carries the language menu and the theme toggle.
+  Its buttons are links: signing in has to leave for the provider's page anyway.
+- **A failure code** in `?error=` (the contract's `AUTH.failures`) shows its text from the `failures` texts; an
+  unknown one shows a generic text. The provider's own words never reach the page (D180).
+- **Any 401 ends the visit.** The query client's `onFailure` invalidates `authKeys.user` after a query's or a
+  mutation's 401, and the gate does the rest. That covers an expired session, a sign-out in another tab and the
+  provider's back-channel logout, with the rule in one place.
+- **Signing out is a navigation** to the `logout_url` `/auth/user` gave (it carries the session's handle). The page
+  unloads, so nothing of the session stays in memory.
+- **The auth texts boot** with the frame's (`_shell/namespaces.ts`, English bundled), because the gate and the menu
+  are drawn before any page.
+
+### What was built (Part 3)
+
+| Where | What |
+|---|---|
+| `web/src/features/auth/api.ts`, `queries.ts` | `getSignedInUser` (`null` on 401), `getLoginOptions`, `isSignedOut`; `authKeys`, `useSignedInUser` (fresh for five minutes), `useLoginOptions` |
+| `features/auth/sign-in-urls.ts`, `user-display.ts` | pure functions: `loginUrl`, `signInPath`, `currentPath`, `failureText`; `safePicture` (`http(s)` only), `initials` |
+| `features/auth/components/` | `auth-gate.tsx`, `session-screens.tsx` (checking, couldn't check), `sign-in-page.tsx`, `sign-in-options.tsx`, `user-menu.tsx`, `user-avatar.tsx` |
+| `features/auth/i18n/` | the `auth` namespace in English and Hindi, English bundled |
+| `app/(client)/sign-in/page.tsx` | the public route: `publicPage` metadata; the page inside `<Suspense>` (it reads the address's query) |
+| `app/(client)/(app)/layout.tsx` | `AuthGate` around the frame |
+| `app/_frame/app-layout.tsx` | `UserMenu` in the top bar |
+| `app/_shell/query-client.ts`, `namespaces.ts` | a 401 asks who is signed in again; the auth texts boot |
+| `app/_views/client-pages.ts`, `app/_i18n/` | `SignInPage`; the page name "Sign in" |
+
+### Run it
+
+```powershell
+.\run.ps1                 # the backend
+cd web; npm run dev       # http://localhost:5173
+```
+
+With no provider configured, the sign-in page offers a single "Sign in", which comes back with "Sign-in isn't
+available right now." Set one up first ([identity_provider.md](../identity_provider.md), Part 4).
+
+### Verify it by hand (Part 3)
+
+1. Signed out, open `http://localhost:5173/expenses`: the sign-in page, its address ending `?return_to=%2Fexpenses`,
+   with one button per login option (or a single "Sign in").
+2. Press a button and sign in at the provider: you're back on Expenses, and the top bar shows your picture (or
+   initials) and name.
+3. Start again and cancel at the provider: back on the sign-in page with "Sign-in was cancelled."
+4. Open `/sign-in` while signed in: you go to the Dashboard.
+5. Open the user menu and choose Sign out: the provider's sign-out, then the sign-in page. `/expenses` asks you to
+   sign in again.
+6. Sign in, open a second tab, sign out in it, then go back to the first tab and open another page: it sends you to
+   the sign-in page.
+7. Stop the backend and reload: "Couldn't check whether you're signed in" with Try again. Start the backend and press
+   Try again: the page appears.
+
 ## Design questions
 
 **1. CORS kept other websites from reading the API. With it gone, what does?**
@@ -286,4 +390,24 @@ Because an email proves only that someone controls that address at some provider
 carefully they check it. Matching on it would let anyone who can get an account with your address anywhere into
 yours. A person is their identity at the provider (issuer and subject); joining several logins into one person is the
 provider's job (ZITADEL links them to one user there, so SpendWise sees one subject).
+</details>
+
+**8. When the session check fails, why doesn't the web app just send the person to sign in?**
+
+<details><summary>Answer</summary>
+
+Because a failure isn't an answer. A 401 says "nobody is signed in"; a dropped connection or a 5xx says nothing about
+the session, which may be perfectly valid. Sending someone to sign in then would make them sign in again for no reason,
+and it would hide the real problem. So only a 401
+leads to the sign-in page; anything else says "couldn't check" and offers Try again.
+</details>
+
+**9. Why are the sign-in buttons and Sign out links (navigations), not `fetch` calls from the page?**
+
+<details><summary>Answer</summary>
+
+Signing in has to show the provider's own page, which only a navigation can do; and the cookie the server sets on
+the way back is HttpOnly, so the page couldn't handle it anyway. Signing out ends at the provider's sign-out page too.
+A navigation also unloads the page, so nothing about the session (the cached user, any data) stays in memory
+afterwards. The sign-out link carries the session's handle, so a link on another site can't sign anyone out (D186).
 </details>

@@ -18,6 +18,7 @@ from pydantic import Field
 from app.core.cqrs import MessageBus
 from app.core.errors import BusinessRuleError
 from app.modules import expenses
+from app.modules.mcp.caller import current_caller
 from app.modules.mcp.contracts import (
     CONFIRM_ARGUMENT,
     EXPECTED_VERSION_ARGUMENT,
@@ -62,9 +63,11 @@ def register_delete_expense(server: MCPServer, bus: MessageBus, views: ExpenseVi
                     f"Nothing was deleted: {CONFIRM_ARGUMENT} must be true, after the user has agreed."
                 )
             # Read before deleting: the answer shows what was deleted, and a missing expense is a clear
-            # "not found" before anything changes.
-            expense = views.find(expense_id)
-            bus.execute(expenses.DeleteExpense(expense_id=expense_id, expected_version=expected_version))
+            # "not found" before anything changes. Only the caller's own (caller.py, D191).
+            owner = current_caller()
+            expense = views.find(owner, expense_id)
+            delete = expenses.DeleteExpense(owner_id=owner, expense_id=expense_id, expected_version=expected_version)
+            bus.execute(delete)
             return ExpenseDeleted(deleted=expense)
 
     require_arguments(delete_expense, EXPENSE_ID_ARGUMENT, CONFIRM_ARGUMENT, EXPECTED_VERSION_ARGUMENT)

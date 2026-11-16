@@ -161,6 +161,16 @@
           }
         ]
       }
+    },
+    {
+      "files": [
+        "src/app/**/page.tsx",
+        "src/app/**/layout.tsx",
+        "src/app/**/not-found.tsx"
+      ],
+      "rules": {
+        "react/only-export-components": "off"
+      }
     }
   ]
 }

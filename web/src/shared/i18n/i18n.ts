@@ -1,7 +1,7 @@
-// The app's one i18next instance, and how texts reach it. Part of shared/i18n. main.tsx awaits initI18n (shared/'s
-// and the app frame's texts) before drawing anything; each page's and panel's lazy loader awaits loadNamespaces for
-// its own texts together with its code; the language menu calls setLanguage. Components read texts with their
-// namespace's useTexts hook (react-i18next); code outside components uses i18n.t and currentLanguage.
+// The app's one i18next instance, and how texts reach it. Part of shared/i18n. app/_shell/client-root.tsx awaits
+// initI18n (shared/'s and the app frame's texts) before drawing anything; each page's and panel's lazy loader awaits
+// loadNamespaces for its own texts together with its code; the language menu calls setLanguage. Components read texts
+// with their namespace's useTexts hook (react-i18next); code outside components uses i18n.t and currentLanguage.
 //
 // i18next is given no backend: the app imports each file itself and adds it with addResourceBundle once every file
 // it needs has arrived. A failed attempt (offline) so adds nothing and leaves nothing marked as failed, and trying

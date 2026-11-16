@@ -5,13 +5,15 @@ Part of the module's contract layer. The tables (persistence/), the slices (comm
 This file imports no other file of the module.
 """
 
+import math
 from datetime import timedelta
-from enum import StrEnum
+from enum import IntEnum, StrEnum
 
 from app.core.ids import RecordId
+from app.core.ids import UserId as UserId  # core's (every module's data points at it); re-exported for accounts
 
-UserId = RecordId
 SessionId = RecordId
+TokenId = RecordId
 
 # How long a session lives. It's renewed while used (sliding): unused for SESSION_IDLE, it ends; and it ends after
 # SESSION_LIFETIME however much it's used, so a stolen cookie can't be kept alive for ever. Renewal is written at
@@ -37,6 +39,31 @@ MAX_URL_LENGTH = 2048
 MAX_STATE_LENGTH = 64
 MAX_VERIFIER_LENGTH = 128
 MAX_OPTION_LENGTH = 32
+# A browser's User-Agent header, kept with its session so the person can tell their sessions apart (Settings).
+MAX_USER_AGENT_LENGTH = 255
+
+# Personal access tokens (D191): what MCP clients send as "Authorization: Bearer <token>" to act for their owner.
+# A token is the prefix and 32 random bytes in unpadded base64url (43 characters); the prefix makes a leaked one
+# recognisable (to a person, or a secret scanner). Only its SHA-256 is stored, plus its last characters as a hint.
+ACCESS_TOKEN_PREFIX = "spw_"
+ACCESS_TOKEN_BYTES = 32
+ACCESS_TOKEN_LENGTH = len(ACCESS_TOKEN_PREFIX) + math.ceil(ACCESS_TOKEN_BYTES * 4 / 3)
+TOKEN_HINT_LENGTH = 4
+# At most this many tokens per person, each named so it can be told apart (and revoked) later.
+MAX_ACCESS_TOKENS = 10
+MAX_TOKEN_NAME_LENGTH = 50
+# A token's last use is written at most this often, not on every MCP request.
+TOKEN_TOUCH_AFTER = timedelta(hours=1)
+
+
+# How long a new token works, in days: it always expires, so a forgotten one stops working by itself.
+class TokenLifetime(IntEnum):
+    MONTH = 30
+    QUARTER = 90
+    YEAR = 365
+
+
+DEFAULT_TOKEN_LIFETIME = TokenLifetime.QUARTER
 
 # Where the sign-in routes live, under the API prefix. The provider sends people back to CALLBACK_PATH: with
 # PUBLIC_URL and the prefix in front, that's the redirect URI registered at the provider.

@@ -20,7 +20,7 @@ from pydantic import BaseModel, ConfigDict
 
 from app.modules.expenses import MonthlySummary, MonthTotal, PaymentMethod
 
-# How a client authenticates to /mcp/ over HTTP (when MCP_TOKEN is set): "Authorization: Bearer <token>".
+# How a client authenticates to /mcp/ over HTTP: "Authorization: Bearer <personal access token>" (D191).
 AUTHORIZATION_HEADER = "Authorization"
 BEARER_SCHEME = "Bearer"
 

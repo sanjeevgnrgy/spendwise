@@ -1,7 +1,7 @@
 """How the composition root plugs this module in: its handlers, routes, tables and tools adapter.
 
 bootstrap.py uses everything here: it registers the handlers on the bus, creates an McpExpenseTools
-(in-process, or remote with MCP_URL) and passes it to create_router with the language model and the receipts
+(this app's MCP server, in-process) and passes it to create_router with the language model and the receipts
 module's ReceiptExtractor, and hands TABLES to the migrations. ExpenseTools is the port that adapter implements,
 for anyone who builds another. Nothing else in the module is meant to be imported from outside.
 """

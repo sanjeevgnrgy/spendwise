@@ -53,8 +53,9 @@ backend/
     core/                shared building blocks: no I/O, no framework, no business rules; imports nothing else
       cqrs.py            Command, Query, MessageBus (also the unit of work)
       errors.py          NotFoundError, BusinessRuleError, ExternalServiceError, AuthenticationError (401),
-                         ForbiddenError (403), each with its status and type
-      ids.py             RecordId, MAX_ID (apart from the database, so a contract doesn't load it)
+                         ForbiddenError (403), TooManyRequestsError (429), each with its status and type
+      rate_limit.py      RateLimiter: a minute's and a day's allowance per person (D194)
+      ids.py             RecordId, MAX_ID, UserId (apart from the database, so a contract doesn't load it)
       clock.py           Clock (today, now), instead of date.today()
       files.py           FileStore: the port for uploaded files' bytes (save, read, delete by a key it makes up)
       identity.py        IdentityProvider: the sign-in port (D185), with VerifiedLogin, LogoutNotice, Principal
@@ -88,6 +89,8 @@ backend/
                          Sec-Fetch-Site), require_user / CurrentUserDep (the session check main.py puts on app.state)
       problems.py        RFC 9457 problem details for every error, the detail in the request's language: the
                          error handlers and the unexpected-error middleware
+      rate_limits.py     MODEL_QUOTA: the per-person allowance on the routes that call the model (D194)
+      security_headers.py  the headers on every answer; no-store under the API and MCP (D193)
       i18n/              the web layer's own texts (a bug's generic detail, "Sign in to continue.", a refused request)
     modules/
       accounts/          people, how they sign in, their sessions (D187); the same shape, plus domain/ (keys.py,
@@ -163,8 +166,8 @@ backend/
 6. **Links between modules are plain ids** with no database foreign key, checked through the other module's queries.
 7. **Outside the modules, shared code is grouped by concern** (D177). `core/` imports nothing else in the app;
    `infrastructure/` and `web/` import only `core/`. Modules never import `infrastructure/` (what it builds, the
-   bus's sessions and the model, is passed in), and only their HTTP adapters (`api.py`, `assistant/api/routes.py`,
-   `mcp/http.py`) import `web/`.
+   bus's sessions and the model, is passed in), and only their HTTP adapters (`api.py`, `accounts/account_api.py`,
+   `assistant/api/routes.py`, `mcp/http.py`) import `web/`.
 8. **`bootstrap.py` is the composition root:** the only file that knows every module. `main.py`, `seed.py`,
    `mcp_stdio.py` and the migrations all build from it. Nothing registers itself just by being imported.
 9. **Adapters translate, use cases decide.** REST routes, the MCP server and the AG-UI adapter are adapters over the
@@ -221,7 +224,7 @@ at the database level. Instead, `CreateExpense`'s handler asks `categories.GetCa
 | `categories` | `CategoryRead`, `CreateCategory`, `ListCategories`, `GetCategory`, `FindCategoryByName`, `CategoryId`, `MAX_NAME_LENGTH`, `UNKNOWN_CATEGORY`, `CategoryText` (its texts' keys, e.g. `NO_CATEGORIES_YET`) | expenses, mcp, assistant, seed |
 | `expenses` | `ExpenseRead`, `ExpenseList`, `CreateExpense`, `UpdateExpense` + `ExpenseChanges`, `DeleteExpense` (with `expected_version`), `GetExpense`, `ListExpenses`, `GetMonthlySummary`, `GetMonthlyTrend` (+ their result types), `ExpenseId`, `MAX_LIST_LIMIT`, `MAX_NOTE_LENGTH`, `PaymentMethod`, `payment_method_label(method, language)`, `ExpenseText` | mcp, assistant (`PaymentMethod`, labels, the note's limit), receipts (`PaymentMethod`), seed |
 | `conversations` | `AppendTurn`, `GetLastTurn`, `GetHistory`, `GetThread`, `ThreadRead`, `ThreadId`, `THREAD_ID_MAX_LENGTH`, `ConversationText` (e.g. `THREAD_NOT_FOUND`) | assistant |
-| `mcp` | `ToolName`, `ResourceUri`, `SERVER_NAME`, `AUTHORIZATION_HEADER` and `BEARER_SCHEME` (how `/mcp/` is authenticated), the argument names (`EXPENSE_ID_ARGUMENT`, `CONFIRM_ARGUMENT`, `EXPECTED_VERSION_ARGUMENT`, `CLEAR_NOTE_ARGUMENT`), the typed results (`ExpenseView`, `ExpenseSaved`, `MonthSpending`, ...). The server itself (`create_server`, `create_http_app`) comes from `mcp/module.py`, for the composition root only | assistant |
+| `mcp` | `ToolName`, `ResourceUri`, `SERVER_NAME`, `acting_for` and `act_for_process` (who a request acts for, D191), the argument names (`EXPENSE_ID_ARGUMENT`, `CONFIRM_ARGUMENT`, `EXPECTED_VERSION_ARGUMENT`, `CLEAR_NOTE_ARGUMENT`), the typed results (`ExpenseView`, `ExpenseSaved`, `MonthSpending`, ...). The server itself (`create_server`, `create_http_app`) comes from `mcp/module.py`, for the composition root only | assistant |
 | `receipts` | `ReceiptExtractor` (reads an uploaded receipt with the model: `extract(receipt_id, today)`), `ReceiptExtraction`, `LineItem`, `ReceiptRead`, `ReceiptId`, `ReceiptMediaType`, `MAX_RECEIPT_BYTES`, `ReceiptText`. Its `module.py` gives the composition root `create_reader(bus, files, llm)` and `create_router(bus, files, reader)` | the assistant (reads a receipt attached in the chat) |
 | `assistant` | nothing for other modules; its `module.py` gives the composition root `create_router` and the `ExpenseTools` port type | — |
 | `accounts` | `UserId`, `CurrentUser`, `SignedInUser`, `SignInFailure`, `SignInParam`, `SIGN_IN_PAGE`, `CALLBACK_PATH`, `SESSION_LIFETIME`, `LOGIN_ATTEMPT_TTL`. Its `module.py` gives the composition root `create_session_gate(bus, identity, clock)` (the check main.py puts on `app.state.authenticate`), `create_router(bus, identity, sealer, config)` and `SignInConfig` | the composition root, the export script; Phase 23's per-user data will use `UserId` |
@@ -400,26 +403,47 @@ Known limits, to address when the load calls for it (D174):
   same moment can fail with "database is locked". `BEGIN IMMEDIATE` for writing units of work plus WAL mode, or
   Postgres (already supported through `DATABASE_URL`), removes that.
 - **Long threads:** `GET /threads/{id}` returns a whole thread, unpaged; the model's history is capped by turns, not size.
-- **Remote MCP:** with `MCP_URL` set, every tool call opens a new MCP session (D74).
 
-## The web app: feature slices
+## The web app: Next.js and feature slices
+
+A Next.js 16 app (App Router, D188). The routes and their metadata are rendered on the server; everything signed-in
+is drawn in the browser, behind one client boundary.
 
 ```
-web/src/
-  app/          the composition: main.tsx (starts i18next, then the root error boundary), providers.tsx (TanStack
-                Query, theme, router, assistant), query-client.ts (the cache and the one refresh rule), pages.tsx
-                (every page once), namespaces.ts (the texts loaded at boot), app.tsx (routes), layout/ (sidebar,
-                top bar, the page area's and chat panel's error boundaries), i18n/ (the frame's own texts)
+web/
+  next.config.ts  the API rewrite (D184), its proxy settings, no compression
+  security-headers.ts  the pages' security headers, applied by next.config.ts (D193)
+  src/
+  app/          Next's route folder and the composition. At its top only Next's files:
+                  layout.tsx       the root document: metadata, the theme boot script, the stylesheet (server)
+                  not-found.tsx    every unknown address: a real 404, with "Page not found" in the browser
+                  robots.ts, sitemap.ts   for search engines: only public pages (today /sign-in)
+                  (client)/        the pages drawn in the browser: layout.tsx renders ClientRoot; (app)/ holds the
+                                   signed-in routes (page.tsx files, each exporting its metadata) and their layout.tsx
+                                   (the session check, then the frame); sign-in/ is the public sign-in page
+                and the rest in private folders (a leading "_" is never a route):
+                  _shell/          client-root.tsx (starts i18next, then the root error boundary and the providers),
+                                   providers.tsx, query-client.ts (the cache and the one refresh rule), namespaces.ts
+                                   (the texts loaded at boot), app-crashed.tsx
+                  _frame/          app-layout.tsx, app-sidebar.tsx (the frame), pages.tsx (the menu's entries)
+                  _views/          client-pages.ts (the client boundary the route files draw pages through),
+                                   placeholder-pages.tsx
+                  _i18n/           the frame's own texts
+                  _seo/            seo.ts: site address (PUBLIC_URL), the public pages, metadata for public and
+                                   signed-in pages
+                  _styles/         index.css
   features/     one folder per feature, each owning its components, hooks, API calls, types, constants and texts
                 (i18n/: en.ts, hi.ts, the namespace and its useTexts hook):
     expenses/     the Expenses page; components/ grouped into table/, dialogs/, filters/, fields/; api.ts, queries.ts
     categories/   categories API and queries, CategorySelect, category names
     dashboard/    the Dashboard page, stat cards, charts, recent list; api.ts, queries.ts
     assistant/    the chat panel; model/ (useChat, AssistantProvider); api/ (the AG-UI stream); a2ui/ (renderer)
+    auth/         the sign-in page, AuthGate (the session check in front of the signed-in pages), the user menu
+    account/      the Settings page: profile, sessions (sign out one or all others), personal access tokens
   shared/       knows no feature: ui/ (shadcn kit), api/ (typed HTTP client, generated contract), config/ (app name,
                 routes, data scopes), i18n/ (the languages and their locales, the i18next setup, the language
                 menu, shared/'s "common" texts), lib/ (formatting, guards, errors, ids), components/ (empty state,
-                error boundary, section error, refresh notice, placeholder page), hooks/, theme/
+                error boundary, section error, refresh notice, placeholder page, labeled field), hooks/, theme/
 ```
 
 ### The rules
@@ -429,14 +453,14 @@ web/src/
    Inside a feature, imports are relative. Fewer cross-feature imports is better.
 3. **`shared/` imports no feature and not `app/`. Only `app/` wires features together.** For example, a mutation only
    declares `meta: { changes: DATA_SCOPES.expenses }` and the assistant only reports "data changed"; one table in
-   `app/query-client.ts` (`STALE_AFTER`, applied by `refreshAfter`) decides that means reloading the expenses and
+   `app/_shell/query-client.ts` (`STALE_AFTER`, applied by `refreshAfter`) decides that means reloading the expenses and
    Dashboard queries (D168, D172).
 4. **Server data goes through TanStack Query** (each feature's `queries.ts`): no fetching in effects, outdated requests
    cancelled, changes invalidate their keys.
 5. **Nothing is copied from the backend by hand:** API types come from `schema.gen.ts`, protocol names and labels from
    `contracts.gen.ts` (both generated).
-6. **Defined once:** the app's name (`APP_NAME`), the pages (`PAGES`, for both router and sidebar), the theme's boot
-   script (generated from `theme-constants.ts` into `index.html` by a Vite plugin) (D169).
+6. **Defined once:** the app's name (`APP_NAME`) and description, the menu (`PAGES`; the routes are their files),
+   the theme's boot script (generated from `theme-constants.ts`, put into `<head>` by the root layout) (D169, D188).
 7. **A failure stays small:** error boundaries at the root, the page area, the chat panel and every A2UI card; a page
    keeps its data with a "couldn't refresh" notice when a reload fails; code that fails to load can be retried
    (`lazyWithRetry`).
@@ -449,14 +473,27 @@ web/src/
 10. **Every text from a namespace, loaded with what uses it** (D178). Each feature (and `app/`, and `shared/` as
     "common") owns its texts in `i18n/`: English in `en.ts` is the source, and each other language is a file with
     the same keys. Every file is its own chunk: a page's (or the chat panel's) load together with its code, from its
-    lazy loader, and "common" and the frame's texts load when the app boots (their English bundled, so the frame can
-    always be drawn). Keys are typed, so a
+    lazy loader, and "common", the frame's and the auth feature's texts load when the app boots (their English
+    bundled, so the frame, with its session check and user menu, can always be drawn). Keys are typed, so a
     misspelt key or a translation missing one fails the build. A language switch loads the new language for the
     namespaces in use, then redraws; numbers and dates follow the language's locale. The app speaks English and Hindi.
 
+11. **Server and browser apart** (D188). A route file is a server component: it exports `metadata` and draws a page
+    from `_views/client-pages.ts`, the client boundary. Under `(client)/`, `ClientRoot` draws nothing on the server,
+    so browser-only code (saved language and theme, window width) never runs there; a page that should be fully
+    rendered on the server (a landing page) goes outside `(client)/`.
+
+12. **Signed in, or sent to sign in** (D189). Every route in `(client)/(app)/` is behind `AuthGate`, which asks the
+    server who is signed in (`GET /auth/user`; its 401 means nobody). Any other request's 401 makes the query client
+    ask again, so the rule lives in one place and features never handle a 401. Signing in and out are navigations to
+    the backend's routes; the browser holds no token. A page never outlives its person (D192): when the session ends
+    or someone else signs in in another tab, the page is unloaded, so nothing of one person stays on screen for the
+    next.
+
 `.oxlintrc.json` enforces rules 2 and 3 (`no-restricted-imports`, including relative imports out of a feature at
 every folder depth, relative imports out of `shared/` and deep imports from `app/`); `npx oxlint` fails on a
-violation. It also runs the `jsx-a11y` accessibility rules.
+violation. It also runs the `jsx-a11y` accessibility rules. Route files (`page.tsx`, `layout.tsx`, `not-found.tsx`)
+may export `metadata` beside their component (Next's convention), so the fast-refresh rule is off for them only.
 
 Working guides: [backend_onboarding.md](backend_onboarding.md), [frontend_onboarding.md](frontend_onboarding.md).
 The full review that shaped these rules: [architecture-review.md](architecture-review.md).
@@ -482,17 +519,22 @@ The browser reaches the API on the web app's own address (D184). The web app cal
 to the backend:
 
 ```
-browser --> http://localhost:5173/            Vite serves the web app
-        --> http://localhost:5173/api/v1/...  Vite's proxy (vite.config.ts) --> http://127.0.0.1:8000/api/v1/...
-production: one reverse proxy serves web/dist and forwards /api/v1/ to uvicorn, in the same way
+browser --> http://localhost:5173/            Next.js serves the web app (npm run dev, or npm run start)
+        --> http://localhost:5173/api/v1/...  Next's rewrite (next.config.ts) --> http://127.0.0.1:8000/api/v1/...
+production: one reverse proxy in front of both: pages to Next.js, /api/v1/ to Next.js too (or straight to uvicorn)
 ```
 
 - **No CORS.** The API sends no `Access-Control-*` headers, so no other website can read its answers in a browser,
   and a cross-origin preflight fails. There's no allow-list to keep in step with the web app's address.
-- **The proxy keeps the browser's `Host`** (`changeOrigin: false`), so URLs the backend builds, such as a new
-  expense's `Location`, point at the web app's address. A production proxy must do the same.
-- **A proxy that can't reach the backend answers 502** (Vite: an empty `text/plain` body). The backend's own errors
-  are always problems, so `ApiError.fromProblem` reads a 502, 503 or 504 that isn't one as "can't reach SpendWise".
+- **Next's rewrite runs before the routes** (`beforeFiles`), so no page can claim `/api/v1/`. Its proxy needs two
+  settings: `compress: false` (it would gzip the assistant's Server-Sent Events and hold them back) and
+  `experimental.proxyTimeout` of 180 s (its default 30 s of silence would cut off `/parse` and receipt reading,
+  which wait up to 2 × 60 s on Gemini). The target (`API_PROXY_TARGET`) is compiled into the build.
+- **Next's proxy sends the backend's own address as `Host`** (the browser's goes in `X-Forwarded-Host`), so URLs
+  the backend builds, such as a new expense's `Location`, name the backend's address. The web app never reads them.
+- **When the backend can't be reached, the server in front answers for it:** Next.js with 500 in plain text, a
+  reverse proxy with 502, 503 or 504. The backend's own errors are always problems, so `ApiError.fromProblem` reads
+  any 5xx that isn't one as "can't reach SpendWise".
 - **Why:** the sign-in of Phase 22 keeps the session on the server and gives the browser one HttpOnly cookie. On one
   origin that cookie can be `SameSite=Strict` with the `__Host-` prefix, and needs no CORS credentials (the Duende BFF
   pattern).
@@ -538,10 +580,15 @@ foreach ($m in "accounts", "categories", "conversations", "expenses", "mcp", "re
 }
 
 # 7. Only a module's HTTP adapters import web/. Expect api.py (accounts, categories, conversations, expenses,
-#    receipts), http.py (mcp) and routes.py (the assistant's api/).
+#    receipts), account_api.py (accounts), http.py (mcp) and routes.py (the assistant's api/).
 Get-ChildItem backend\app\modules -Recurse -Filter *.py | Select-String -Pattern 'app\.web\b' | Split-Path -Leaf |
   Sort-Object -Unique
 
 # 8. No identity provider's name in the code (D185): the provider is configuration. Expect no output.
 Get-ChildItem backend\app, web\src -Recurse -Include *.py,*.ts,*.tsx | Select-String -Pattern 'zitadel'
+
+# 9. A person's data is never looked up by its id alone (D190): the owner goes in the same statement. Expect only
+#    take_approval.py, which compares the owner on the next line.
+Get-ChildItem backend\app\modules\expenses, backend\app\modules\conversations, backend\app\modules\receipts,
+  backend\app\modules\assistant -Recurse -Filter *.py | Select-String -Pattern 'session\.get\(' | Split-Path -Leaf
 ```

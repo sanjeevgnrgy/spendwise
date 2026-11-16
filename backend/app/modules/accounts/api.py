@@ -48,6 +48,8 @@ MAX_CODE_LENGTH = 2048
 MAX_STATE_LENGTH = 256
 # A logout token is a signed JWT: a few kilobytes at most.
 MAX_LOGOUT_TOKEN_LENGTH = 16_384
+# The browser's own description, kept with the session it signs in (shown in Settings to tell sessions apart).
+USER_AGENT_HEADER = "User-Agent"
 
 
 # The provider's back-channel logout request (application/x-www-form-urlencoded): the signed logout token. Other
@@ -119,7 +121,8 @@ def _add_sign_in_routes(router: APIRouter, sign_in: SignInFlow) -> None:
         error: Annotated[str | None, Query(max_length=MAX_STATE_LENGTH)] = None,
     ) -> RedirectResponse:
         try:
-            finished = sign_in.finish(cookies.read_login(request), state, code, error)
+            user_agent = request.headers.get(USER_AGENT_HEADER)
+            finished = sign_in.finish(cookies.read_login(request), state, code, error, user_agent)
         except SignInFailedError as failure:
             response = _sign_in_page(failure.reason)
         else:

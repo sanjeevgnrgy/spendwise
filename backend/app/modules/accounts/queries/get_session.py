@@ -10,6 +10,7 @@ from sqlmodel import col, select
 from app.core.cqrs import Context, Query
 from app.modules.accounts.models import SessionView
 from app.modules.accounts.persistence.tables import AppUser, UserSession
+from app.modules.accounts.queries.live_sessions import live_session_conditions
 from app.modules.accounts.values import KEY_HASH_LENGTH, MAX_ISSUER_LENGTH
 
 
@@ -27,17 +28,12 @@ def get_session(ctx: Context, query: GetSession) -> SessionView | None:
     provider (a switch of provider ends every older session), and its user switched on."""
     if query.issuer is None:
         return None
-    now = ctx.clock.now()
     statement = (
         select(UserSession)
         .join(AppUser, col(AppUser.id) == col(UserSession.user_id))
         .where(
             col(UserSession.key_hash) == query.key_hash,
-            col(UserSession.revoked_at).is_(None),
-            col(UserSession.expires_at) > now,
-            col(UserSession.absolute_expires_at) > now,
-            col(UserSession.issuer) == query.issuer,
-            col(AppUser.is_active).is_(True),
+            *live_session_conditions(ctx.clock.now(), query.issuer),
         )
     )
     session = ctx.session.exec(statement).first()

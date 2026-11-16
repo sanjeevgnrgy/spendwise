@@ -11,7 +11,9 @@ from app.modules.receipts.application.upload_receipt import ReceiptUploader
 from app.modules.receipts.models import ReceiptRead
 from app.modules.receipts.queries.get_receipt import GetReceipt
 from app.modules.receipts.values import MAX_RECEIPT_BYTES
+from app.web.auth import CurrentUserDep
 from app.web.dependencies import BusDep, ClockDep, IdPath
+from app.web.rate_limits import MODEL_QUOTA
 
 TAG = "receipts"
 
@@ -29,22 +31,27 @@ def create_router(uploader: ReceiptUploader, extractor: ReceiptExtractor) -> API
     # 422 (business-rule). FastAPI has already spooled the upload to a temporary file; at most one byte past the
     # limit is read from it, enough to know it's too large.
     @router.post("/receipts", status_code=201)
-    def upload_receipt(file: UploadFile, bus: BusDep, request: Request, response: Response) -> ReceiptRead:
-        receipt_id = uploader.upload(file.file.read(MAX_RECEIPT_BYTES + 1))
+    def upload_receipt(
+        file: UploadFile, principal: CurrentUserDep, bus: BusDep, request: Request, response: Response
+    ) -> ReceiptRead:
+        owner = principal.user_id
+        receipt_id = uploader.upload(owner, file.file.read(MAX_RECEIPT_BYTES + 1))
         # 201 Created says where the new resource lives (url_for includes the /api/v1 prefix).
         response.headers["Location"] = str(request.url_for(get_receipt.__name__, receipt_id=receipt_id))
-        return bus.ask(GetReceipt(receipt_id=receipt_id)).public()
+        return bus.ask(GetReceipt(owner_id=owner, receipt_id=receipt_id)).public()
 
-    # GET /api/v1/receipts/{receipt_id}: what's known about an uploaded receipt (not its bytes). 404 if unknown.
+    # GET /api/v1/receipts/{receipt_id}: what's known about one of the signed-in person's receipts (not its bytes).
+    # 404 if they have no such receipt (another person's is never shown, D190).
     @router.get("/receipts/{receipt_id}")
-    def get_receipt(receipt_id: IdPath, bus: BusDep) -> ReceiptRead:
-        return bus.ask(GetReceipt(receipt_id=receipt_id)).public()
+    def get_receipt(receipt_id: IdPath, principal: CurrentUserDep, bus: BusDep) -> ReceiptRead:
+        return bus.ask(GetReceipt(owner_id=principal.user_id, receipt_id=receipt_id)).public()
 
     # POST /api/v1/receipts/{receipt_id}/extraction: read the receipt with the model and answer what it says, as a
     # suggestion (nothing is saved). POST, not GET: each call asks the model again, which takes seconds and quota.
-    # 404 for an unknown receipt or a missing file; 502 if the model fails or can't be understood.
-    @router.post("/receipts/{receipt_id}/extraction")
-    def extract_receipt(receipt_id: IdPath, clock: ClockDep) -> ReceiptExtraction:
-        return extractor.extract(receipt_id, clock.today())
+    # 404 for a receipt the person doesn't have, or a missing file; 502 if the model fails or can't be understood.
+    # It calls the model, so it counts against the person's allowance (MODEL_QUOTA, D194): a 429 once it's spent.
+    @router.post("/receipts/{receipt_id}/extraction", dependencies=[MODEL_QUOTA])
+    def extract_receipt(receipt_id: IdPath, principal: CurrentUserDep, clock: ClockDep) -> ReceiptExtraction:
+        return extractor.extract(principal.user_id, receipt_id, clock.today())
 
     return router

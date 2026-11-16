@@ -200,7 +200,7 @@ EN: dict[ChatText, TextValue] = {
     ChatText.DELETE_FAILED: "I couldn't delete {ref} just now. Nothing was deleted; ask me again in a moment.",
     # All a person is told about a bug in a run: the details go to the server log only.
     ChatText.RUN_FAILED: "Something went wrong on the server. The server log has the details.",
-    # The model (or a remote tools server) failed; its own words go to the server log only (D180).
+    # The model (or another outside service) failed; its own words go to the server log only (D180).
     ChatText.SERVICE_FAILED: "The assistant's service didn't answer properly. Try again in a moment.",
     ChatText.EMPTY_ANSWER: "The assistant didn't come up with an answer. Try asking again.",
     # Pydantic's explanation of the mismatch goes to the server log (at DEBUG: it quotes the answer).

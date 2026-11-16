@@ -1,5 +1,5 @@
 // The theme's provider: it holds the chosen theme, saves changes, and applies it to the page. Part of shared/theme.
-// Used once, by app/providers.tsx, around the whole app.
+// Used once, by app/_shell/providers.tsx, around the whole app.
 
 import { useEffect, useMemo, useState, type ReactNode } from "react"
 

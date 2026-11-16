@@ -33,7 +33,8 @@ def to_view(expense: expenses.ExpenseRead, names: dict[int, str]) -> ExpenseView
 
 
 class ExpenseViews:
-    """Reads the tools share: category names and ids, and one expense as an ExpenseView.
+    """Reads the tools share: category names and ids (shared by everyone), and one of a person's expenses as an
+    ExpenseView.
 
     Each method sends queries through the bus, so each runs in its own unit of work.
     """
@@ -60,12 +61,12 @@ class ExpenseViews:
             raise BusinessRuleError(translatable(categories.CategoryText.NO_CATEGORIES_YET))
         raise BusinessRuleError(f"Unknown category '{name.strip()}'. Use one of: {', '.join(names)}.")
 
-    def find(self, expense_id: int) -> ExpenseView:
-        """One expense as an ExpenseView. Raises NotFoundError if there's no such expense.
+    def find(self, owner_id: int, expense_id: int) -> ExpenseView:
+        """One of `owner_id`'s expenses as an ExpenseView. Raises NotFoundError if they have no such expense.
 
         Names its category with one GetCategory (a primary-key lookup), not by loading every category.
         """
-        expense = self._bus.ask(expenses.GetExpense(expense_id=expense_id))
+        expense = self._bus.ask(expenses.GetExpense(owner_id=owner_id, expense_id=expense_id))
         category = self._bus.ask(categories.GetCategory(category_id=expense.category_id))
         # A category that no longer exists gets no entry, so to_view shows it as UNKNOWN_CATEGORY.
         names = {category.id: category.name} if category is not None else {}

@@ -8,6 +8,7 @@ The bus commits; the handler never does.
 from pydantic import Field
 
 from app.core.cqrs import Command, Context
+from app.core.ids import UserId
 from app.core.llm import Message
 from app.modules.conversations.persistence.tables import ConversationMessage
 from app.modules.conversations.values import ThreadId
@@ -16,8 +17,9 @@ from app.modules.conversations.values import ThreadId
 # Sent by the assistant once a run has finished. `turn` is the next number after GetLastTurn's (1 for a
 # new thread); the messages are stored in the order given.
 class AppendTurn(Command[None]):
-    """Store one whole turn (it's saved only once the run has succeeded)."""
+    """Store one whole turn of the owner's thread (it's saved only once the run has succeeded)."""
 
+    owner_id: UserId
     thread_id: ThreadId
     turn: int = Field(ge=1)
     messages: list[Message]
@@ -32,6 +34,7 @@ def append_turn(ctx: Context, command: AppendTurn) -> None:
     # One command, one transaction: a thread never holds half a turn.
     ctx.session.add_all(
         ConversationMessage(
+            owner_id=command.owner_id,
             thread_id=command.thread_id,
             turn=command.turn,
             kind=message.kind,

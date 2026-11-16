@@ -1,7 +1,7 @@
-// A component of the expenses feature: the Expenses page, the feature's main export (app/pages.tsx routes to it).
-// It holds the page's state (the filters, and which expenses are waiting for "are you sure?"), loads the list
-// through useExpenses, and lays out its parts: the Add dialog, the filters bar, the table, and the delete dialog.
-// Its texts come from the feature's i18n namespace.
+// A component of the expenses feature: the Expenses page, the feature's main export
+// (app/(client)/(app)/expenses/page.tsx draws it). It holds the page's state (the filters, and which expenses are
+// waiting for "are you sure?"), loads the list through useExpenses, and lays out its parts: the Add dialog, the filters
+// bar, the table, and the delete dialog. Its texts come from the feature's i18n namespace.
 
 import { useState } from "react"
 

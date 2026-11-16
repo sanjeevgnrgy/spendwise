@@ -1,33 +1,37 @@
-"""ListExpenses: one page of expenses, newest first, with optional filters. The query and its handler.
+"""ListExpenses: one page of a person's expenses, newest first, with optional filters. The query and its handler.
 
 A slice of the expenses module's read side; it never changes anything. module.py registers the handler with the
 bus. The database does the filtering and counting (WHERE, COUNT, OFFSET, LIMIT), so only the page shown leaves it,
-as ExpenseRead copies in an ExpenseList (models.py). ListExpenses is also GET /expenses's query parameters
+as ExpenseRead copies in an ExpenseList (models.py). ExpenseFilters is also GET /expenses's query parameters
 (api.py), so its docstring and field descriptions are part of the OpenAPI document: notes are `#` comments.
 """
 
 from datetime import date
 from typing import Any, Self
 
-from pydantic import Field, model_validator
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 from sqlalchemy import func, or_
 from sqlmodel import col, select
 
 from app.core.cqrs import Context, Query
+from app.core.ids import UserId
 from app.modules.categories import CategoryId
 from app.modules.expenses.models import ExpenseList, ExpenseRead
 from app.modules.expenses.persistence.tables import Expense
 from app.modules.expenses.values import DEFAULT_LIST_LIMIT, MAX_LIST_LIMIT, MAX_MERCHANT_LENGTH, MAX_SEARCH_LENGTH
 
 
-# Asked by GET /expenses (the web app's lists), MCP's list_expenses and its "recent" resource, and seed.py.
-# Filters are combined with AND; the handler turns each one given into a WHERE condition.
-class ListExpenses(Query[ExpenseList]):
+# Which expenses, and which page: GET /expenses's query parameters, MCP's list_expenses arguments (translated) and
+# its "recent" resource. Combined with AND. Not a message: it has no owner, which the server adds (ListExpenses), so
+# a query string can't name someone else (an ?owner_id= is an unknown parameter: a 422, like a typo).
+class ExpenseFilters(BaseModel):
     """Expenses, newest first. All filters are optional; combine as many as you like.
 
     Also the query parameters of GET /expenses, so unknown parameters (a typo like ?catgory_id=3)
     are an error instead of being silently ignored.
     """
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
 
     start_date: date | None = None
     end_date: date | None = None
@@ -51,39 +55,50 @@ class ListExpenses(Query[ExpenseList]):
         return self
 
 
-def _matching(query: ListExpenses) -> list[Any]:
-    """The WHERE conditions for a list's filters; list_expenses uses them for both the count and the page."""
-    # Each condition is added only when that filter was given, so no filters means "everything".
-    conditions: list[Any] = []
-    if query.start_date:
-        conditions.append(Expense.spent_on >= query.start_date)
-    if query.end_date:
-        conditions.append(Expense.spent_on <= query.end_date)
-    if query.category_id is not None:
-        conditions.append(Expense.category_id == query.category_id)
-    if query.merchant:
+# Asked by GET /expenses (the web app's lists), MCP's list_expenses and its "recent" resource, and seed.py: always one
+# person's expenses (D190).
+class ListExpenses(Query[ExpenseList]):
+    """The owner's expenses that match the filters, newest first."""
+
+    owner_id: UserId
+    filters: ExpenseFilters = ExpenseFilters()
+
+
+def _matching(owner_id: int, filters: ExpenseFilters) -> list[Any]:
+    """The WHERE conditions for the owner and a list's filters; list_expenses uses them for both the count and the
+    page."""
+    # The owner always; each filter only when it was given, so no filters means "all of theirs".
+    conditions: list[Any] = [Expense.owner_id == owner_id]
+    if filters.start_date:
+        conditions.append(Expense.spent_on >= filters.start_date)
+    if filters.end_date:
+        conditions.append(Expense.spent_on <= filters.end_date)
+    if filters.category_id is not None:
+        conditions.append(Expense.category_id == filters.category_id)
+    if filters.merchant:
         # The database lowercases both sides. Python's .lower() handles letters like "É" that SQLite's
         # lower() leaves alone, so mixing the two would make "CAFÉ" never match itself.
-        conditions.append(func.lower(Expense.merchant) == func.lower(query.merchant))
-    if query.search:
+        conditions.append(func.lower(Expense.merchant) == func.lower(filters.merchant))
+    if filters.search:
         # autoescape: a % or _ the user types is searched for literally, not used as a wildcard.
         # icontains lowercases both sides in the database too (lower(...) LIKE '%' || lower(?) || '%').
         conditions.append(
             or_(
-                col(Expense.merchant).icontains(query.search, autoescape=True),
-                col(Expense.note).icontains(query.search, autoescape=True),
+                col(Expense.merchant).icontains(filters.search, autoescape=True),
+                col(Expense.note).icontains(filters.search, autoescape=True),
             )
         )
     return conditions
 
 
 def list_expenses(ctx: Context, query: ListExpenses) -> ExpenseList:
-    """One page of the expenses that match the filters, newest first, plus how many match in all.
+    """One page of the owner's expenses that match the filters, newest first, plus how many match in all.
 
     Two statements with the same conditions: COUNT(*) for the total, then the page itself with OFFSET
     and LIMIT, so only the rows shown leave the database.
     """
-    conditions = _matching(query)
+    filters = query.filters
+    conditions = _matching(query.owner_id, filters)
     total = ctx.session.exec(select(func.count()).select_from(Expense).where(*conditions)).one()
     rows = ctx.session.exec(
         select(Expense)
@@ -91,7 +106,7 @@ def list_expenses(ctx: Context, query: ListExpenses) -> ExpenseList:
         # Newest first: that's how people read a list of expenses.
         # The id breaks ties between expenses on the same day, so pages never overlap or skip a row.
         .order_by(col(Expense.spent_on).desc(), col(Expense.id).desc())
-        .offset(query.offset)
-        .limit(query.limit)
+        .offset(filters.offset)
+        .limit(filters.limit)
     )
     return ExpenseList(items=[ExpenseRead.model_validate(row) for row in rows], total=total)

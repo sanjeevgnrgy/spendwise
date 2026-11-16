@@ -1,5 +1,5 @@
 // The theme menu in the top bar: a sun/moon button that opens Light / Dark / System. Part of shared/theme. Used by
-// app/layout/app-layout.tsx (through shared/theme's index.ts).
+// app/_frame/app-layout.tsx (through shared/theme's index.ts).
 
 import { Monitor, Moon, Sun, type LucideIcon } from "lucide-react"
 import { useTranslation } from "react-i18next"

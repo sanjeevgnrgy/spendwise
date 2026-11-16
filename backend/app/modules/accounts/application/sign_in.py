@@ -22,7 +22,7 @@ from app.modules.accounts.domain.keys import hash_key, new_handle, new_key, new_
 from app.modules.accounts.domain.return_paths import safe_return_path
 from app.modules.accounts.domain.rules import AccountDisabledError, may_sign_in, profile_of
 from app.modules.accounts.models import LoginAttemptView, LoginOptionRead
-from app.modules.accounts.values import SignInFailure
+from app.modules.accounts.values import MAX_USER_AGENT_LENGTH, SignInFailure
 
 logger = logging.getLogger(__name__)
 
@@ -89,8 +89,16 @@ class SignInFlow:
         )
         return Started(authorization_url=url, login_key=login_key)
 
-    def finish(self, login_key: str | None, state: str | None, code: str | None, error: str | None) -> Finished:
-        """Check the provider's answer against the attempt this browser started, and start a session.
+    def finish(
+        self,
+        login_key: str | None,
+        state: str | None,
+        code: str | None,
+        error: str | None,
+        user_agent: str | None = None,
+    ) -> Finished:
+        """Check the provider's answer against the attempt this browser started, and start a session. `user_agent`
+        (the browser's header) is kept with the session, so the person can tell their sessions apart in Settings.
 
         Raises SignInFailedError with the reason the sign-in page shows: the attempt is gone (EXPIRED), the state
         doesn't match or a check failed (REJECTED), the person cancelled (CANCELLED), may not sign in (NOT_ALLOWED),
@@ -112,7 +120,7 @@ class SignInFlow:
         if not may_sign_in(login.roles, self.config.required_role):
             logger.info("sign-in refused: the required role is missing")
             raise SignInFailedError(SignInFailure.NOT_ALLOWED)
-        return Finished(session_key=self._start_session(login), return_to=attempt.return_to)
+        return Finished(session_key=self._start_session(login, user_agent), return_to=attempt.return_to)
 
     def _verified(self, code: str, attempt: LoginAttemptView) -> VerifiedLogin:
         """Ask the provider who signed in. Raises SignInFailedError (REJECTED or UNAVAILABLE); details are logged."""
@@ -125,7 +133,7 @@ class SignInFlow:
             logger.warning("sign-in failed at the provider: %s", failure)
             raise SignInFailedError(SignInFailure.UNAVAILABLE) from None
 
-    def _start_session(self, login: VerifiedLogin) -> str:
+    def _start_session(self, login: VerifiedLogin, user_agent: str | None) -> str:
         """Record the user and a new session; return the session cookie's key. Raises SignInFailedError
         (NOT_ALLOWED) if the account is switched off."""
         profile = profile_of(login)
@@ -143,6 +151,8 @@ class SignInFlow:
                     handle=new_handle(),
                     provider_session_id=login.session_id,
                     sealed_id_token=self.sealer.seal(login.id_token),
+                    # Cut to the column's size: it's only ever shown to its owner, to tell sessions apart.
+                    user_agent=user_agent[:MAX_USER_AGENT_LENGTH] if user_agent else None,
                 )
             )
         except AccountDisabledError as failure:

@@ -151,6 +151,21 @@ behaving:
 | What was read from a receipt steering later turns | It's stored in the conversation as JSON labelled "data, not instructions", like a form's values |
 | Runaway cost or hangs | at most 5 model calls per message, 60 s × 2 attempts per call, no retry on quota errors, 15 s per tool call, input length limits |
 
+## The receipt agent (A2A, Phase 24)
+
+A separate process that receives people's receipts and spends the Gemini quota, so it's guarded like an API.
+
+| Risk | Defence |
+|---|---|
+| Anyone calling it, from anywhere | It listens on `127.0.0.1` only, and every route but the Agent Card needs `Authorization: Bearer <RECEIPT_AGENT_KEY>`, compared in constant time; a wrong or missing key is a 401 before anything is read (D197). The SDK declares the card's security scheme but doesn't check it, so `agents/receipt/http.py` does |
+| Running open by mistake | No key, or one under 32 characters, and the agent refuses to start; the error never repeats the value |
+| A huge request | A request without a `Content-Length` or over about 7 MB (5 MB as base64, plus the envelope) is refused before it's read |
+| One person reading another's receipt through it | The agent never sees who anyone is. The client (the monolith) checks the receipt's owner before its bytes leave (D190); the agent takes only bytes and the choices it may pick from, and refuses unknown fields (`owner_id` included) |
+| The agent keeping receipts | Each task is kept without its file's bytes, and only the 20 most recent tasks are kept at all, in memory (D198). Nothing is written to disk |
+| A receipt's text steering the model | The same as before (D182): one call with no tools, an instruction that the receipt's text is never an instruction, and the answer checked (categories and payment methods only from the client's lists). The client checks the agent's answer again, as outside data |
+| Google's words reaching a client | A failed reading ends the task FAILED with a fixed reason; the model's error goes to the agent's log only (D180) |
+| Its answers cached | Every answer carries `Cache-Control: no-store` |
+
 ## The A2UI renderer
 
 Cards and forms are data from the server (partly written by the model), drawn by the browser. The renderer treats
@@ -189,6 +204,7 @@ Every backend and web dependency is pinned to an exact version (`requirements.tx
 | **One process's rate limit** | the model allowance (D194) is counted in memory: several server processes would each count separately | a shared counter (Redis) before running more than one |
 | **Inline scripts allowed** | the pages' CSP allows `'unsafe-inline'` scripts (Next.js's bootstrap), so it can't stop an injected inline script | a nonce-based CSP, if the pages are rendered per request anyway (D193) |
 | **No request-size limit** | an upload is spooled to a temporary file before the receipts route can refuse it, so a very large one uses disk and time | a body-size limit at the proxy (a little over 5 MB for `POST /receipts`) |
+| **The receipt agent speaks plain HTTP** | its requests carry the key and a receipt; on one machine they never leave it, but across machines anyone on the path could read them | TLS (or mTLS) between the backend and the agent before they run on different machines, and a key that can be rotated without a restart |
 | **Uploaded files are never deleted** | receipts accumulate in `UPLOADS_DIR` | a retention rule, or deleting a receipt once its expense is saved |
 | **SQLite file** | one machine, file permissions only | Postgres with a least-privilege database user |
 | **No audit trail** | can't tell who changed what | record changes (who, when, before/after) once users exist |

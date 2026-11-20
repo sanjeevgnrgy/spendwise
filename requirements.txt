@@ -30,3 +30,6 @@ python-multipart==0.0.33
 # SDK and google-genai already bring both; pinned because the sign-in adapter uses them directly.
 pyjwt==2.15.1
 cryptography==50.0.2
+# The official A2A SDK (protocol 1.0) for the receipt agent (agents/receipt, Phase 24). [http-server] adds
+# Starlette and sse-starlette for its JSON-RPC routes.
+a2a-sdk[http-server]==1.3.1

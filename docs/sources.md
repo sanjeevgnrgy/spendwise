@@ -1,6 +1,6 @@
 # Sources: what the official docs and libraries say
 
-The facts that Phases 14 to 20 and the refactors are built on: where each came from, what it says, and what SpendWise does with it.
+The facts that Phases 14 to 24 and the refactors are built on: where each came from, what it says, and what SpendWise does with it.
 Earlier phases' doc facts are in [gemini.md](gemini.md) and the phase notes.
 
 All checked on **2026-11-13**. Each fact is marked with where it came from:
@@ -800,6 +800,44 @@ rather than replacing it.
 sign-in, Settings and Next.js checks.
 
 **Used in:** `web/security-headers.ts`, `backend/app/web/security_headers.py`, D193.
+
+---
+
+## 32. A2A: the SDK, the protocol's names, parts and security (Phase 24)
+
+Checked on 2026-11-20.
+
+**Web:**
+- https://pypi.org/project/a2a-sdk/: version 1.3.1 (17 Nov 2026), Python 3.10 and up (3.14 listed); `[http-server]`
+  adds `starlette` and `sse-starlette`.
+- https://github.com/a2aproject/a2a-python: "This SDK implements the A2A Protocol Specification `1.0`, with
+  compatibility mode for `0.3`."
+- https://a2a-protocol.org/latest/specification/: the JSON-RPC method is `SendMessage` (`message/send` was 0.3's
+  name); the card is at `https://{server_domain}/.well-known/agent-card.json`; a server "MUST authenticate every
+  incoming request based on the provided credentials and its declared authentication requirements".
+- https://github.com/a2aproject/a2a-samples, `samples/python/agents/helloworld`: the server is a plain Starlette app
+  built from `create_agent_card_routes` and `create_jsonrpc_routes`; the executor uses `TaskUpdater`; the client is
+  `create_client(card, ClientConfig(...))` and `send_message` is read with `async for`.
+
+**Package** (`.venv/Lib/site-packages/a2a/`, 1.3.1):
+- `helpers/proto_helpers.py`: `new_raw_part(raw, media_type, filename)` (a file's bytes), `new_data_part(data)` (a
+  `google.protobuf.Value`: "Whole numbers come back as floats", so amounts travel as strings, as `DecimalText`
+  already does), `get_data_parts`, `new_task_from_user_message` (a SUBMITTED task from the first message).
+- `server/tasks/task_updater.py`: `start_work`, `add_artifact(parts, name, last_chunk)`, `complete`, `failed`,
+  `reject`, `new_agent_message`.
+- `server/request_handlers/__init__.py`: `DefaultRequestHandler = DefaultRequestHandlerV2`.
+- `server/tasks/inmemory_task_store.py`: every task kept, per owner, "lost when the server process stops" (D198).
+- `server/routes/common.py`: the routes take the user from `request.user` when an authentication middleware set one;
+  nothing refuses a request by the card's security schemes (D197).
+- `types/a2a_pb2.pyi`: the `TaskState` values (`TASK_STATE_SUBMITTED`, `_WORKING`, `_COMPLETED`, `_FAILED`,
+  `_CANCELED`, `_INPUT_REQUIRED`, `_REJECTED`, `_AUTH_REQUIRED`); `AgentCard.security_schemes` and
+  `security_requirements`; `HTTPAuthSecurityScheme(scheme, description)`.
+- `utils/constants.py`: `AGENT_CARD_WELL_KNOWN_PATH = '/.well-known/agent-card.json'`, `TransportProtocol.JSONRPC`.
+
+**Observed:** the offline check and the live calls in D195: a non-streaming client gets the finished task (its id,
+state and artifacts) as the last item of `send_message`.
+
+**Used in:** `agents/receipt/`, D195–D198.
 
 ---
 

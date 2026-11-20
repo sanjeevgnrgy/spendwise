@@ -404,6 +404,25 @@ Known limits, to address when the load calls for it (D174):
   Postgres (already supported through `DATABASE_URL`), removes that.
 - **Long threads:** `GET /threads/{id}` returns a whole thread, unpaged; the model's history is capped by turns, not size.
 
+## The agents: separate services (`agents/`)
+
+**A2A agents run outside the monolith, each as its own process** (D12, D195). Today there is one: the receipt agent
+(`agents/receipt`, Phase 24), an A2A server on `127.0.0.1:9001` with one skill, `extract_receipt`.
+
+- **A remote agent, not a module.** It has no database, no bus and no person: a client agent sends a task (a receipt
+  and the choices it may pick from), the agent works on it and answers with an artifact. Whatever the person's data
+  needs (who owns the receipt, which categories exist, today's date) stays in the monolith and travels as data.
+- **Layout:** `contract.py` (what travels on the wire), `reader.py` (the model call), `executor.py` (the
+  AgentExecutor: task states and the artifact), `task_store.py`, `card.py`, `http.py` (the key check), `settings.py`,
+  and `server.py`, its composition root (`build_app(settings, llm)` takes any `StructuredOutputModel`, so a check
+  runs it with a fake).
+- **What it may import from the backend** (D196): `app.core` (the LLM port, the schema helpers, money's currency
+  pattern) and, in `server.py` only, the Gemini adapter and `setup_logging` from `app.infrastructure`. Never a module,
+  `web/`, `bootstrap`, `main` or the backend's settings: those are the monolith's, and an agent that needed them
+  would really be a module. Nothing in `backend/` imports `agents/`.
+- **Its own settings** (`AgentSettings`, the same `.env`), its own start script (`run-receipt-agent.ps1`, which puts
+  `backend` and `agents` on `PYTHONPATH`), its own logger (`receipt.*`).
+
 ## The web app: Next.js and feature slices
 
 A Next.js 16 app (App Router, D188). The routes and their metadata are rendered on the server; everything signed-in
@@ -563,8 +582,9 @@ Get-ChildItem backend\app\modules -Recurse -Filter *.py | Select-String -Pattern
 # 3. Only the composition root imports a module.py. Expect bootstrap.py and main.py.
 Get-ChildItem backend -Recurse -Filter *.py | Select-String -Pattern 'import module as' | Split-Path -Leaf | Sort-Object -Unique
 
-# 4. Only bootstrap.py picks the LLM provider. Expect bootstrap.py, and the adapter (infrastructure/llm/gemini.py).
-Get-ChildItem backend -Recurse -Filter *.py | Select-String -Pattern 'llm\.gemini|from google'
+# 4. Only a composition root picks the LLM provider. Expect bootstrap.py, the adapter (infrastructure/llm/gemini.py)
+#    and the receipt agent's server.py.
+Get-ChildItem backend, agents -Recurse -Filter *.py | Select-String -Pattern 'llm\.gemini|from google'
 
 # 5. Inside the assistant, imports run api/ -> application/ -> agent/, approvals/, tools/, a2ui/, never back.
 #    Expect only module.py, which builds the router and the use cases.
@@ -591,4 +611,16 @@ Get-ChildItem backend\app, web\src -Recurse -Include *.py,*.ts,*.tsx | Select-St
 #    take_approval.py, which compares the owner on the next line.
 Get-ChildItem backend\app\modules\expenses, backend\app\modules\conversations, backend\app\modules\receipts,
   backend\app\modules\assistant -Recurse -Filter *.py | Select-String -Pattern 'session\.get\(' | Split-Path -Leaf
+
+# 10. The agents use only the backend's core/, and the Gemini adapter and logging in their server.py (D196); the
+#     backend never imports an agent. Expect no output from either.
+Get-ChildItem agents -Recurse -Filter *.py |
+  Select-String -Pattern '^\s*(from|import)\s+app\.(modules|web|bootstrap|main|infrastructure\.config)\b'
+Get-ChildItem agents -Recurse -Filter *.py | Where-Object Name -NE server.py |
+  Select-String -Pattern '^\s*(from|import)\s+app\.infrastructure\b'
+Get-ChildItem backend -Recurse -Filter *.py | Select-String -Pattern '^\s*(from|import)\s+receipt\b'
+
+# 11. The agents import and compile on their own. Expect no output.
+$env:PYTHONPATH = "backend;agents"; .\.venv\Scripts\python.exe -c "import receipt.server"; Remove-Item Env:PYTHONPATH
+.\.venv\Scripts\python.exe -m compileall -q agents
 ```

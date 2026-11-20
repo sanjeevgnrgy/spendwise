@@ -118,10 +118,26 @@ Values the backend and the web app must agree on are **generated from the backen
 Run both after changing an API, a label or a limit, and commit the results with the change. A forgotten
 regeneration shows up as a TypeScript error, or a value that doesn't match.
 
+## Receipt agent settings (`.env`)
+
+The receipt agent (`agents/receipt`, Phase 24) is its own service with its own `AgentSettings`
+(`agents/receipt/settings.py`), read the same way as the backend's, from the same `.env`. It shares only the Gemini
+settings' names, so one key and one model serve both.
+
+| Setting | Default | Used for |
+|---|---|---|
+| `GEMINI_API_KEY`, `GEMINI_MODEL` | not set | The same as the backend's: the agent reads each receipt with one Gemini call |
+| `RECEIPT_AGENT_KEY` | **required** | The key a client must send as `Authorization: Bearer <key>` (D197). At least 32 characters; the agent won't start without it, so it never runs open. It's yours to make: `python -c "import secrets; print(secrets.token_urlsafe(32))"` |
+| `RECEIPT_AGENT_PORT` | `9001` | The port it listens on. The host is fixed: `127.0.0.1` only, so nothing outside this machine can reach it |
+
+Fixed in code: the host (`settings.HOST`), the largest file (5 MB, `contract.MAX_RECEIPT_BYTES`) and request
+(`http.MAX_REQUEST_BYTES`), how many tasks it remembers (`task_store.MAX_KEPT_TASKS`, 20).
+
 ## Run-time options
 
 | | |
 |---|---|
+| `.\run-receipt-agent.ps1` | starts the receipt agent on `http://127.0.0.1:9001` (needs `RECEIPT_AGENT_KEY`; run `.\run.ps1` once first, for `.venv`) |
 | `.\run.ps1 --port 8001` | extra arguments go to uvicorn (then set `API_PROXY_TARGET=http://127.0.0.1:8001` in `web/.env`) |
 | `npx next dev --port 5175` | the web dev server on another port (then set `PUBLIC_URL` on both sides, since sign-in sends people back to it) |
 | `npm run build`, then `npm run start` | the production build, served on :5173 (`API_PROXY_TARGET` and `PUBLIC_URL` are taken when building) |

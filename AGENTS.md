@@ -80,6 +80,10 @@ modules need it. Recipes: [backend_onboarding.md](docs/backend_onboarding.md).
   expenses; assistant → the rest; accounts depends on none. A new dependency must not create a cycle; if two modules
   need each other, redesign (an event, or a third module).
 - Inside the assistant, imports run `api/` → `application/` → `agent/`, `approvals/`, `tools/`, `a2ui/`, never back.
+- **A2A agents live outside the monolith**, in `agents/<name>/`, each its own process (D195). An agent imports only
+  `app.core`, plus the Gemini adapter and `setup_logging` in its `server.py` (D196); never a module, `web/` or the
+  backend's settings. The backend never imports an agent: it talks to one over A2A. An agent knows no person: the
+  owner is checked in the monolith before anything is sent, and the agent refuses requests without its key (D197).
 
 **Composition root.** `bootstrap.build(clock, llm, tools, engine, files, identity, sealer)` creates everything
 replaceable;
@@ -291,7 +295,7 @@ Run these before asking to commit (PowerShell, from the repo root):
 ```powershell
 # Backend compiles, and the module rules hold: run every scan in docs/architecture.md, "Checking the rules"
 # (they include each module package importing on its own, which catches import cycles).
-.\.venv\Scripts\python.exe -m compileall -q backend
+.\.venv\Scripts\python.exe -m compileall -q backend agents
 
 # Migrations, on a COPY of the database
 Copy-Item backend\spendwise.db $env:TEMP\spendwise-check.db

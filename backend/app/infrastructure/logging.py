@@ -1,16 +1,19 @@
 """Console logging for SpendWise's own messages, such as the assistant's steps and tool calls (infrastructure).
 
-Called once by each entry point before it starts working: main.create_app (the web app) and mcp_stdio.py.
+Called once by each entry point before it starts working: main.create_app (the web app), mcp_stdio.py and the
+receipt agent (agents/receipt/server.py, which adds its own "receipt" loggers).
 """
 
 import logging
+from collections.abc import Iterable
 
 # Every module logs with logging.getLogger(__name__), so all our loggers live under "app".
 APP_LOGGER = "app"
 
 
-def setup_logging(level: int = logging.INFO) -> None:
-    """Show our own loggers ("app.*") at `level` on the console; other libraries only from WARNING up."""
+def setup_logging(level: int = logging.INFO, loggers: Iterable[str] = ()) -> None:
+    """Show our own loggers ("app.*", and any in `loggers`) at `level` on the console; other libraries only from
+    WARNING up."""
     # Show our own messages, while libraries stay quiet unless something goes wrong. Uvicorn keeps
     # its own log setup for request lines.
     # Message text, tool arguments and form values are logged only at DEBUG: they're the user's
@@ -23,4 +26,5 @@ def setup_logging(level: int = logging.INFO) -> None:
         # basicConfig does nothing once handlers exist. force=True replaces that setup with ours.
         force=True,
     )
-    logging.getLogger(APP_LOGGER).setLevel(level)
+    for name in (APP_LOGGER, *loggers):
+        logging.getLogger(name).setLevel(level)

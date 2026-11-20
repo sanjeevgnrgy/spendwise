@@ -15,6 +15,7 @@ it's built that way.
 | work on the code with an AI agent | [AGENTS.md](../AGENTS.md): the rules every change follows, and the definition of done |
 | work on the AI assistant | [assistant_architecture.md](assistant_architecture.md) |
 | see how a feature was designed and built | the [phase notes](#phase-notes) below |
+| see what's planned next | [roadmap.md](roadmap.md) |
 
 ## Overview and architecture
 
@@ -25,6 +26,7 @@ it's built that way.
 | [assistant_architecture.md](assistant_architecture.md) | The agent loop, tools over MCP, AG-UI streaming, A2UI cards and forms, approvals, memory, cost |
 | [how_spendwise_works.md](how_spendwise_works.md) | The main flows as diagrams: adding an expense, the Dashboard, asking, deleting with approval, staying in sync |
 | [architecture-review.md](architecture-review.md) | Every finding of the architecture review and the two code reviews, and how each was resolved |
+| [roadmap.md](roadmap.md) | What's planned next, in order: each feature's goal, scope, design, open decisions and dependencies, including paid plans with Razorpay |
 | [decisions.md](decisions.md) | Every design decision (D1–D194), with why, and when to revisit it |
 
 ## Developer guides

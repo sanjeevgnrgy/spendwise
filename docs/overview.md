@@ -76,6 +76,8 @@ or over HTTP at `/mcp/` with a bearer token ([api_endpoints.md](api_endpoints.md
 | Web app | 11 frontend + Expenses · 12 Dashboard · 13 chat panel |
 | Agent UI | 14 AG-UI streaming · 15 tool progress · 16 A2UI cards · 17 A2UI forms · 18 insight cards + approvals |
 | Architecture | the refactor: CQRS, feature slices, migrations, generated contracts ([phases/refactor-architecture.md](phases/refactor-architecture.md)) |
+| Product | 19-20 English and Hindi · 21 receipts · 22 signing in · 23 each person's own data · 24-25 A2A agents · 26 Agent Skills · 27 budgets ([phases/](phases/)) |
 
-**Planned** (from the project plan): budgets, splitting expenses, receipts, user accounts and login (auth), A2A agents
-(receipt, insights, currency) as separate services, Agent Skills, Postgres. Each arrives as its own phase.
+**Planned:** real exchange rates, recurring expenses, proactive alerts, statement import, Hinglish and voice, data
+export and deletion, page-aware chat, production readiness, paid plans with Razorpay, a WhatsApp channel, and more:
+[roadmap.md](roadmap.md).

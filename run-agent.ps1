@@ -1,10 +1,12 @@
-# Starts one of SpendWise's A2A agents (agents/), beside the backend: receipt (:9001) or currency (:9003).
-# Usage:  .\run-agent.ps1 receipt        .\run-agent.ps1 currency
+# Starts one of SpendWise's A2A agents (agents/), beside the backend: receipt (:9001), insights (:9002) or
+# currency (:9003).
+# Usage:  .\run-agent.ps1 receipt        .\run-agent.ps1 insights        .\run-agent.ps1 currency
 # Run .\run.ps1 once first: it creates .venv and installs the requirements. Each agent needs its key in .env
-# (RECEIPT_AGENT_KEY, CURRENCY_AGENT_KEY: docs/configuration.md); the receipt agent uses the backend's Gemini settings.
+# (RECEIPT_AGENT_KEY, INSIGHTS_AGENT_KEY, CURRENCY_AGENT_KEY: docs/configuration.md); the receipt and insights
+# agents use the backend's Gemini settings.
 param(
     [Parameter(Mandatory = $true)]
-    [ValidateSet("receipt", "currency")]
+    [ValidateSet("receipt", "insights", "currency")]
     [string]$Name
 )
 

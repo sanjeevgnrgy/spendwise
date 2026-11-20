@@ -170,6 +170,9 @@ agent kit's gate (D197, D202). Each agent has its own key.
 | A wrong or tampered answer from the agent | To the backend, the agent's answer is outside data: it's validated against the assistant's own model (types, sizes, the payment methods it knows, unknown fields ignored) and checked again (categories offered, currency, total); an unusable one is "couldn't be read". The task id is shown only if it looks like an id |
 | The file echoed back | The request asks for no history (`historyLength: 0`), so the answer doesn't carry the file back |
 | A person's spending reaching the currency agent | It's asked only what 1 unit of a currency was worth in INR on a day: never the amount, the merchant or who it's for; the backend works out the INR amount itself (D204) |
+| A person's notes reaching the insights agent | The contract has no field for them: a note, an id or an owner in a request is refused (`extra="forbid"`); the backend will send date, INR amount, category, merchant and payment method only (Part 3, the owner's choice) |
+| A merchant's name steering the insights agent's model | The model gets only the computed figures and the question, as JSON, with an instruction that none of it is an instruction, in a call with no tools; its answer must be exactly 3 short strings; every number is code's, not the model's (D205) |
+| A waiting task lost, or kept forever | A task waiting for an answer is forgotten last when the store is full (20 tasks); nothing is written to disk |
 | A wrong rate saved | The answer must be for the currencies asked about, a positive decimal written as a string, for no later day than asked; anything else is "not available" and nothing is saved |
 
 ## The A2UI renderer

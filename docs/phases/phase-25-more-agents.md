@@ -2,7 +2,7 @@
 
 **Goal:** more specialist agents beside the receipt agent (a currency agent and an insights agent), every expense kept
 in INR as well as its own currency, and the assistant choosing which agent to ask, including agents that need to ask
-the person something before they can finish. Decisions: D201–D204 (Part 1).
+the person something before they can finish. Decisions: D201–D204 (Part 1), D205 (Part 2).
 
 **The owner's choices** (asked before building):
 
@@ -74,3 +74,43 @@ Add an expense in dollars (in the chat: "add a 4 dollar coffee at Blue Tokai tod
 API with `"currency": "USD"`). The Expenses page shows "$4.00" with "≈ ₹338.00" under it (mock rate 84.5), and the
 Dashboard's total includes ₹338.00. Stop the currency agent and try again: the save is refused with "Currency
 conversion isn't available right now"; an expense in INR still saves.
+
+## Part 2: the insights agent, and input-required
+
+**The idea: a task that stops to ask.** Most tasks run from SUBMITTED to COMPLETED in one go. A2A also lets a task
+stop half-way in **INPUT_REQUIRED**: the agent says what it needs ("Which month should I analyse?") and waits. The task
+isn't over: the client answers by sending another message **naming the same task** (its task id and context id), and
+the agent carries on from where it stopped, with everything it was given before. It's like a tailor who takes your
+cloth and measurements, then phones to ask "which collar?": you don't bring the cloth again, you just answer, and the
+same order continues. Here, the insights agent asks only when it must: when no month was named and the expenses span
+several. The reply is read by rule (a month's name in English or Hindi, `2026-11`, "last month"), and a reply it can't
+read is asked about again.
+
+**Numbers by code, words by the model.** The totals, trends, unusual spends and forecast are arithmetic: exact,
+repeatable and free, so code does them. The model gets those figures (not the raw rows) and writes the 3 tips: the
+part code can't do. Merchant names and the question are data in that call, never instructions, and the answer must be
+exactly 3 short strings.
+
+**What was built** (`agents/insights/`, D205):
+
+| File | What it does |
+|---|---|
+| `contract.py` | `InsightsRequest` (today, month?, question?, expenses), `MonthReply`, the `Insights` answer |
+| `analysis.py` | totals, trends against the month before, unusual spends (3× the category's median), the linear forecast |
+| `months.py` | the months the expenses cover, and the month a reply names (English and Hindi) |
+| `tips.py` | `TipWriter`: one structured-output call for exactly 3 tips |
+| `executor.py` | asks which month (INPUT_REQUIRED), resumes from the task's history, answers |
+| `card.py`, `settings.py`, `server.py`, `__main__.py` | the card (9002, `INSIGHTS_AGENT_KEY`), settings, composition root, entry point |
+
+Also: the kit's task store forgets finished tasks before waiting ones; `run-agent.ps1 insights`.
+
+**How it was checked:** 30 offline checks with a fake model (D205), the other agents' suites again, and 2 live Gemini
+calls: asked which month, resumed with "November" on the same task, correct figures, and a merchant's injected text
+not followed. 3 live calls remain for Part 3.
+
+### Try it
+
+```powershell
+# .env: INSIGHTS_AGENT_KEY=<32+ random characters>
+.\run-agent.ps1 insights      # http://127.0.0.1:9002; the assistant starts asking it in Part 3
+```

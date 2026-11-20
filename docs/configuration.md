@@ -133,6 +133,8 @@ with the backend, so one key and one model serve both; each agent's key is the s
 | `GEMINI_API_KEY`, `GEMINI_MODEL` | not set | The same as the backend's: the agent reads each receipt with one Gemini call |
 | `RECEIPT_AGENT_KEY` | **required** | The key a client must send as `Authorization: Bearer <key>` (D197). At least 32 characters; the agent won't start without it, so it never runs open. It's yours to make: `python -c "import secrets; print(secrets.token_urlsafe(32))"` |
 | `RECEIPT_AGENT_PORT` | `9001` | The port it listens on. The host is fixed: `127.0.0.1` only, so nothing outside this machine can reach it |
+| `INSIGHTS_AGENT_KEY` | **required** (insights agent) | As above, for the insights agent (Phase 25), which uses the Gemini settings too |
+| `INSIGHTS_AGENT_PORT` | `9002` | The insights agent's port |
 | `CURRENCY_AGENT_KEY` | **required** (currency agent) | As above, for the currency agent; at least 32 characters |
 | `CURRENCY_AGENT_PORT` | `9003` | The currency agent's port (keep `CURRENCY_AGENT_URL` in step). It needs no Gemini settings |
 
@@ -145,7 +147,7 @@ made-up values, D203).
 
 | | |
 |---|---|
-| `.\run-agent.ps1 receipt`, `.\run-agent.ps1 currency` | starts the receipt agent (`:9001`) or the currency agent (`:9003`); each needs its key; run `.\run.ps1` once first, for `.venv` |
+| `.\run-agent.ps1 receipt`, `insights`, `currency` | starts the receipt (`:9001`), insights (`:9002`) or currency (`:9003`) agent; each needs its key; run `.\run.ps1` once first, for `.venv` |
 | `.\run.ps1 --port 8001` | extra arguments go to uvicorn (then set `API_PROXY_TARGET=http://127.0.0.1:8001` in `web/.env`) |
 | `npx next dev --port 5175` | the web dev server on another port (then set `PUBLIC_URL` on both sides, since sign-in sends people back to it) |
 | `npm run build`, then `npm run start` | the production build, served on :5173 (`API_PROXY_TARGET` and `PUBLIC_URL` are taken when building) |

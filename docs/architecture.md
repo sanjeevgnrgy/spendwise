@@ -417,6 +417,7 @@ Known limits, to address when the load calls for it (D174):
 | Agent | Port | Skill | Model | Used by |
 |---|---|---|---|---|
 | `agents/receipt` (Phase 24) | 9001 | `extract_receipt` | Gemini, one call | the assistant, for a receipt attached in the chat |
+| `agents/insights` (Phase 25) | 9002 | `analyze_spending` | Gemini, one call (the tips; the numbers are code) | the assistant, from Part 3; it may stop input-required to ask which month (D205) |
 | `agents/currency` (Phase 25) | 9003 | `convert_currency` | none: a `RateProvider` (mock rates for now, D203) | the expenses module, to store every expense in INR too (D204) |
 
 **What they share is the agent kit** (`agents/agent_kit/`, D202): `AgentGate` (the key check, the request limit,
@@ -434,9 +435,9 @@ address, and sends the agent's key.
   answers with an artifact. Whatever the person's data
   needs (who owns the receipt, which categories exist, today's date) stays in the monolith and travels as data.
 - **Layout of an agent:** `contract.py` (what travels on the wire), its work (`reader.py`, the model call;
-  `rates.py`, the rate provider), `executor.py` (the AgentExecutor: task states and the artifact), `card.py`,
-  `settings.py`, and `server.py`, its composition root (`build_app(...)` takes its collaborators, a model or a rate
-  provider and a clock, so a check runs it with fakes).
+  `rates.py`, the rate provider; `analysis.py`, `months.py` and `tips.py`, the insights), `executor.py` (the
+  AgentExecutor: task states and the artifact), `card.py`, `settings.py`, and `server.py`, its composition root
+  (`build_app(...)` takes its collaborators, a model or a rate provider and a clock, so a check runs it with fakes).
 - **What they may import from the backend** (D196): `app.core` (the LLM port, the schema helpers, money and its
   conversion rule, the clock) and, in a `server.py` only, the Gemini adapter and `setup_logging` from
   `app.infrastructure`. Never a module, `web/`, `bootstrap`, `main` or the backend's settings: those are the
@@ -604,7 +605,7 @@ Get-ChildItem backend\app\modules -Recurse -Filter *.py | Select-String -Pattern
 Get-ChildItem backend -Recurse -Filter *.py | Select-String -Pattern 'import module as' | Split-Path -Leaf | Sort-Object -Unique
 
 # 4. Only a composition root picks the LLM provider. Expect bootstrap.py, the adapter (infrastructure/llm/gemini.py)
-#    and the receipt agent's server.py (the currency agent uses no model).
+#    and the receipt and insights agents' server.py (the currency agent uses no model).
 Get-ChildItem backend, agents -Recurse -Filter *.py | Select-String -Pattern 'llm\.gemini|from google'
 
 # 5. Inside the assistant, imports run api/ -> application/ -> agent/, approvals/, tools/, receipt_agent/, a2ui/,
@@ -641,10 +642,11 @@ Get-ChildItem agents -Recurse -Filter *.py |
 Get-ChildItem agents -Recurse -Filter *.py | Where-Object Name -NE server.py |
   Select-String -Pattern '^\s*(from|import)\s+app\.infrastructure\b'
 Get-ChildItem backend -Recurse -Filter *.py |
-  Select-String -Pattern '^\s*(from|import)\s+(receipt|currency|agent_kit)\b'
+  Select-String -Pattern '^\s*(from|import)\s+(receipt|insights|currency|agent_kit)\b'
 
 # 11. The agents import and compile on their own. Expect no output.
-$env:PYTHONPATH = "backend;agents"; .\.venv\Scripts\python.exe -c "import receipt.server, currency.server"
+$env:PYTHONPATH = "backend;agents"
+.\.venv\Scripts\python.exe -c "import receipt.server, insights.server, currency.server"
 Remove-Item Env:PYTHONPATH
 .\.venv\Scripts\python.exe -m compileall -q agents
 

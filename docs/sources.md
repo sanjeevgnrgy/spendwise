@@ -853,7 +853,19 @@ Checked on 2026-11-20.
   numbers come back as floats; the currency agent's amounts and rates travel as decimal strings (D203).
 - **Observed:** the agent's JSON answers are compact (`"from_currency":"USD"`, no space after the colon).
 
-**Used in:** `agents/currency/contract.py`, `backend/app/modules/expenses/conversion/currency_agent.py`, D203, D204.
+**Resuming an input-required task** (`server/request_handlers/default_request_handler_v2.py`, `_setup`): a message
+naming `task_id` (and optionally `context_id`, which must match) continues that stored task ("Agents must infer the
+contextId from the task when the message names only a taskId"); an unknown id is `TaskNotFoundError`. A blocking
+`SendMessage` returns when the task reaches a terminal **or interrupted** state (`INTERRUPTED_TASK_STATES`), so the
+client gets the INPUT_REQUIRED task and its question at once. **Observed:** the executor then sees
+`context.current_task` with its history, the client's first message included (the insights agent reads its request
+back from it).
+
+**Observed:** integers in a data part come back as floats (`"days_in_month": 30.0`), as the helper's docstring warns:
+a client reading the insights artifact must accept them.
+
+**Used in:** `agents/currency/contract.py`, `agents/insights/executor.py`,
+`backend/app/modules/expenses/conversion/currency_agent.py`, D203–D205.
 
 ---
 

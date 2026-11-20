@@ -27,6 +27,7 @@ from app.modules.assistant.agent.surfaces import Surface, TextChat, WebPanel
 from app.modules.assistant.application.decisions import approval_turn
 from app.modules.assistant.application.receipt_turn import receipt_turn
 from app.modules.assistant.approvals import ExpenseSnapshot, RequestApproval, RestoreApproval, TakeApproval
+from app.modules.assistant.receipt_agent.port import ReceiptReader
 from app.modules.assistant.tools.port import ExpenseTools
 from app.modules.mcp import ExpenseView
 
@@ -51,15 +52,16 @@ def new_thread_id() -> str:
 class Assistant:
     """The use cases, with what they need. Built once by the composition root.
 
-    module.create_router builds it from the bus, the tools adapter, the language model and the receipts module's
-    extractor, and the routes (api/routes.py) call it: run_turn, read_receipt and decide through
-    api/agui_stream.py for POST /agent, chat for POST /chat.
+    module.create_router builds it from the bus, the tools adapter, the language model, the receipts module's
+    ReceiptFiles and the receipt reader (the receipt agent, over A2A), and the routes (api/routes.py) call it:
+    run_turn, read_receipt and decide through api/agui_stream.py for POST /agent, chat for POST /chat.
     """
 
     bus: MessageBus
     tools: ExpenseTools
     llm: ToolCallingModel
-    receipts: receipts.ReceiptExtractor
+    receipt_files: receipts.ReceiptFiles
+    receipt_reader: ReceiptReader
 
     def _next_turn(self, owner_id: int, thread_id: str) -> int:
         """The number the owner's thread's next turn gets: 1 for a new thread."""
@@ -123,11 +125,13 @@ class Assistant:
         """A receipt attached in the web panel (with `message`, possibly empty): read it and offer it as the expense
         form, pre-filled, saving the turn when it finishes. No agent loop: a person confirms the form first.
 
-        Raises NotFoundError for a receipt the owner doesn't have and LlmError if it can't be read (receipt_turn.py).
+        Raises NotFoundError for a receipt the owner doesn't have and ExternalServiceError if the receipt agent can't
+        be reached or can't read it (receipt_turn.py).
         """
         turn = self._next_turn(owner_id, thread_id)
         tools = self.tools.acting_for(owner_id)
-        for event in receipt_turn(self.receipts, tools, owner_id, receipt_id, message, today, language):
+        files, reader = self.receipt_files, self.receipt_reader
+        for event in receipt_turn(files, reader, tools, owner_id, receipt_id, message, today, language):
             if isinstance(event, TurnFinished):
                 self._save(owner_id, thread_id, turn, event)
             yield event

@@ -1,7 +1,7 @@
 """GetReceipt: one uploaded receipt by id. The query and its handler; it never changes anything.
 
 A slice of the receipts module's read side. module.py registers the handler with the bus. The routes ask it (the
-upload's answer, GET /receipts/{id}) and so does the extraction, which needs the storage key. The answer is a frozen
+upload's answer, GET /receipts/{id}) and so does ReceiptFiles, which needs the storage key. The answer is a frozen
 StoredReceipt copy (models.py), never a table row.
 """
 

@@ -1,7 +1,8 @@
 """Pieces for the JSON schemas a model answers in (structured output): part of the LLM port (core layer).
 
-Shared by every structured-output use case: the assistant's ExpenseParser (/parse) and the receipts module's
-ReceiptExtractor. A schema is behaviour (the model reads it), so a piece both use is defined once, here.
+Shared by every structured-output use case: the assistant's ExpenseParser (/parse) and the receipt agent's
+ReceiptReader (agents/receipt/reader.py, D196). A schema is behaviour (the model reads it), so a piece both use is
+defined once, here.
 """
 
 import copy

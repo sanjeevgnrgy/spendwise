@@ -336,33 +336,16 @@ curl.exe -F "file=@receipt.jpg" http://127.0.0.1:8000/api/v1/receipts
   bytes, not its name or `Content-Type`, and `media_type` reports what was found.
 - **422 `business-rule`:** an empty file, one over 5 MB, or any other kind of file. **422 `validation`:** no `file`
   field.
-- Nothing is read yet: the upload only keeps the file.
+- Nothing is read here: the upload only keeps the file. A receipt is read when it's attached in the chat: the
+  assistant sends it to the receipt agent (`POST /agent`, Phase 24).
 
 ### `GET /api/v1/receipts/{receipt_id}`
 
 What's known about an uploaded receipt (the same object as above; not its bytes). 404 if the person has no such
 receipt.
 
-### `POST /api/v1/receipts/{receipt_id}/extraction`
-
-Reads the receipt with the model and answers what it says. **A suggestion: nothing is saved.** A POST, not a GET,
-because each call asks the model again (a few seconds, and quota).
-
-```json
-{
-  "merchant": "GREEN LEAF CAFE", "spent_on": "2026-11-12",
-  "line_items": [
-    {"description": "Masala Chai x2", "amount": "120.00"}, {"description": "Veg Sandwich", "amount": "150.00"}
-  ],
-  "tax": "13.50", "total": "283.50", "currency": "INR", "payment_method": "upi", "category": "Food"
-}
-```
-
-- Any field the receipt doesn't show is `null` (and `line_items` empty); so is anything that can't be right: a
-  `category` that isn't one of yours (it's chosen from your categories), a `currency` that isn't a three-letter code,
-  a `total` that isn't positive. Amounts are strings, like everywhere else.
-- **404** for an unknown receipt, or one whose file is missing from `UPLOADS_DIR` ("upload it again"). **502** if the
-  model fails or its answer can't be used.
+`POST /api/v1/receipts/{receipt_id}/extraction` was removed in Phase 24 (D199): reading a receipt is the receipt
+agent's job now, reached only through the chat.
 
 ## The assistant
 

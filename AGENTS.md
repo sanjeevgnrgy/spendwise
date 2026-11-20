@@ -76,24 +76,26 @@ modules need it. Recipes: [backend_onboarding.md](docs/backend_onboarding.md).
   is passed in); only their HTTP adapters (`api.py`, `accounts/account_api.py`, `assistant/api/routes.py`,
   `mcp/http.py`) import `web/`.
 - Only `bootstrap.py` and `main.py` import a `module.py`.
-- Module dependencies stay one-way: expenses → categories; mcp → expenses, categories; receipts → categories,
-  expenses; assistant → the rest; accounts depends on none. A new dependency must not create a cycle; if two modules
+- Module dependencies stay one-way: expenses → categories; mcp → expenses, categories; assistant → the rest;
+  accounts and receipts depend on none. A new dependency must not create a cycle; if two modules
   need each other, redesign (an event, or a third module).
-- Inside the assistant, imports run `api/` → `application/` → `agent/`, `approvals/`, `tools/`, `a2ui/`, never back.
+- Inside the assistant, imports run `api/` → `application/` → `agent/`, `approvals/`, `tools/`, `receipt_agent/`,
+  `a2ui/`, never back.
 - **A2A agents live outside the monolith**, in `agents/<name>/`, each its own process (D195). An agent imports only
   `app.core`, plus the Gemini adapter and `setup_logging` in its `server.py` (D196); never a module, `web/` or the
   backend's settings. The backend never imports an agent: it talks to one over A2A. An agent knows no person: the
   owner is checked in the monolith before anything is sent, and the agent refuses requests without its key (D197).
 
-**Composition root.** `bootstrap.build(clock, llm, tools, engine, files, identity, sealer)` creates everything
-replaceable;
+**Composition root.** `bootstrap.build(clock, llm, tools, engine, files, identity, sealer, receipt_reader)` creates
+everything replaceable;
 `main.create_app(services)` serves it; nothing is built at import (uvicorn runs with `--factory`).
 
 **Ports and adapters.** The model sits behind `core/llm` ports: depend on the narrowest one you call
 (`StructuredOutputModel` or `ToolCallingModel`). Only `bootstrap.py` imports the Gemini adapter
 (`infrastructure/llm/`). The expense tools sit behind `ExpenseTools`, uploaded files' bytes behind `FileStore`
-(`core/files.py`; never a path built from a user's file name), the sign-in provider behind `IdentityProvider`
-(`core/identity.py`) and sealed secrets behind `Sealer` (`core/sealing.py`). Time comes from the injected clock
+(`core/files.py`; never a path built from a user's file name), the receipt agent behind `ReceiptReader`
+(`assistant/receipt_agent/port.py`; its answer is checked again as outside data, D199), the sign-in provider behind
+`IdentityProvider` (`core/identity.py`) and sealed secrets behind `Sealer` (`core/sealing.py`). Time comes from the injected clock
 (`ctx.clock`, `ClockDep`), never `date.today()` or `datetime.now()`.
 
 **Signing in (D185–D187).**
@@ -266,6 +268,8 @@ migrations.upgrade_to_latest(engine)
 services = bootstrap.build(clock=FixedClock(), llm=FakeModel(), engine=engine,
                            identity=FakeIdentityProvider(), sealer=FernetSealer([Fernet.generate_key().decode()]))
 client = TestClient(create_app(services), base_url="https://localhost")   # https: the cookies are Secure
+# The receipt agent: pass receipt_reader= a fake ReceiptReader, or A2AReceiptReader(url, key,
+# transport=httpx.ASGITransport(app=receipt.server.build_app(settings, FakeModel()))) for the real one in-process.
 # Sign in through the real routes: GET /api/v1/auth/login, then /auth/callback with the state the fake was given.
 # Send X-CSRF: 1 on every API call. A fake provider implements core/identity.IdentityProvider; the OIDC adapter
 # itself takes httpx2.MockTransport (transport=...) to talk to a fake provider without a network.

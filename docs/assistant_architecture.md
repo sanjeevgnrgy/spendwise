@@ -43,8 +43,9 @@ flowchart LR
 ```
 
 The module is organised in folders by role. Imports run one way: `api/` (adapters) → `application/` (use cases) →
-`agent/`, `approvals/`, `tools/` and `a2ui/`; nothing lower down imports the layers above it, and only `module.py`
-(the composition root's entry point) builds the router and the use cases.
+`agent/`, `approvals/`, `tools/`, `receipt_agent/` (the receipt agent's port and A2A client, D199) and `a2ui/`;
+nothing lower down imports the layers above it, and only `module.py` (the composition root's entry point) builds the
+router and the use cases.
 
 | File (under `modules/assistant/`) | Layer | Job |
 |---|---|---|
@@ -202,23 +203,30 @@ form's values in `forwardedProps`; the server writes them as the next message, l
 **A receipt attached in the chat** (Phase 21, D183) is the third way a form appears. The browser uploads the file
 (`POST /receipts`), then sends the run with an AG-UI `image` or `document` part pointing at it
 (`{"type": "file", "value": "<id>", "provider": "spendwise-receipts"}`). The server doesn't run the agent:
-`application/receipt_turn.py` reads the receipt with the receipts module's `ReceiptExtractor` (one model call, no
-tools) and sends a reply and the built-in form, pre-filled from it (`metadata.source: "receipt"`), with the line items
-and tax summarised in the note. Save then goes to the agent like any form's.
+`application/receipt_turn.py` takes the file from the receipts module (`ReceiptFiles`, for its owner only) and has
+the **receipt agent** read it (Phase 24, D199): the assistant is the A2A client agent, `receipt_agent/a2a_client.py`
+fetches the agent's card, checks it, sends the file and the choices, and checks the answer as outside data. The
+reading shows as a chip of its own ("Asking the receipt agent…", then "Receipt read · A2A task 3f2a9c1e", D200).
+Then the reply and the built-in form, pre-filled from it (`metadata.source: "receipt"`), with the line items and tax
+summarised in the note. Save then goes to the agent like any form's.
 
 ```mermaid
 sequenceDiagram
     participant B as Browser
     participant A as /agent
     participant R as receipts module
+    participant RA as receipt agent (A2A, :9001)
     participant G as Gemini
     B->>R: POST /receipts (the file)
     R-->>B: 201 {id, media_type}
     B->>A: run: [text?, image part {file: id}]
-    A->>R: ReceiptExtractor.extract(id)
-    R->>G: the file + schema (no tools)
-    G-->>R: JSON, checked
-    A-->>B: TEXT "I read the receipt…", CUSTOM a2ui (form, source=receipt)
+    A->>R: ReceiptFiles.content(owner, id)
+    A-->>B: TOOL_CALL_START read_receipt ("Asking the receipt agent…")
+    A->>RA: GET agent card, then SendMessage (file + choices, bearer key)
+    RA->>G: the file + schema (no tools)
+    G-->>RA: JSON, checked
+    RA-->>A: task COMPLETED, artifact receipt_extraction
+    A-->>B: TOOL_CALL_RESULT (ok, "A2A task 3f2a9c1e"), TEXT "I read the receipt…", CUSTOM a2ui (form)
     B->>A: Save (forwardedProps action) → agent → add_expense
 ```
 

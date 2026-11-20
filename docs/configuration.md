@@ -21,7 +21,9 @@ All backend settings are one Pydantic `Settings` class in `backend/app/infrastru
 | `GEMINI_API_KEY` | not set | The assistant (`/chat`, `/agent`) and `/parse`. Without it, those routes fail with a message saying the key is missing; everything else works. Get one at https://aistudio.google.com/apikey |
 | `GEMINI_MODEL` | not set | Which Gemini model answers, e.g. `gemini-3.5-flash-lite`. Model ids and free-tier limits: [gemini.md](gemini.md) |
 | `DATABASE_URL` | `sqlite:///<project>/backend/spendwise.db` | Any SQLAlchemy URL. Point it at a copy to experiment safely |
-| `MODEL_REQUESTS_PER_MINUTE`, `MODEL_REQUESTS_PER_DAY` | `10`, `300` | How many requests to the routes that call the model (`/agent`, `/chat`, `/parse`, reading a receipt) each person may make per minute and per day (UTC); one more is a 429 (D194). Counted in memory, per server process |
+| `MODEL_REQUESTS_PER_MINUTE`, `MODEL_REQUESTS_PER_DAY` | `10`, `300` | How many requests to the routes that call the model (`/agent`, `/chat`, `/parse`; a receipt is read through `/agent`) each person may make per minute and per day (UTC); one more is a 429 (D194). Counted in memory, per server process |
+| `RECEIPT_AGENT_URL` | `http://127.0.0.1:9001` | Where the backend reaches the receipt agent (Phase 24). Its Agent Card must name this same address, or the backend refuses to send it anything (D199) |
+| `RECEIPT_AGENT_KEY` | not set | The receipt agent's key (below): the backend sends it, the agent checks it. Without it, an attached receipt can't be read (the chat says the reader isn't available); everything else works |
 | `UPLOADS_DIR` | `<project>/backend/uploads` | The folder uploaded receipts are kept in, by random names (created on the first upload; git-ignored). It goes with the database: a copy of one needs a copy of the other |
 
 ### Sign-in
@@ -121,8 +123,9 @@ regeneration shows up as a TypeScript error, or a value that doesn't match.
 ## Receipt agent settings (`.env`)
 
 The receipt agent (`agents/receipt`, Phase 24) is its own service with its own `AgentSettings`
-(`agents/receipt/settings.py`), read the same way as the backend's, from the same `.env`. It shares only the Gemini
-settings' names, so one key and one model serve both.
+(`agents/receipt/settings.py`), read the same way as the backend's, from the same `.env`. It shares the Gemini
+settings' names, so one key and one model serve both, and `RECEIPT_AGENT_KEY`, which the backend sends and the agent
+checks.
 
 | Setting | Default | Used for |
 |---|---|---|

@@ -131,6 +131,7 @@ export const AGUI = {
   "metadata": {
     "ok": "ok",
     "labels": "labels",
-    "source": "source"
+    "source": "source",
+    "detail": "detail"
   }
 } as const

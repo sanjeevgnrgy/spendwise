@@ -11,11 +11,13 @@ import type { ToolActivity } from "../model/chat-types"
 /**
  * One tool call as a chip: spinning while it runs, then a tick or a cross, or "?" if the connection broke while
  * it ran. What it says comes from the backend (TOOL_CALL_START's labels, shown as sent), so this file knows no
- * tool names; only the "?" chip's explanation is the browser's own text, in the language on now.
+ * tool names; only the "?" chip's explanation is the browser's own text, in the language on now. When a remote agent
+ * did the work, its task ("A2A task 3f2a9c1e", also from the backend) follows the text once the call has ended.
  */
 export function ToolChip({ tool }: { tool: ToolActivity }) {
   const { t } = useTexts()
   const { running, done, failed } = tool.labels
+  const detail = tool.detail ? <span className="font-mono opacity-70">{tool.detail}</span> : null
 
   if (tool.status === "running") {
     return (
@@ -38,13 +40,13 @@ export function ToolChip({ tool }: { tool: ToolActivity }) {
     // reply explains what went wrong, in the user's language.
     return (
       <Badge variant="destructive">
-        <X /> {failed}
+        <X /> {failed} {detail}
       </Badge>
     )
   }
   return (
     <Badge variant="secondary">
-      <Check /> {done}
+      <Check /> {done} {detail}
     </Badge>
   )
 }

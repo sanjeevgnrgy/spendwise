@@ -3,7 +3,7 @@
 The port (core layer, no business rules). Two narrow protocols, one per way the app uses a model, so each
 caller depends only on what it calls (interface segregation):
 - StructuredOutputModel: one answer as JSON in a given shape, from text and any attached files (the assistant's
-  /parse, ExpenseParser; the receipts module's ReceiptReader, which attaches a receipt's image or PDF);
+  /parse, ExpenseParser; the receipt agent's ReceiptReader, agents/receipt, which attaches a receipt's image or PDF);
 - ToolCallingModel: one streamed step of a tool-using conversation (the assistant's agent loop, agent.Agent).
 LanguageModel is both: what the composition root (bootstrap.py) builds and hands out, today GeminiModel
 (infrastructure/llm/gemini.py), which satisfies all three structurally. Nothing else imports a provider.

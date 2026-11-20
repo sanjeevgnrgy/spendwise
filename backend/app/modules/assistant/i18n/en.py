@@ -75,6 +75,10 @@ class ChatText(StrEnum):
     CHIP_TOOL_RUNNING = "chips.anyTool.running"
     CHIP_TOOL_DONE = "chips.anyTool.done"
     CHIP_TOOL_FAILED = "chips.anyTool.failed"
+    CHIP_RECEIPT_RUNNING = "chips.readReceipt.running"
+    CHIP_RECEIPT_DONE = "chips.readReceipt.done"
+    CHIP_RECEIPT_FAILED = "chips.readReceipt.failed"
+    CHIP_TASK = "chips.task"
     # Replies the server writes itself (agent/agent.py, application/decisions.py)
     TOO_MANY_STEPS = "replies.tooManySteps"
     FORM_SHOWN = "replies.formShown"
@@ -100,6 +104,8 @@ class ChatText(StrEnum):
     INVALID_ACTION = "errors.invalidAction"
     ONE_RECEIPT = "errors.oneReceipt"
     INVALID_ATTACHMENT = "errors.invalidAttachment"
+    RECEIPT_UNREADABLE = "errors.receiptUnreadable"
+    RECEIPT_AGENT_UNAVAILABLE = "errors.receiptAgentUnavailable"
     THREAD_ID_LENGTH = "errors.threadIdLength"
     FORM_TOO_LONG = "errors.formTooLong"
 
@@ -168,6 +174,12 @@ EN: dict[ChatText, TextValue] = {
     ChatText.CHIP_TOOL_RUNNING: "Running {tool}…",
     ChatText.CHIP_TOOL_DONE: "Ran {tool}",
     ChatText.CHIP_TOOL_FAILED: "{tool} failed",
+    # Reading an attached receipt: the receipt agent's step (application/receipt_turn.py).
+    ChatText.CHIP_RECEIPT_RUNNING: "Asking the receipt agent…",
+    ChatText.CHIP_RECEIPT_DONE: "Receipt read",
+    ChatText.CHIP_RECEIPT_FAILED: "Couldn't read the receipt",
+    # Shown after a chip's text when a remote agent did the work: {task} is the start of its A2A task id.
+    ChatText.CHIP_TASK: "A2A task {task}",
     ChatText.TOO_MANY_STEPS: (
         "Sorry, that took too many steps, so I stopped. Could you try a simpler or more specific request?"
     ),
@@ -213,6 +225,12 @@ EN: dict[ChatText, TextValue] = {
     ChatText.ONE_RECEIPT: "Attach one receipt at a time.",
     # An attachment that isn't an uploaded receipt (sent inline or by URL, from another service, a bad id).
     ChatText.INVALID_ATTACHMENT: "The attachment isn't a receipt uploaded to this app. Upload it first.",
+    # The receipt agent ran but couldn't read it (or answered something unusable); why goes to the server log (D180).
+    ChatText.RECEIPT_UNREADABLE: "The receipt couldn't be read. Try again, or upload a clearer photo.",
+    # The receipt agent isn't configured, can't be reached or refused us; why goes to the server log (D180).
+    ChatText.RECEIPT_AGENT_UNAVAILABLE: (
+        "The receipt reader isn't available right now. Try again in a moment, or fill in the expense yourself."
+    ),
     ChatText.THREAD_ID_LENGTH: "threadId must be 1 to {max} characters long.",
     ChatText.FORM_TOO_LONG: "The form's values must be under {max} characters in total.",
 }

@@ -886,50 +886,6 @@
         }
       }
     },
-    "/api/v1/receipts/{receipt_id}/extraction": {
-      "post": {
-        "tags": [
-          "receipts"
-        ],
-        "summary": "Extract Receipt",
-        "operationId": "extract_receipt_api_v1_receipts__receipt_id__extraction_post",
-        "parameters": [
-          {
-            "name": "receipt_id",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "integer",
-              "maximum": 9223372036854775807,
-              "minimum": 1,
-              "title": "Receipt Id"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "Successful Response",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ReceiptExtraction"
-                }
-              }
-            }
-          },
-          "422": {
-            "description": "Validation Error",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            }
-          }
-        }
-      }
-    },
     "/api/v1/parse": {
       "post": {
         "tags": [
@@ -2217,30 +2173,6 @@
         "title": "ImagePart",
         "description": "An image part."
       },
-      "LineItem": {
-        "properties": {
-          "description": {
-            "type": "string",
-            "title": "Description",
-            "description": "The item as printed, e.g. 'Paneer tikka x2'."
-          },
-          "amount": {
-            "type": [
-              "string",
-              "null"
-            ],
-            "title": "Amount",
-            "description": "The line's price as a plain number string, e.g. \"240.00\", or null."
-          }
-        },
-        "type": "object",
-        "required": [
-          "description",
-          "amount"
-        ],
-        "title": "LineItem",
-        "description": "One line of the receipt: what was bought, and what that line cost."
-      },
       "LoginOptionRead": {
         "properties": {
           "key": {
@@ -2648,108 +2580,6 @@
         ],
         "title": "ReasoningMessage",
         "description": "A span of the agent's reasoning, materialised as a message. Stands alone\nrather than composing BaseMessage, because it carries no name."
-      },
-      "ReceiptExtraction": {
-        "properties": {
-          "merchant": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Merchant",
-            "description": "The shop or company name printed on the receipt, or null."
-          },
-          "spent_on": {
-            "anyOf": [
-              {
-                "type": "string",
-                "format": "date"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Spent On",
-            "description": "The purchase date printed on the receipt, or null."
-          },
-          "line_items": {
-            "items": {
-              "$ref": "#/components/schemas/LineItem"
-            },
-            "type": "array",
-            "maxItems": 50,
-            "title": "Line Items",
-            "description": "Each item bought, in the receipt's order; empty if none are listed."
-          },
-          "tax": {
-            "type": [
-              "string",
-              "null"
-            ],
-            "title": "Tax",
-            "description": "The total tax (GST, VAT...) as a plain number string, or null."
-          },
-          "total": {
-            "type": [
-              "string",
-              "null"
-            ],
-            "title": "Total",
-            "description": "The final amount paid, as a plain number string without symbols or commas, e.g. \"1250.50\"."
-          },
-          "currency": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Currency",
-            "description": "The ISO 4217 code of the amounts, from the symbol or text on the receipt (₹ or Rs is INR)."
-          },
-          "payment_method": {
-            "anyOf": [
-              {
-                "$ref": "#/components/schemas/PaymentMethod"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "description": "Only if the receipt says how it was paid (a card, UPI, cash...); otherwise null."
-          },
-          "category": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Category",
-            "description": "The best matching category from the allowed list, or null."
-          }
-        },
-        "type": "object",
-        "required": [
-          "merchant",
-          "spent_on",
-          "line_items",
-          "tax",
-          "total",
-          "currency",
-          "payment_method",
-          "category"
-        ],
-        "title": "ReceiptExtraction",
-        "description": "What one shop receipt says. Use null for anything the receipt does not show; never guess."
       },
       "ReceiptRead": {
         "properties": {

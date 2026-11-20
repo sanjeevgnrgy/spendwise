@@ -262,23 +262,6 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/api/v1/receipts/{receipt_id}/extraction": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /** Extract Receipt */
-        post: operations["extract_receipt_api_v1_receipts__receipt_id__extraction_post"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
     "/api/v1/parse": {
         parameters: {
             query?: never;
@@ -801,22 +784,6 @@ export interface components {
         } & {
             [key: string]: unknown;
         };
-        /**
-         * LineItem
-         * @description One line of the receipt: what was bought, and what that line cost.
-         */
-        LineItem: {
-            /**
-             * Description
-             * @description The item as printed, e.g. 'Paneer tikka x2'.
-             */
-            description: string;
-            /**
-             * Amount
-             * @description The line's price as a plain number string, e.g. "240.00", or null.
-             */
-            amount: string | null;
-        };
         /** LoginOptionRead */
         LoginOptionRead: {
             /** Key */
@@ -984,49 +951,6 @@ export interface components {
             } | null;
         } & {
             [key: string]: unknown;
-        };
-        /**
-         * ReceiptExtraction
-         * @description What one shop receipt says. Use null for anything the receipt does not show; never guess.
-         */
-        ReceiptExtraction: {
-            /**
-             * Merchant
-             * @description The shop or company name printed on the receipt, or null.
-             */
-            merchant: string | null;
-            /**
-             * Spent On
-             * @description The purchase date printed on the receipt, or null.
-             */
-            spent_on: string | null;
-            /**
-             * Line Items
-             * @description Each item bought, in the receipt's order; empty if none are listed.
-             */
-            line_items: components["schemas"]["LineItem"][];
-            /**
-             * Tax
-             * @description The total tax (GST, VAT...) as a plain number string, or null.
-             */
-            tax: string | null;
-            /**
-             * Total
-             * @description The final amount paid, as a plain number string without symbols or commas, e.g. "1250.50".
-             */
-            total: string | null;
-            /**
-             * Currency
-             * @description The ISO 4217 code of the amounts, from the symbol or text on the receipt (₹ or Rs is INR).
-             */
-            currency: string | null;
-            /** @description Only if the receipt says how it was paid (a card, UPI, cash...); otherwise null. */
-            payment_method: components["schemas"]["PaymentMethod"] | null;
-            /**
-             * Category
-             * @description The best matching category from the allowed list, or null.
-             */
-            category: string | null;
         };
         /**
          * ReceiptRead
@@ -1899,37 +1823,6 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["ReceiptRead"];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    extract_receipt_api_v1_receipts__receipt_id__extraction_post: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                receipt_id: number;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ReceiptExtraction"];
                 };
             };
             /** @description Validation Error */

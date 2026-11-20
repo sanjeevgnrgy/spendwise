@@ -57,6 +57,11 @@ What it does, in order:
 Extra arguments go to uvicorn, e.g. `.\run.ps1 --port 8001`. If PowerShell refuses to run the script, allow local
 scripts once: `Set-ExecutionPolicy -Scope CurrentUser RemoteSigned`.
 
+**The receipt agent** (Phase 24) reads receipts attached in the chat. It's a separate service: put a
+`RECEIPT_AGENT_KEY` in `.env` (any random 32+ characters, e.g. from
+`python -c "import secrets; print(secrets.token_urlsafe(32))"`), then start it in a second terminal with
+`.\run-receipt-agent.ps1` (http://127.0.0.1:9001). Everything else works without it.
+
 ### The same, by hand (any OS)
 
 ```powershell

@@ -1,7 +1,7 @@
 // Reads the parts of AG-UI events that @ag-ui/core leaves open (`metadata`, `snapshot`): the chip labels, whether
-// a tool worked, and the shared data version. (A tool's result text stays on the server, D180.) Pure functions over
-// network data, which is checked rather than trusted. Used by the transcript (model/transcript.ts) and the run hook
-// (model/use-agent-run.ts).
+// a tool worked and the remote agent's task, and the shared data version. (A tool's result text stays on the server,
+// D180.) Pure functions over network data, which is checked rather than trusted. Used by the transcript
+// (model/transcript.ts) and the run hook (model/use-agent-run.ts).
 
 import { AGUI } from "@/shared/api/contracts.gen"
 import { isObject } from "@/shared/lib/guards"
@@ -34,6 +34,15 @@ export function toolLabelsOf(metadata: unknown, name: string): ToolLabels {
 /** Whether a tool call worked, from TOOL_CALL_RESULT's metadata. Only an explicit `ok: false` means it failed. */
 export function toolSucceeded(metadata: unknown): boolean {
   return !(isObject(metadata) && metadata[AGUI.metadata.ok] === false)
+}
+
+/**
+ * What the chip adds after its text, from TOOL_CALL_RESULT's metadata: the remote agent's task when one did the work
+ * ("A2A task 3f2a9c1e", written by the server in the run's language), or undefined.
+ */
+export function toolDetailOf(metadata: unknown): string | undefined {
+  const detail = isObject(metadata) ? metadata[AGUI.metadata.detail] : undefined
+  return typeof detail === "string" && detail !== "" ? detail : undefined
 }
 
 /** The data version in a STATE_SNAPSHOT, or undefined if it doesn't carry a number. */

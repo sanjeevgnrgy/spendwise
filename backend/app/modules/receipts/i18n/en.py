@@ -1,8 +1,8 @@
 """The receipts module's texts for people, in English: their keys, and the source every other language translates.
 
-Part of the receipts module (i18n/). Only what a person reads: the errors of an upload and of reading a receipt (a
-problem's detail). What the model reads (the extraction's instruction and schema) stays plain English where it's
-written (application/extract_receipt.py). hi.py translates these; __init__.py registers the catalog.
+Part of the receipts module (i18n/). Only what a person reads: the errors of an upload and of finding a receipt (a
+problem's detail). Reading a receipt is the receipt agent's (Phase 24), and its errors are the assistant's texts.
+hi.py translates these; __init__.py registers the catalog.
 """
 
 from enum import StrEnum
@@ -18,7 +18,6 @@ class ReceiptText(StrEnum):
     UNSUPPORTED_TYPE = "errors.unsupportedType"
     NOT_FOUND = "errors.notFound"
     FILE_MISSING = "errors.fileMissing"
-    UNREADABLE = "errors.unreadable"
 
 
 EN: dict[ReceiptText, TextValue] = {
@@ -29,6 +28,4 @@ EN: dict[ReceiptText, TextValue] = {
     ReceiptText.NOT_FOUND: "Receipt {receipt_id} not found",
     # The row is there but its file isn't (the uploads folder was moved or emptied); where it was goes to the log.
     ReceiptText.FILE_MISSING: "The file for receipt {receipt_id} is missing. Upload it again.",
-    # The model answered in a shape that can't be used; the details go to the server log (D180).
-    ReceiptText.UNREADABLE: "The receipt couldn't be read. Try again, or upload a clearer photo.",
 }

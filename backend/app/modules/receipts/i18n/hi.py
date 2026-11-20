@@ -9,5 +9,4 @@ HI: dict[ReceiptText, TextValue] = {
     ReceiptText.UNSUPPORTED_TYPE: "रसीद के रूप में सिर्फ़ फ़ोटो (JPEG, PNG या WEBP) और PDF फ़ाइलें पढ़ी जा सकती हैं।",
     ReceiptText.NOT_FOUND: "रसीद {receipt_id} नहीं मिली",
     ReceiptText.FILE_MISSING: "रसीद {receipt_id} की फ़ाइल मौजूद नहीं है। उसे फिर से अपलोड करें।",
-    ReceiptText.UNREADABLE: "रसीद पढ़ी नहीं जा सकी। फिर से कोशिश करें, या ज़्यादा साफ़ फ़ोटो अपलोड करें।",
 }

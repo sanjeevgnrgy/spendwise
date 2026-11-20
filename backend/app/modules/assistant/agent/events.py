@@ -66,7 +66,8 @@ class ToolFinished:
     """A tool call has ended. `ok` is False if the tool reported an error or couldn't be reached.
 
     The AG-UI adapter turns it into the call's result, a "data changed" signal if `changed_data`, and a
-    card if the tool has one.
+    card if the tool has one. `task_id` is the id a remote agent gave this call (the receipt agent's A2A task), which
+    the chip shows; None for the expense tools.
     """
 
     call_id: str
@@ -76,6 +77,7 @@ class ToolFinished:
     data: dict[str, Any] | None  # the typed result, for a card
     changed_data: bool  # it may have changed expenses: pages should reload
     intent: ToolIntent = ToolIntent.RUN
+    task_id: str | None = None
 
 
 @dataclass(frozen=True)

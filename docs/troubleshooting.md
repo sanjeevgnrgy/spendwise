@@ -172,33 +172,35 @@ is in the backend terminal (D180).
 - **Fix:** a phone's "medium" or "large" size instead of the original, or a single-page PDF. The limit is
   `MAX_RECEIPT_MB` in `receipts/values.py`.
 
-### Extraction returns 404 "The file for receipt … is missing. Upload it again."
+### Attaching a receipt says "The receipt reader isn't available right now."
+- **Cause:** the backend couldn't use the receipt agent (Phase 24). Its log has a WARNING line from
+  `receipt_agent.a2a_client` saying why: `RECEIPT_AGENT_KEY isn't set`; a connection error (the agent isn't running,
+  or `RECEIPT_AGENT_URL` points elsewhere); a 401 (the two sides have different keys); or "the card ... doesn't offer
+  extract_receipt ... at that address" (`RECEIPT_AGENT_URL` and the agent's `RECEIPT_AGENT_PORT` disagree).
+- **Fix:** set `RECEIPT_AGENT_KEY` in `.env`, start `.\run-receipt-agent.ps1`, and restart the backend after changing
+  `.env`.
+
+### The receipt agent won't start: "receipt_agent_key ... Field required" or "at least 32 characters"
+- **Fix:** add `RECEIPT_AGENT_KEY` to `.env` (make one with
+  `python -c "import secrets; print(secrets.token_urlsafe(32))"`). The agent refuses to run without a key, on purpose.
+
+### Attaching a receipt says "The file for receipt … is missing. Upload it again."
 - **Cause:** the row exists, but its file isn't in `UPLOADS_DIR`: the folder was emptied or moved, or the database
   was copied without it (they go together). The server log names the missing key.
 - **Fix:** upload the receipt again; or point `UPLOADS_DIR` back at the folder that has the files.
 
-### Extraction returns 502 "The receipt couldn't be read."
-- **Cause:** Gemini answered, but not in the shape asked for. The server log has a WARNING line ("didn't match
-  ReceiptExtraction"); Pydantic's explanation is logged only at DEBUG, as it quotes the receipt.
-- **Fix:** try again; if it repeats with the same receipt, try a sharper photo. Other 502s are Gemini failing: see
-  the Gemini section above.
+### Attaching a receipt says "The receipt couldn't be read."
+- **Cause:** the receipt agent ran, but the reading failed: the chip shows "Couldn't read the receipt" with its A2A
+  task id. Find that id in the agent's console: "task … failed" with Gemini's own words (a 503 "high demand" is
+  Google's side), or the backend's "answered something unusable" (details at DEBUG, as they quote the receipt).
+- **Fix:** try again; if it repeats with the same receipt, try a sharper photo. Gemini failures: see the Gemini
+  section above.
 
-### Extraction answers, but with `null`s
-- **Cause:** a field the receipt doesn't show (or that's unreadable) is `null` on purpose, never guessed. So is a value
-  that can't be right: a category that isn't one of yours, a currency that isn't a three-letter code, a total that
-  isn't positive.
-- **Fix:** nothing is wrong; the person fills the gaps when confirming (Part 2's form). A blurred or cropped photo
-  gives more `null`s.
-
-### Chat: attaching a receipt shows a toast "… can't be read as a receipt" or "… is larger than 5 MB"
-- **Cause:** the browser checks the file before uploading it: a photo (JPEG, PNG, WEBP) or a PDF, at most 5 MB.
-  An iPhone photo may be HEIC (see "Upload returns 422 …" above).
-- **Fix:** attach a JPEG or PDF of the receipt instead.
-
-### Chat: the receipt's form has empty fields, or a wrong category
-- **Cause:** whatever the receipt doesn't show clearly is left empty rather than guessed, and the category is only
-  a suggestion from your list.
-- **Fix:** fill in or change the fields, then press Save: nothing is saved before that.
+### The form comes back with empty fields
+- **Cause:** a field the receipt doesn't show (or that's unreadable) is left empty on purpose, never guessed. So is a
+  value that can't be right: a category that isn't one of yours, a currency that isn't a three-letter code, a total
+  that isn't positive.
+- **Fix:** nothing is wrong; fill the gaps before pressing Save. A blurred or cropped photo gives more gaps.
 
 ## Web app
 
@@ -545,6 +547,17 @@ is in the backend terminal (D180).
 ### Errors about files that no longer exist (e.g. old `tsconfig.json`)
 - **Cause:** the editor's language servers still hold the old files in memory.
 - **Fix:** close tabs from deleted files without saving, then run **Developer: Reload Window**.
+
+## Web dependencies
+
+### `npx tsc -b` says "Cannot find module 'next'"
+- **Cause:** `web/node_modules` was installed before the move to Next.js (D188) and never updated.
+- **Fix:** `npm install` in `web/` (it follows `package-lock.json`).
+
+### `npm ci` fails with EPERM on `oxlint.win32-x64-msvc.node`
+- **Cause:** `npm ci` deletes `node_modules` first, and VS Code's oxlint extension keeps that native module open.
+- **Fix:** use `npm install` instead (it leaves unchanged packages in place), or close VS Code and run `npm ci`
+  again. If `npm ci` stopped half-way, `npm install` puts the rest back.
 
 ## Git
 

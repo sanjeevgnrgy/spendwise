@@ -1,10 +1,12 @@
-"""The receipts module's read models: ReceiptRead (what anyone may see of an uploaded receipt) and StoredReceipt (the
-same, plus where its bytes are kept, for this module only).
+"""The receipts module's read models: ReceiptRead (what anyone may see of an uploaded receipt), StoredReceipt (the
+same, plus where its bytes are kept, for this module only) and ReceiptContent (a receipt's bytes, for its owner).
 
 Part of the module's contract layer. The GetReceipt query (queries/) returns a StoredReceipt; api.py sends its public
-part from the upload and GET routes; the extraction (application/extract_receipt.py) reads the file by its key.
+part from the upload and GET routes; ReceiptFiles (application/receipt_files.py) reads the file by its key and
+returns a ReceiptContent.
 """
 
+from dataclasses import dataclass
 from datetime import datetime
 
 from pydantic import BaseModel, ConfigDict
@@ -33,3 +35,11 @@ class StoredReceipt(ReceiptRead):
     def public(self) -> ReceiptRead:
         """The part anyone may see: everything but the storage key."""
         return ReceiptRead.model_validate(self.model_dump(exclude={"storage_key"}))
+
+
+@dataclass(frozen=True)
+class ReceiptContent:
+    """A receipt's file: its bytes, and its media type as read from them at upload (a ReceiptMediaType value)."""
+
+    data: bytes
+    media_type: str

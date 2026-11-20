@@ -11,7 +11,7 @@ import { i18n } from "@/shared/i18n"
 import { isAbort, messageOf } from "@/shared/lib/errors"
 
 import { applyA2uiMessage, createsSurface, setAt, type A2uiAction, type A2uiSurface } from "../a2ui/protocol"
-import { toolLabelsOf, toolSucceeded } from "../api/agent-events"
+import { toolDetailOf, toolLabelsOf, toolSucceeded } from "../api/agent-events"
 import type { AgentEvent } from "../api/agent-stream"
 import { connectionLostMessage } from "../api/sse"
 import { assistantTexts } from "../i18n"
@@ -122,7 +122,8 @@ export function applyAgentEvent(messages: ChatMessage[], replyId: number, event:
     // TOOL_CALL_END only says the arguments are complete; the chip keeps spinning while the tool runs.
     case EventType.TOOL_CALL_RESULT: {
       const status = toolSucceeded(event.metadata) ? "done" : "failed"
-      return updateTool(messages, replyId, event.toolCallId, (tool) => ({ ...tool, status }))
+      const detail = toolDetailOf(event.metadata)
+      return updateTool(messages, replyId, event.toolCallId, (tool) => ({ ...tool, status, detail }))
     }
     case EventType.CUSTOM:
       return event.name === AGUI.customEvents.a2ui ? applyA2ui(messages, replyId, event.value) : messages

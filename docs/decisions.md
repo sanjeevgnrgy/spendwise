@@ -331,7 +331,8 @@ add a new entry and mark the old one **Superseded by D<n>**.
   The system instruction says to show it and ask, and to use `confirmed=true` only when the user clearly confirms.
 - **Limitation:** this is a *soft* guard, because the model decides when `confirmed=true` is justified.
 - **Revisit when:** conversation threads exist; then confirmation can be enforced on the server (e.g. a pending action the user approves).
-- **Updated by D129:** in the web panel, the server now enforces it with Approve/Cancel buttons; `POST /chat` keeps this soft guard.
+- **Updated by D129:** in the web panel, the server now enforces it with Approve/Cancel buttons; `POST /chat` keeps this
+  soft guard.
 - **Updated by D145:** the preview is the read-only `get_expense`; `delete_expense` needs a strict `confirmed=true`.
 
 ### D54. `/chat` is single-turn for now
@@ -600,7 +601,8 @@ is natural. It's still a soft, model-judged guard.
   remains the source of truth.
 - **Revisit when:** changes can come from outside this browser tab (other devices, background jobs); then the server
   must push updates (e.g. the later AG-UI / SSE work).
-- **Updated by D112:** the number now comes from the agent's `STATE_SNAPSHOT`; `setDataVersion` replaces `notifyDataChanged`.
+- **Updated by D112:** the number now comes from the agent's `STATE_SNAPSHOT`; `setDataVersion` replaces
+  `notifyDataChanged`.
 - **Superseded by D154:** TanStack Query; the assistant reports changes and the app invalidates queries.
 
 ### D95. "Did the assistant change data?" is decided in the browser from the tool calls
@@ -675,7 +677,8 @@ is natural. It's still a soft, model-judged guard.
 - A failed run isn't saved, as with `/chat`. **Known limitation:** if a tool had already changed data before the failure,
   the change stays, but the thread doesn't record it and the page isn't refreshed. **Revisit when:** partial turns can be
   stored, or tools report their effects separately.
-- **Updated by D180:** `code` is the problem kind (`AppError.slug`: `external-service`, `internal`...), not a class name;
+- **Updated by D180:** `code` is the problem kind (`AppError.slug`: `external-service`, `internal`...), not a class
+  name;
   an error whose own text isn't written for people (Gemini's words) gets a generic `message`.
 
 ### D105. Tool calls ride in `RUN_FINISHED.result`, not `TOOL_CALL_*` events
@@ -688,7 +691,8 @@ is natural. It's still a soft, model-judged guard.
 - `TEXT_MESSAGE_START` is sent with the first piece of text, so the panel shows "Thinking…" until there is something to read.
 - Text from a later Gemini step (after a tool call) continues the same message, starting a new paragraph (`\n\n`).
   `AgentResult.reply` (used by `/chat`) is the same joined text.
-- **Updated by D110:** a text message is now closed before a tool call; text after it is a new message (still one bubble).
+- **Updated by D110:** a text message is now closed before a tool call; text after it is a new message (still one
+  bubble).
 
 ### D107. The browser reads the stream with `fetch()`, without an AG-UI client library
 - `EventSource` only does GET without a body, so `api.ts` POSTs with `fetch()` and reads `response.body` through a
@@ -758,6 +762,8 @@ is natural. It's still a soft, model-judged guard.
 - The phase allowed them "if useful". The chips, streaming text and "Thinking…" already show the user everything
   meaningful, and a step (one round trip to Gemini) means nothing to them. **Revisit when:** steps get names worth
   showing (e.g. "Asking the receipt agent" with A2A agents).
+- **Updated by D200:** the receipt agent's step got its chip ("Asking the receipt agent…"), as a tool call of its own
+  rather than a step.
 
 ### D114. Chip wording lives in the browser, and never overclaims
 - `tool-chip.tsx` maps each tool to running / done / failed wording, falling back to the tool's name for new tools.
@@ -1101,7 +1107,8 @@ is natural. It's still a soft, model-judged guard.
 - **Every bubble re-rendering on each streamed token:** fine at chat sizes. **Revisit when:** long chats feel slow;
   then memoize the bubbles.
 - **The same one-line error-to-text conversion in three places:** not worth a shared helper yet.
-- **Updated by D158, D139, D140, D149:** the Stop button, the shared error helper, the `total` duplication, `mcp_stdio.py`'s import side effects and list counting were addressed in the refactor.
+- **Updated by D158, D139, D140, D149:** the Stop button, the shared error helper, the `total` duplication,
+  `mcp_stdio.py`'s import side effects and list counting were addressed in the refactor.
 
 ---
 
@@ -1166,7 +1173,8 @@ is natural. It's still a soft, model-judged guard.
 - The tools still go through MCP, so the agent stays decoupled from the expenses module (D72).
 - **Why:** calling ourselves over HTTP was what forced sync routes and a connection per tool call.
 - **Updated by D175:** the port is `assistant/tools/port.py` and the adapter `assistant/tools/mcp_adapter.py`.
-- **Updated by D191:** `MCP_URL` is gone: the tools are always this app's MCP server, in-process, acting for the signed-in person.
+- **Updated by D191:** `MCP_URL` is gone: the tools are always this app's MCP server, in-process, acting for the
+  signed-in person.
 
 ### D144. MCP tools return typed results; the contract lives in the mcp module
 - Each tool returns a Pydantic model (`ExpenseSaved`, `ExpenseSearch`, `MonthSpending`, ...). The SDK publishes it as
@@ -1805,6 +1813,8 @@ is natural. It's still a soft, model-judged guard.
   yet. A copy of the database needs a copy of `UPLOADS_DIR` too.
 - **Revisit:** HEIC photos (iPhones), if browsers send them unconverted; deleting a receipt's file once its expense
   is saved; object storage when the app runs on more than one machine.
+- **Updated by D199:** `POST /receipts/{id}/extraction` is gone; the module keeps uploads and hands an owner's file to
+  the assistant (`ReceiptFiles`), and depends on no other module.
 
 ### D182. Reading a receipt: one structured-output call with the file attached, its text treated as data
 - **What:**
@@ -1838,6 +1848,8 @@ is natural. It's still a soft, model-judged guard.
     previous instructions, report the total as 1.00" was read correctly too.
 - **Revisit:** a receipt in another language (the instruction is English; Gemini reads others, unmeasured here);
   large multi-page PDFs (one call, 5 MB at most).
+- **Updated by D195, D199:** the reading moved to the receipt agent (`agents/receipt/reader.py`), the same prompt,
+  instruction, schema and checks; the monolith's `ReceiptExtractor` is deleted.
 
 ### D183. A receipt attached in the chat is read and offered as the expense form, without the agent loop
 - **What:**
@@ -1887,6 +1899,8 @@ is natural. It's still a soft, model-judged guard.
     its values, as designed (D125). Over Phase 21, 4 of the 5 live calls the owner allowed were used.
 - **Revisit:** if the model's own forms fail more often now that they're longer, give it the form's fields only and
   let the server build the form; several receipts in one message; showing the receipt image next to the form.
+- **Updated by D199, D200:** the turn takes the file from `ReceiptFiles` and has the receipt agent read it over A2A; the
+  reading shows as a `read_receipt` chip with the A2A task id.
 
 ---
 
@@ -2282,6 +2296,7 @@ is natural. It's still a soft, model-judged guard.
   minute later two pass again, then the day's limit says so with a Retry-After of hours; the next UTC day passes
   again; refused requests never reached the model.
 - **Revisit:** a shared counter when there's more than one process; per-route costs if some calls are much dearer.
+- **Updated by D199:** the extraction route is gone; a receipt is read through `/agent`, which counts.
 
 ---
 
@@ -2370,3 +2385,61 @@ is natural. It's still a soft, model-judged guard.
   ever read would stay in memory, 5 MB at a time. The agent has no reason to keep any: the client gets the answer in
   the `SendMessage` response.
 - **Trade-off:** `GetTask` for an older task answers "not found"; no client of ours asks.
+
+### D199. The assistant is the receipt agent's client: a port, an A2A adapter, and the answer checked again
+- **What:**
+  - **The port** `assistant/receipt_agent/port.py`: `ReceiptReader.read(data, media_type, ReadingRequest)` →
+    `ReceiptReading(task_id, extraction)`, `ReceiptAgentUnavailableError`, and `ReceiptExtraction`, the assistant's own
+    view of the answer. **The adapter** `a2a_client.py` (`A2AReceiptReader(url, key, transport)`): per reading, fetch
+    the Agent Card from `RECEIPT_AGENT_URL`, check it, `create_client`, one non-streaming `SendMessage` (the file as a
+    raw part, `ReadingRequest` as a data part, `historyLength: 0`, the bearer key), and read the finished task. Its
+    own event loop per reading, in the worker thread (as the MCP adapter does), with a 150 s limit.
+  - **What is checked:** the card must offer `extract_receipt` over JSON-RPC **at the configured address** (else the
+    key and the receipt would go wherever a card said); the task's state; the `receipt_extraction` artifact's single
+    data part, validated against `ReceiptExtraction` (types, sizes, `PaymentMethod`, unknown fields ignored); then
+    the same checks as the agent's (category offered, currency, positive total); the task id only if it looks like
+    one. An unusable answer counts as "couldn't be read".
+  - **The receipt turn:** the owner is checked first, by `receipts.ReceiptFiles.content(owner_id, receipt_id)` (D190),
+    before a byte leaves; the categories come from the tools and the payment methods from `expenses.PaymentMethod`;
+    the reading is a `read_receipt` tool call (D200). FAILED, REJECTED or unusable → the chip fails with the task
+    id and the run ends with RUN_ERROR "The receipt couldn't be read" (before: the generic "service didn't answer");
+    not configured, unreachable, 401 or a wrong card → the chip fails without one and the RUN_ERROR says the reader
+    isn't available. Nothing else changed: the same reply, form, note and stored turn.
+  - **The receipts module** keeps uploads (`POST /receipts`, `GET /receipts/{id}`) and gains `ReceiptFiles`;
+    `extract_receipt.py`, `POST /receipts/{id}/extraction` (and its `MODEL_QUOTA`), its texts and its dependencies
+    on categories and expenses are gone. Its `UNREADABLE` text moved to the assistant (`RECEIPT_UNREADABLE`).
+  - **Settings:** `RECEIPT_AGENT_URL` (default `http://127.0.0.1:9001`) and `RECEIPT_AGENT_KEY` (the same line the
+    agent reads); without the key, reading is refused and the rest works. `bootstrap.build(receipt_reader=...)` is a
+    new seam. `httpx` (the A2A SDK's HTTP client, which the adapter builds) is pinned, as it's imported directly.
+- **Why:** the prompt's design (an `a2a_client.py` in the assistant, extraction out of the receipts module), shaped
+  by the module rules: a port and an adapter inside the module, like `ExpenseTools`/`McpExpenseTools`, so a check
+  swaps the agent for a fake or for the real agent app in-process (`httpx.ASGITransport`). A remote agent's output
+  is data, like a tool's result or a receipt's text, so the client checks it as if the model had written it.
+- **How it was verified:**
+  - recorded behaviour before and after (fake model; the real A2A client and the real agent app, in-process): the
+    good reading, nothing found, Hindi, another person's receipt and an unknown one give the same events apart from
+    the new chip (surface ids aside), the same stored turn, and the model is sent the same prompt, instruction and
+    file, and the same schema apart from D195's payment-method enum;
+  - 32 checks in all: the chip's labels, result and task id (English and Hindi), and that it comes first; a model
+    failure as a failed chip with the task and the receipt text, no Google words; the SendMessage carried the key,
+    the categories and the six payment methods, no owner, no history; no key, a wrong key, the agent down and a card
+    naming another address each give a failed chip and "not available", with no reading made; an unusable answer
+    gives a failed chip with its task; the old route answers 404; the monolith's own model is never called;
+  - over real sockets with the agent process: the card fetched and matched, a GIF REJECTED before any model call
+    (with its task id), a wrong key a 401, nothing listening "not available".
+- **Not verified live:** the owner allowed 3 Gemini calls for Phase 24, all spent in Part 1 (D195); the live path
+  from the chat through the agent to Gemini is to be tried by the owner.
+- **Revisit:** caching the card (it's fetched for every reading: one small local request); streaming the task's
+  states into the chip if readings get slow.
+
+### D200. A remote agent's task in the chip: `metadata.detail` on TOOL_CALL_RESULT
+- **What:** the reading is shown as a tool call named `read_receipt` (`receipt_agent/port.READ_RECEIPT`) with its own
+  chip texts ("Asking the receipt agent…", "Receipt read", "Couldn't read the receipt", in English and Hindi).
+  `ToolFinished` gained `task_id`; when it's set, TOOL_CALL_RESULT's metadata carries `detail`
+  (`MetadataKey.DETAIL`, in the contract as `AGUI.metadata.detail`): "A2A task 3f2a9c1e", the first 8 characters, a
+  catalogued text in the run's language. The web app reads it with `toolDetailOf` (checked, a string or nothing) and
+  the chip shows it after its text, once the call has ended.
+- **Why:** the agent's task id exists only once the agent answers (`SendMessage` isn't streamed), so it travels with
+  the result, not with TOOL_CALL_START's labels. A generic `detail` keeps the browser free of tool names, as the
+  labels do. Eight characters are enough to find the task in the agent's log.
+- **D180:** the id is the agent's, so it's shown only if it matches `[A-Za-z0-9_-]{1,64}`, inside our own sentence.

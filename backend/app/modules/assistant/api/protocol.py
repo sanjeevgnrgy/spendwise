@@ -25,6 +25,7 @@ class MetadataKey(StrEnum):
     OK = "ok"  # TOOL_CALL_RESULT: did the tool succeed?
     LABELS = "labels"  # TOOL_CALL_START: what the chip says (ToolLabels)
     SOURCE = "source"  # CUSTOM a2ui form: "model", "fallback" or "receipt" (a2ui.FormSource)
+    DETAIL = "detail"  # TOOL_CALL_RESULT: a short text the chip shows after its own (a remote agent's task, D200)
 
 
 # Nothing official says how an A2UI action travels over AG-UI, so the client puts the A2UI `action`

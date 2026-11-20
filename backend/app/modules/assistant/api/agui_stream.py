@@ -3,9 +3,10 @@
 Adapter layer. routes.py's /agent route calls stream() with a run already checked by agui_request.read_request,
 and sends each event it yields as one Server-Sent Event:
 
-RUN_STARTED; then, as they happen, the reply's text as TEXT_MESSAGE_START / _CONTENT / _END, each tool
-call as TOOL_CALL_START (with its chip labels) / _ARGS / _END / _RESULT (its outcome, not its text), a
-STATE_SNAPSHOT after a tool changed data, and a CUSTOM "a2ui" event for each card or form; then RUN_FINISHED.
+RUN_STARTED; then, as they happen, the reply's text as TEXT_MESSAGE_START / _CONTENT / _END, each tool call as
+TOOL_CALL_START (with its chip labels) / _ARGS / _END / _RESULT (its outcome and a remote agent's task id, never its
+text), a STATE_SNAPSHOT after a tool changed data, and a CUSTOM "a2ui" event for each card or form; then
+RUN_FINISHED.
 Once the stream has started, the HTTP status (200) has been sent and can't change, so a failure becomes a
 RUN_ERROR event.
 
@@ -51,7 +52,7 @@ from app.modules.assistant.agent.events import (
     TurnFinished,
 )
 from app.modules.assistant.api.agui_request import AgentRequest
-from app.modules.assistant.api.chip_labels import labels_for
+from app.modules.assistant.api.chip_labels import labels_for, task_detail
 from app.modules.assistant.api.protocol import STATE_DATA_VERSION, CustomEventName, MetadataKey
 from app.modules.assistant.application.assistant import Assistant
 from app.modules.assistant.i18n import ChatText
@@ -138,12 +139,13 @@ class _Writer:
 
     def _tool_finished(self, event: ToolFinished) -> Iterator[BaseEvent]:
         """A tool's result; then a raised data version if it changed data, and its card if it has one."""
-        # That the tool has run. The event has no error field, so success goes in `metadata`.
+        # That the tool has run. The event has no error field, so success goes in `metadata`, with the remote agent's
+        # task (if one did the work) for the chip to show after its text (D200).
+        metadata: dict[str, object] = {MetadataKey.OK: event.ok}
+        if event.task_id is not None:
+            metadata[MetadataKey.DETAIL] = task_detail(event.task_id, self.language)
         yield ToolCallResultEvent(
-            message_id=uuid4().hex,
-            tool_call_id=event.call_id,
-            content=NO_TOOL_CONTENT,
-            metadata={MetadataKey.OK: event.ok},
+            message_id=uuid4().hex, tool_call_id=event.call_id, content=NO_TOOL_CONTENT, metadata=metadata
         )
         if event.changed_data:
             self.data_version += 1

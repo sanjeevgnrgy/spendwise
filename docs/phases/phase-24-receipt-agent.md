@@ -77,8 +77,8 @@ JSON-RPC method is `SendMessage`, and the SDK builds a plain Starlette app from 
 (`create_agent_card_routes`, `create_jsonrpc_routes`) instead of the older `A2AStarletteApplication`. A file is a
 `raw` part (bytes, sent as base64 in JSON) and structured data a `data` part (sources.md, section 32).
 
-**Until Part 2, the monolith still reads receipts itself** (D182's `ReceiptExtractor`), so the chat keeps working.
-The extraction prompt and schema exist twice until Part 2 deletes the monolith's copy.
+**Until Part 2, the monolith still read receipts itself** (D182's `ReceiptExtractor`), so the chat kept working;
+Part 2 deleted that copy.
 
 **How it was checked:** 31 offline checks with a fake model, 3 live calls (2 read correctly, 1 hit a Gemini 503
 and failed as designed). Details in D195.
@@ -96,3 +96,39 @@ and failed as designed). Details in D195.
 curl.exe -s http://127.0.0.1:9001/.well-known/agent-card.json      # the card: name, skill extract_receipt, ...
 curl.exe -s -X POST http://127.0.0.1:9001/ -d "{}"                  # {"error":"a valid bearer key is required"}
 ```
+
+## Part 2: the assistant as the client agent
+
+**What changed** (D199, D200):
+
+- **`assistant/receipt_agent/`**: the `ReceiptReader` port and `A2AReceiptReader`, the prompt's `a2a_client.py`. For
+  each attached receipt it fetches the Agent Card from `RECEIPT_AGENT_URL`, refuses a card that doesn't offer
+  `extract_receipt` at that same address, sends one `SendMessage` with the file, the categories and payment methods
+  and the key, and reads the finished task. The answer is validated and checked again: to the assistant, the agent's
+  output is outside data.
+- **The receipt turn** takes the file from the receipts module (`ReceiptFiles`, for its owner only, before anything
+  leaves) and shows the reading as a chip of its own: "Asking the receipt agent…", then "Receipt read · A2A task
+  3f2a9c1e", or "Couldn't read the receipt" with the task id. The reply, the pre-filled form and the stored turn are
+  as before.
+- **The receipts module keeps uploads only:** `extract_receipt.py` and `POST /receipts/{id}/extraction` are gone, and
+  it no longer depends on categories or expenses.
+- **The web app** shows the chip's `detail` (`toolDetailOf`, `ToolActivity.detail`); the contract gained
+  `AGUI.metadata.detail` and lost the extraction route's types.
+- **Settings:** `RECEIPT_AGENT_URL` and `RECEIPT_AGENT_KEY` on the backend's side (the same key line as the agent's).
+
+**How it was checked:** the receipt run recorded before the change and after it, through the real A2A client and the
+real agent app in-process with a fake model: identical apart from the new chip. 32 checks in all, then the client
+against the agent process over real sockets. No live Gemini call: Part 1 used the three allowed. Details in D199.
+
+### Try it
+
+```powershell
+# .env needs RECEIPT_AGENT_KEY (Part 1); the backend reads the same line.
+.\run-receipt-agent.ps1      # terminal 1: the receipt agent on :9001
+.\run.ps1                    # terminal 2: the backend (restart it after changing .env)
+cd web; npm run dev          # terminal 3: http://localhost:5173
+```
+
+In the chat panel, attach a receipt with the paperclip and send. The chip says "Asking the receipt agent…", then
+"Receipt read · A2A task …" (the same id the agent's console logs: "task … completed"), and the expense form arrives
+pre-filled. Stop the agent and try again: the chip fails and the chat says the receipt reader isn't available.

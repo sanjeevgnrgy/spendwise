@@ -66,6 +66,10 @@ HI: dict[ChatText, TextValue] = {
     ChatText.CHIP_TOOL_RUNNING: "{tool} चलाया जा रहा है…",
     ChatText.CHIP_TOOL_DONE: "{tool} चलाया गया",
     ChatText.CHIP_TOOL_FAILED: "{tool} विफल रहा",
+    ChatText.CHIP_RECEIPT_RUNNING: "रसीद एजेंट से पूछा जा रहा है…",
+    ChatText.CHIP_RECEIPT_DONE: "रसीद पढ़ ली गई",
+    ChatText.CHIP_RECEIPT_FAILED: "रसीद नहीं पढ़ी जा सकी",
+    ChatText.CHIP_TASK: "A2A टास्क {task}",
     ChatText.TOO_MANY_STEPS: (
         "माफ़ कीजिए, इसमें बहुत ज़्यादा चरण लग गए, इसलिए मैंने रोक दिया। "
         "क्या आप कोई आसान या ज़्यादा स्पष्ट अनुरोध आज़मा सकते हैं?"
@@ -105,6 +109,10 @@ HI: dict[ChatText, TextValue] = {
     ChatText.INVALID_ACTION: "बटन की कार्रवाई मान्य नहीं है।",
     ChatText.ONE_RECEIPT: "एक बार में एक ही रसीद जोड़ें।",
     ChatText.INVALID_ATTACHMENT: "यह अटैचमेंट इस ऐप पर अपलोड की गई रसीद नहीं है। पहले उसे अपलोड करें।",
+    ChatText.RECEIPT_UNREADABLE: "रसीद पढ़ी नहीं जा सकी। फिर से कोशिश करें, या ज़्यादा साफ़ फ़ोटो अपलोड करें।",
+    ChatText.RECEIPT_AGENT_UNAVAILABLE: (
+        "रसीद पढ़ने वाला अभी उपलब्ध नहीं है। थोड़ी देर में फिर से कोशिश करें, या खर्च ख़ुद भरें।"
+    ),
     ChatText.THREAD_ID_LENGTH: "threadId 1 से {max} अक्षरों तक का होना चाहिए।",
     ChatText.FORM_TOO_LONG: "फ़ॉर्म के सभी मान मिलाकर {max} अक्षरों से कम होने चाहिए।",
 }

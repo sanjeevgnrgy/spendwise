@@ -1,7 +1,7 @@
 """The receipts module's shared values: its id type, limits and the kinds of file it accepts.
 
-Part of the module's contract layer. The upload check (domain/file_types.py), the command (commands/), the table
-(persistence/tables.py) and the extraction (application/extract_receipt.py) use them; __init__.py exports what
+Part of the module's contract layer. The upload check (domain/file_types.py), the command (commands/) and the table
+(persistence/tables.py) use them; __init__.py exports what
 other modules and the web contract need. This file imports no other file of the module.
 """
 
@@ -31,6 +31,3 @@ class ReceiptMediaType(StrEnum):
 # a media type is one of ReceiptMediaType's values.
 STORAGE_KEY_LENGTH = 32
 MAX_MEDIA_TYPE_LENGTH = max(len(media_type) for media_type in ReceiptMediaType)
-
-# How many receipt lines the model may list: a long supermarket bill fits, and the answer stays bounded.
-MAX_LINE_ITEMS = 50

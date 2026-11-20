@@ -1,28 +1,27 @@
 """HTTP routes for receipts: they only translate HTTP into the use cases and queries.
 
-The receipts module's REST adapter. module.create_router builds the router with the use cases passed in (an uploader
-and an extractor), and the composition root mounts it under /api/v1.
+The receipts module's REST adapter. module.create_router builds the router with the upload use case passed in, and
+the composition root mounts it under /api/v1. Reading a receipt isn't a route: the assistant sends it to the receipt
+agent (Phase 24, D199).
 """
 
 from fastapi import APIRouter, Request, Response, UploadFile
 
-from app.modules.receipts.application.extract_receipt import ReceiptExtraction, ReceiptExtractor
 from app.modules.receipts.application.upload_receipt import ReceiptUploader
 from app.modules.receipts.models import ReceiptRead
 from app.modules.receipts.queries.get_receipt import GetReceipt
 from app.modules.receipts.values import MAX_RECEIPT_BYTES
 from app.web.auth import CurrentUserDep
-from app.web.dependencies import BusDep, ClockDep, IdPath
-from app.web.rate_limits import MODEL_QUOTA
+from app.web.dependencies import BusDep, IdPath
 
 TAG = "receipts"
 
 
-def create_router(uploader: ReceiptUploader, extractor: ReceiptExtractor) -> APIRouter:
-    """The routes, with the use cases handed in (constructor injection) rather than found globally.
+def create_router(uploader: ReceiptUploader) -> APIRouter:
+    """The routes, with the upload use case handed in (constructor injection) rather than found globally.
 
-    Plain `def` routes: reading and writing the file and calling the model block, so FastAPI runs them in a worker
-    thread and other requests aren't held up.
+    Plain `def` routes: reading and writing the file block, so FastAPI runs them in a worker thread and other requests
+    aren't held up.
     """
     router = APIRouter(tags=[TAG])
 
@@ -45,13 +44,5 @@ def create_router(uploader: ReceiptUploader, extractor: ReceiptExtractor) -> API
     @router.get("/receipts/{receipt_id}")
     def get_receipt(receipt_id: IdPath, principal: CurrentUserDep, bus: BusDep) -> ReceiptRead:
         return bus.ask(GetReceipt(owner_id=principal.user_id, receipt_id=receipt_id)).public()
-
-    # POST /api/v1/receipts/{receipt_id}/extraction: read the receipt with the model and answer what it says, as a
-    # suggestion (nothing is saved). POST, not GET: each call asks the model again, which takes seconds and quota.
-    # 404 for a receipt the person doesn't have, or a missing file; 502 if the model fails or can't be understood.
-    # It calls the model, so it counts against the person's allowance (MODEL_QUOTA, D194): a 429 once it's spent.
-    @router.post("/receipts/{receipt_id}/extraction", dependencies=[MODEL_QUOTA])
-    def extract_receipt(receipt_id: IdPath, principal: CurrentUserDep, clock: ClockDep) -> ReceiptExtraction:
-        return extractor.extract(principal.user_id, receipt_id, clock.today())
 
     return router

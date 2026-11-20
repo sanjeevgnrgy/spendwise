@@ -109,10 +109,10 @@ backend/
                          (the write side's table access) and queries/month_range.py (the summary's and trend's filter)
       conversations/     stored chat threads (provider-neutral messages); GET /threads/{id}; the same shape,
                          without models.py, plus queries/thread_rows.py (what GetHistory and GetThread share)
-      receipts/          uploaded receipt files and reading them with the model; the same shape, plus
-                         domain/file_types.py (what may be uploaded, judged by the file's bytes) and application/
-                         (upload_receipt.py: ReceiptUploader; extract_receipt.py: ReceiptExtractor and the schema the
-                         model answers in), which aren't bus messages: one writes a file, the other calls the model
+      receipts/          uploaded receipt files, for their owner; the same shape, plus domain/file_types.py (what
+                         may be uploaded, judged by the file's bytes) and application/ (upload_receipt.py:
+                         ReceiptUploader; receipt_files.py: ReceiptFiles, an owner's file for the assistant), which
+                         aren't bus messages: both use the FileStore. Reading a receipt is the receipt agent's
       assistant/         the agent, one folder per role; imports run api/ -> application/ -> the rest:
                            api/          adapters: routes.py, schemas.py (bodies), agui_request.py (AG-UI in),
                                          agui_stream.py (AG-UI out), protocol.py (names on the wire)
@@ -126,6 +126,8 @@ backend/
                            approvals/    delete cards: commands/ (request, take, restore: one slice each),
                                          models.py, store.py, persistence/tables.py (pending_approval)
                            tools/        port.py (the ExpenseTools port), mcp_adapter.py (McpExpenseTools)
+                           receipt_agent/ port.py (the ReceiptReader port), a2a_client.py (A2AReceiptReader: the
+                                         assistant as a client agent of agents/receipt, D199)
                            a2ui/         cards, forms
                            module.py     what the composition root plugs in
       mcp/               MCP adapter: contracts.py (tool and argument names, bearer scheme, typed results; all
@@ -175,12 +177,14 @@ backend/
    AG-UI.
 10. **Ports for the outside world:** the LLM (`core/llm/port.py`), uploaded files (`core/files.py`: `FileStore`), the
     sign-in provider (`core/identity.py`: `IdentityProvider`), sealed secrets (`core/sealing.py`: `Sealer`) and the
-    expense tools (`assistant/tools/port.py`: `ExpenseTools`) are protocols with one adapter each (`GeminiModel` in
+    expense tools (`assistant/tools/port.py`: `ExpenseTools`) and the receipt reader
+    (`assistant/receipt_agent/port.py`: `ReceiptReader`) are protocols with one adapter each (`GeminiModel` in
     `infrastructure/llm/`; `LocalFileStore` in `infrastructure/files.py`; `OidcIdentityProvider`, standard OpenID
     Connect, in `infrastructure/identity/`, D185; `FernetSealer` in `infrastructure/sealing.py`; `McpExpenseTools` in
-    `assistant/tools/mcp_adapter.py`, in-process by default).
-    Each user depends only on what it calls: `/parse` and the receipt reader on `StructuredOutputModel`, the agent on
-    `ToolCallingModel`.
+    `assistant/tools/mcp_adapter.py`, in-process by default; `A2AReceiptReader` in
+    `assistant/receipt_agent/a2a_client.py`, the receipt agent over A2A, D199).
+    Each user depends only on what it calls: `/parse` and the receipt agent's reader on `StructuredOutputModel`, the
+    agent on `ToolCallingModel`.
     `bootstrap.build()` creates the adapters and injects them; nothing else imports a provider (D166, D172).
 11. **No magic strings:** protocol names, tool names, keys and limits are enums or constants, defined once and
     exported from the module that owns them.
@@ -204,9 +208,8 @@ A module's public contract is still its package: other modules write `from app.m
 slice files, so importing a module's package also loads its handlers and tables (not its routes, and not the
 database engine). The earlier layout, where the package loaded only a `contracts.py`, gave the lighter import;
 co-location was judged worth more. It can't cause an import cycle, because module dependencies run one way:
-expenses → categories; mcp → expenses, categories; receipts → categories, expenses; assistant → the rest; accounts
-depends on none. The mcp package still exports only its
-`contracts.py` and loads no server code (D166, D175).
+expenses → categories; mcp → expenses, categories; assistant → the rest; accounts and receipts depend on none. The
+mcp package still exports only its `contracts.py` and loads no server code (D166, D175).
 
 ### Why each module owns its tables
 
@@ -222,11 +225,11 @@ at the database level. Instead, `CreateExpense`'s handler asks `categories.GetCa
 | Module | Contract (`from app.modules import <name>`) | Used by |
 |---|---|---|
 | `categories` | `CategoryRead`, `CreateCategory`, `ListCategories`, `GetCategory`, `FindCategoryByName`, `CategoryId`, `MAX_NAME_LENGTH`, `UNKNOWN_CATEGORY`, `CategoryText` (its texts' keys, e.g. `NO_CATEGORIES_YET`) | expenses, mcp, assistant, seed |
-| `expenses` | `ExpenseRead`, `ExpenseList`, `CreateExpense`, `UpdateExpense` + `ExpenseChanges`, `DeleteExpense` (with `expected_version`), `GetExpense`, `ListExpenses`, `GetMonthlySummary`, `GetMonthlyTrend` (+ their result types), `ExpenseId`, `MAX_LIST_LIMIT`, `MAX_NOTE_LENGTH`, `PaymentMethod`, `payment_method_label(method, language)`, `ExpenseText` | mcp, assistant (`PaymentMethod`, labels, the note's limit), receipts (`PaymentMethod`), seed |
+| `expenses` | `ExpenseRead`, `ExpenseList`, `CreateExpense`, `UpdateExpense` + `ExpenseChanges`, `DeleteExpense` (with `expected_version`), `GetExpense`, `ListExpenses`, `GetMonthlySummary`, `GetMonthlyTrend` (+ their result types), `ExpenseId`, `MAX_LIST_LIMIT`, `MAX_NOTE_LENGTH`, `PaymentMethod`, `payment_method_label(method, language)`, `ExpenseText` | mcp, assistant (`PaymentMethod`, labels, the note's limit), seed |
 | `conversations` | `AppendTurn`, `GetLastTurn`, `GetHistory`, `GetThread`, `ThreadRead`, `ThreadId`, `THREAD_ID_MAX_LENGTH`, `ConversationText` (e.g. `THREAD_NOT_FOUND`) | assistant |
 | `mcp` | `ToolName`, `ResourceUri`, `SERVER_NAME`, `acting_for` and `act_for_process` (who a request acts for, D191), the argument names (`EXPENSE_ID_ARGUMENT`, `CONFIRM_ARGUMENT`, `EXPECTED_VERSION_ARGUMENT`, `CLEAR_NOTE_ARGUMENT`), the typed results (`ExpenseView`, `ExpenseSaved`, `MonthSpending`, ...). The server itself (`create_server`, `create_http_app`) comes from `mcp/module.py`, for the composition root only | assistant |
-| `receipts` | `ReceiptExtractor` (reads an uploaded receipt with the model: `extract(receipt_id, today)`), `ReceiptExtraction`, `LineItem`, `ReceiptRead`, `ReceiptId`, `ReceiptMediaType`, `MAX_RECEIPT_BYTES`, `ReceiptText`. Its `module.py` gives the composition root `create_reader(bus, files, llm)` and `create_router(bus, files, reader)` | the assistant (reads a receipt attached in the chat) |
-| `assistant` | nothing for other modules; its `module.py` gives the composition root `create_router` and the `ExpenseTools` port type | — |
+| `receipts` | `ReceiptFiles` (an owner's receipt file: `content(owner_id, receipt_id)` → `ReceiptContent`, bytes and media type), `ReceiptContent`, `ReceiptRead`, `ReceiptId`, `ReceiptMediaType`, `MAX_RECEIPT_BYTES`, `ReceiptText`. Its `module.py` gives the composition root `create_files(bus, files)` and `create_router(bus, files)` | the assistant (sends a receipt attached in the chat to the receipt agent), the export script |
+| `assistant` | nothing for other modules; its `module.py` gives the composition root `create_router`, the `ExpenseTools` and `ReceiptReader` port types and their adapters | — |
 | `accounts` | `UserId`, `CurrentUser`, `SignedInUser`, `SignInFailure`, `SignInParam`, `SIGN_IN_PAGE`, `CALLBACK_PATH`, `SESSION_LIFETIME`, `LOGIN_ATTEMPT_TTL`. Its `module.py` gives the composition root `create_session_gate(bus, identity, clock)` (the check main.py puts on `app.state.authenticate`), `create_router(bus, identity, sealer, config)` and `SignInConfig` | the composition root, the export script; Phase 23's per-user data will use `UserId` |
 
 Each module's `module.py` is what `bootstrap.py` plugs in: `register_handlers(bus)`, its router (or a function that
@@ -362,7 +365,8 @@ taken when it comes back, and the session written only after the provider has an
 
 Everything a test would want to replace can be passed in, without patching modules:
 
-- `bootstrap.build(clock=..., llm=..., tools=..., engine=..., files=..., identity=..., sealer=...)` builds the app's
+- `bootstrap.build(clock=..., llm=..., tools=..., engine=..., files=..., identity=..., sealer=..., receipt_reader=...)`
+  builds the app's
   services around fakes, and `main.create_app(services)` serves them over HTTP (FastAPI's `TestClient` works directly
   on it; with `base_url="https://localhost"` it keeps the Secure session cookie). A fake identity provider signs a
   test in through the real routes; the OIDC adapter itself takes `transport=httpx2.MockTransport(...)` to talk to a
@@ -409,8 +413,9 @@ Known limits, to address when the load calls for it (D174):
 **A2A agents run outside the monolith, each as its own process** (D12, D195). Today there is one: the receipt agent
 (`agents/receipt`, Phase 24), an A2A server on `127.0.0.1:9001` with one skill, `extract_receipt`.
 
-- **A remote agent, not a module.** It has no database, no bus and no person: a client agent sends a task (a receipt
-  and the choices it may pick from), the agent works on it and answers with an artifact. Whatever the person's data
+- **A remote agent, not a module.** It has no database, no bus and no person: a client agent (the assistant's
+  `A2AReceiptReader`, D199) sends a task (a receipt and the choices it may pick from), the agent works on it and
+  answers with an artifact. Whatever the person's data
   needs (who owns the receipt, which categories exist, today's date) stays in the monolith and travels as data.
 - **Layout:** `contract.py` (what travels on the wire), `reader.py` (the model call), `executor.py` (the
   AgentExecutor: task states and the artifact), `task_store.py`, `card.py`, `http.py` (the key check), `settings.py`,
@@ -586,7 +591,8 @@ Get-ChildItem backend -Recurse -Filter *.py | Select-String -Pattern 'import mod
 #    and the receipt agent's server.py.
 Get-ChildItem backend, agents -Recurse -Filter *.py | Select-String -Pattern 'llm\.gemini|from google'
 
-# 5. Inside the assistant, imports run api/ -> application/ -> agent/, approvals/, tools/, a2ui/, never back.
+# 5. Inside the assistant, imports run api/ -> application/ -> agent/, approvals/, tools/, receipt_agent/, a2ui/,
+#    never back.
 #    Expect only module.py, which builds the router and the use cases.
 $assistant = Get-ChildItem backend\app\modules\assistant -Recurse -Filter *.py
 $assistant | Where-Object FullName -NotMatch '\\assistant\\api\\' | Select-String -Pattern 'assistant\.api\b'

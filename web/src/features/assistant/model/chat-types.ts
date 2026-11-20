@@ -19,6 +19,8 @@ export interface ToolActivity {
   args: string
   labels: ToolLabels
   status: ToolStatus
+  /** Shown after the chip's text once it has run: the remote agent's task, when one did the work (from the server). */
+  detail?: string
 }
 
 /** One bubble in the conversation: yours, or the assistant's. */

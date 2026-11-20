@@ -4,8 +4,9 @@ main.py (the web app), seed.py, mcp_stdio.py and the migrations (for the tables)
 so there's exactly one list of modules, and nothing registers itself as a side effect of being imported.
 
 build() is also the one seam for replacing the outside world: pass it a clock, a language model, expense
-tools, a database engine, a file store, an identity provider or a sealer, and everything built from the result (the
-bus, the MCP server, the session check, the routes, main.create_app(services)) uses those instead of the real ones.
+tools, a database engine, a file store, an identity provider, a sealer or a receipt reader, and everything built from
+the result (the bus, the MCP server, the session check, the routes, main.create_app(services)) uses those instead of
+the real ones.
 """
 
 from dataclasses import dataclass
@@ -57,6 +58,8 @@ class Services:
     tools: assistant_module.ExpenseTools
     # Where uploaded files' bytes are kept (the receipts module's receipts).
     files: FileStore
+    # Who reads an attached receipt (the assistant's ReceiptReader port): the receipt agent, over A2A (Phase 24).
+    receipt_reader: assistant_module.ReceiptReader
     mcp_server: MCPServer
     # Personal access tokens (D191): the account routes make them; MCP over HTTP and the stdio server resolve one to
     # the person it acts for.
@@ -92,6 +95,7 @@ def build(
     files: FileStore | None = None,
     identity: IdentityProvider | None = None,
     sealer: Sealer | None = None,
+    receipt_reader: assistant_module.ReceiptReader | None = None,
 ) -> Services:
     """Everything the app is made of. Each argument left out gets the real one, configured from the settings.
 
@@ -103,7 +107,10 @@ def build(
       should pass its own too, so uploads don't land among the real ones;
     - identity: the OpenID Connect provider in OIDC_ISSUER (nothing is fetched from it until someone signs in), or,
       if a sign-in setting is missing, one that refuses every sign-in (D185);
-    - sealer: Fernet, with SESSION_ENCRYPTION_KEYS.
+    - sealer: Fernet, with SESSION_ENCRYPTION_KEYS;
+    - receipt_reader: the receipt agent at RECEIPT_AGENT_URL, with RECEIPT_AGENT_KEY (nothing is fetched from it
+      until a receipt is attached). A check passes a fake, or an A2AReceiptReader whose transport reaches the agent's
+      app in-process.
     """
     clock = SystemClock() if clock is None else clock
     engine = db.engine if engine is None else engine
@@ -119,6 +126,8 @@ def build(
     identity = _identity_provider(clock) if identity is None else identity
     if sealer is None:
         sealer = FernetSealer([key.get_secret_value() for key in settings.session_encryption_keys])
+    if receipt_reader is None:
+        receipt_reader = assistant_module.A2AReceiptReader(settings.receipt_agent_url, settings.receipt_agent_key)
     return Services(
         clock=clock,
         engine=engine,
@@ -126,6 +135,7 @@ def build(
         llm=llm,
         tools=tools,
         files=files,
+        receipt_reader=receipt_reader,
         mcp_server=mcp_server,
         access_tokens=accounts_module.create_access_tokens(bus, clock),
         model_quota=RateLimiter(clock, settings.model_requests_per_minute, settings.model_requests_per_day),
@@ -184,19 +194,21 @@ def api_routers(services: Services) -> list[APIRouter]:
     """Every other module's REST routes; main.py puts the X-CSRF and session checks in front of all of them. Their
     order is the OpenAPI document's order.
 
-    The receipts and assistant routers are built from `services` (the file store, the tools and the model), and share
-    one receipt reader: the receipts routes read a receipt on request, the assistant when one is attached in the
-    chat. The account router (the signed-in person's sessions and access tokens) gets the bus, the provider and the
-    tokens. The others are fixed routers that read the bus and the clock from `app.state` at request time
+    The receipts and assistant routers are built from `services` (the file store, the tools, the model and the receipt
+    reader): the receipts routes take uploads, and the assistant hands an attached receipt's file (ReceiptFiles, for
+    its owner only) to the receipt reader. The account router (the signed-in person's sessions and access tokens) gets
+    the bus, the provider and the tokens. The others are fixed routers that read the bus and the clock from `app.state` at request time
     (web/dependencies), which create_app sets from the same services.
     """
-    reader = receipts_module.create_reader(services.bus, services.files, services.llm)
+    receipt_files = receipts_module.create_files(services.bus, services.files)
     return [
         categories_module.router,
         expenses_module.router,
         conversations_module.router,
-        receipts_module.create_router(services.bus, services.files, reader),
-        assistant_module.create_router(services.bus, services.tools, services.llm, reader),
+        receipts_module.create_router(services.bus, services.files),
+        assistant_module.create_router(
+            services.bus, services.tools, services.llm, receipt_files, services.receipt_reader
+        ),
         accounts_module.create_account_router(services.bus, services.identity, services.access_tokens),
     ]
 

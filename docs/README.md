@@ -49,6 +49,7 @@ it's built that way.
 | [identity_provider.md](identity_provider.md) | Signing in: what SpendWise needs from an OpenID Connect provider, setting up ZITADEL, the values for other providers, and switching providers |
 | [gemini.md](gemini.md) | Gemini setup, models and the free tier, privacy, errors, tokens |
 | [sources.md](sources.md) | What the official docs, specs and library code say, with links, for the facts Phase 14 onwards relies on |
+| [references.md](references.md) | The official documentation for every library, protocol, standard and service SpendWise uses |
 | [images/](images/) | Screenshots used by the READMEs (`hero.png`: the Dashboard with sample data) |
 
 ## Phase notes
@@ -102,5 +103,6 @@ it, and design questions with their answers (collapsed). Later changes are noted
 - A new module, port or rule updates [architecture.md](architecture.md) (its interface table too).
 - A problem that took real effort to solve gets an entry in [troubleshooting.md](troubleshooting.md).
 - A fact taken from official docs, a spec or a library's code goes in [sources.md](sources.md), with its link or file.
+- A new dependency, protocol or service gets a row in [references.md](references.md) (and a removed one loses it).
 - If a doc and the code disagree, the code is right and the doc is a bug. Fix the doc.
 - A new rule for how the code is built goes in [AGENTS.md](../AGENTS.md) too, so AI agents follow it.

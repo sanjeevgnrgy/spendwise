@@ -1,6 +1,6 @@
 // A2UI button actions, as pure functions: reading a Button's `action` property (sent by the server, so
 // untrusted) and building the A2UI `action` message a click sends back to the agent. Part of the
-// assistant feature's A2UI renderer; used by A2uiButton (basic-components.tsx).
+// assistant feature's A2UI renderer; used by useButtonClick (use-button-click.ts), for A2uiButton.
 
 import { isObject } from "@/shared/lib/guards"
 

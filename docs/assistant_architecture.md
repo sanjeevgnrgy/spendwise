@@ -183,14 +183,16 @@ small data model. The agent never sends HTML or code, and the browser draws each
 DateTimeInput, Button) plus SpendWise's own insights catalog (`urn:spendwise:catalog:insights:v1`: **Chart** and
 **Stat**), mixed on one surface with a per-component `@catalogId`.
 
-**Cards** (`a2ui/cards.py`, the insight card in `a2ui/summary_card.py`) are built by code from each tool's typed
-result, never by the model, in the run's language (texts from the assistant's catalog, money and dates through CLDR):
+**Cards** (`a2ui/cards.py`, the insight card in `a2ui/summary_card.py`, the report card in `a2ui/report_card.py`) are
+built by code from each tool's typed result, never by the model, in the run's language (texts from the assistant's
+catalog, money and dates through CLDR):
 
 | Tool result | Card |
 |---|---|
 | `add_expense` / `update_expense` / `get_expense` / `delete_expense` | one expense: title, `#id`, amount, merchant, category, date |
 | `list_expenses` | up to 10 rows, "Showing the newest 10 of N" |
 | `get_summary` | the insight card: "Spent in November" with "+12% vs October", the biggest category, a donut of the top 4 + "Everything else" |
+| `get_monthly_report` | the report card (D209): "Spent in November" with "+330% vs October", the daily average, each category with its share and count, the biggest expense, and **Download CSV** / **Download report (.md)**, which run the browser's `downloadReport` function (no message to the agent) |
 | a delete in the web panel | the approval card: the expense, "Nothing is deleted unless you press Approve", **Approve** / **Cancel** |
 
 **Forms** (`a2ui/forms.py`): when details are missing, the model calls `show_expense_form` with an A2UI form it wrote,
@@ -247,6 +249,11 @@ category for an expense… Use when recording or changing an expense and the use
 matches, the model calls `load_skill("categorization")` and gets the skill's steps and rules; if they tell it to, it
 calls `load_skill("categorization", "references/merchants.md")` for the merchant list. A chip shows each read
 ("Reading a skill…"). Unlike other tool results, a skill's text is instructions to follow: the instruction says so.
+
+**A skill with a script** (Part 2, D209): the `monthly-report` skill tells the model to call `get_monthly_report`, and
+how to word the reply. The tool's figures come from the skill's `scripts/compute_report.py`, which the server (the
+reports module) runs on the person's own expenses and checks; the model never runs or reads the script. So the model
+picks the month and writes two or three sentences; the arithmetic is exact, and the card shows the rest.
 
 ## Other agents: delegating (Phase 25, D206)
 

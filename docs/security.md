@@ -181,13 +181,15 @@ about addresses, ports and plain HTTP below apply when an agent runs on its own,
 | A waiting task lost, or kept forever | A task waiting for an answer is forgotten last when the store is full (20 tasks); nothing is written to disk |
 | A wrong rate saved | The answer must be for the currencies asked about, a positive decimal written as a string, for no later day than asked; anything else is "not available" and nothing is saved |
 
-## Agent Skills (D208)
+## Agent Skills (D208, D209)
 
 | Risk | Defence |
 |---|---|
 | A skill's text overriding the rules | Skills are text in this repository, reviewed like code; the model is told only `load_skill`'s results are instructions, every other tool result stays data |
 | The model reading files it shouldn't | It names a skill and, at most, a file the library listed when it read the folder (only under `references/` or `assets/`, at most 64 KB); its argument is looked up, never joined to a path, so `../../.env` is "not found" |
-| A skill's script being run by the model | Scripts are never read out and never run by the model; the server runs a skill's script itself (Phase 26 part 2) |
+| A skill's script being run by the model | The model has no tool that runs code and never reads a script. The server runs a script only for a use case it was written for (the monthly report): one listed `scripts/*.py`, looked up by name (never a path from a request), `python -I` with no shell, from the skill's folder, input on stdin, 10 seconds and 1 MB of output at most (D209) |
+| A script's answer being trusted | Its JSON is validated (`reports.MonthlyReport`: no extra keys, amounts not negative, shares 0-100, the month asked for) before the model or the person sees it; a failure is a 502 with a catalogued text, the cause logged at DEBUG |
+| A script seeing someone else's data | Its input is built by the server from the signed-in person's own expenses (`ListExpenses` with their owner id); it gets no database, settings or keys |
 | A malformed or foreign skill | Only folders whose frontmatter follows the format are loaded; others are skipped with a warning; skills come only from `SKILLS_DIR` |
 
 ## The A2UI renderer
@@ -201,7 +203,21 @@ them as untrusted:
   styles; shadcn's chart writes its config into a `<style>` tag, so that config is fixed;
 - data-model paths refuse `__proto__`, `prototype` and `constructor` (no prototype pollution);
 - a card that would draw over 300 components, nest deeper than 12 or contain itself is refused before drawing;
-- every card has its own error boundary: a broken card can't take the app down.
+- every card has its own error boundary: a broken card can't take the app down;
+- a button's `functionCall` runs only a function on the renderer's own allow-list (`downloadReport`), from the insights
+  catalog, on a click, with arguments it checks (a month matching `YYYY-MM` and one of the report formats). The browser
+  builds the address itself and calls it with the person's session, so a card can't make it fetch or open anything
+  else. A model-written form can't contain a function call: its buttons may only send `save_expense` (D209).
+
+## Report downloads (D209)
+
+- The CSV is for spreadsheets, which run a cell starting with `=`, `+`, `-` or `@` as a formula (CSV injection): text
+  from the person's data (merchant, category, note) that starts with one of those (or their full-width forms), a tab,
+  a carriage return or a line feed gets a leading `'`, so it's shown as text. OWASP notes no technique is fully
+  reliable in Excel once a file is saved and reopened; the risk is the person's own data, in their own download.
+- The markdown report escapes markup characters in the person's text (merchants, categories), so a merchant called
+  `[x](http://…)` stays text: no link, image or HTML when the file is opened in a markdown viewer.
+- Both are sent as attachments, with `no-store` like every API answer, and only to the signed-in person.
 
 Every AG-UI event is validated with `@ag-ui/core`'s schemas before it's used.
 

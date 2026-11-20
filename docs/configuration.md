@@ -22,7 +22,7 @@ All backend settings are one Pydantic `Settings` class in `backend/app/infrastru
 | `GEMINI_MODEL` | not set | Which Gemini model answers, e.g. `gemini-3.5-flash-lite`. Model ids and free-tier limits: [gemini.md](gemini.md) |
 | `DATABASE_URL` | `sqlite:///<project>/backend/spendwise.db` | Any SQLAlchemy URL. Point it at a copy to experiment safely |
 | `MODEL_REQUESTS_PER_MINUTE`, `MODEL_REQUESTS_PER_DAY` | `10`, `300` | How many requests to the routes that call the model (`/agent`, `/chat`, `/parse`; a receipt is read through `/agent`) each person may make per minute and per day (UTC); one more is a 429 (D194). Counted in memory, per server process |
-| `SKILLS_DIR` | `<project>/skills` | The Agent Skills folder (D208): one folder per skill with its `SKILL.md`, read once, at the first turn (restart to pick up an edited skill) |
+| `SKILLS_DIR` | `<project>/skills` | The Agent Skills folder (D208): one folder per skill with its `SKILL.md`, read once, at the first turn (restart to pick up an edited skill). A skill's `scripts/*.py` are run by the server with the backend's own Python (D209) |
 | `UPLOADS_DIR` | `<project>/backend/uploads` | The folder uploaded receipts are kept in, by random names (created on the first upload; git-ignored). It goes with the database: a copy of one needs a copy of the other |
 
 ### Sign-in

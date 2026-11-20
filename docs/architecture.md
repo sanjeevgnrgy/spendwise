@@ -113,6 +113,10 @@ backend/
                          may be uploaded, judged by the file's bytes) and application/ (upload_receipt.py:
                          ReceiptUploader; receipt_files.py: ReceiptFiles, an owner's file for the assistant), which
                          aren't bus messages: both use the FileStore. Reading a receipt is the receipt agent's
+      reports/           a person's monthly report (D209), no tables of its own: application/monthly_reports.py
+                         (MonthlyReports: reads expenses and categories through their queries, runs the monthly-report
+                         skill's script, checks its answer), models.py (MonthlyReport), documents/ (markdown.py,
+                         spreadsheet.py: the downloads, in the person's language), api.py, i18n/, values.py, module.py
       assistant/         the agent, one folder per role; imports run api/ -> application/ -> the rest:
                            api/          adapters: routes.py, schemas.py (bodies), agui_request.py (AG-UI in),
                                          agui_stream.py (AG-UI out), protocol.py (names on the wire)
@@ -212,12 +216,12 @@ them, in a file or folder named for its role (`values.py`, `models.py`, `domain/
 never imports another slice's handler: it sends that slice's message through the bus.
 
 A module's public contract is still its package: other modules write `from app.modules import expenses` and use
-`expenses.GetMonthlySummary`, never a slice file. The trade-off: `__init__.py` re-exports the messages from their
-slice files, so importing a module's package also loads its handlers and tables (not its routes, and not the
-database engine). The earlier layout, where the package loaded only a `contracts.py`, gave the lighter import;
-co-location was judged worth more. It can't cause an import cycle, because module dependencies run one way:
-expenses → categories; mcp → expenses, categories; assistant → the rest; accounts and receipts depend on none. The
-mcp package still exports only its `contracts.py` and loads no server code (D166, D175).
+`expenses.GetMonthlySummary`, never a slice file. The trade-off: `__init__.py` re-exports the messages from their slice
+files, so importing a module's package also loads its handlers and tables (not its routes, and not the database engine).
+The earlier layout, where the package loaded only a `contracts.py`, gave the lighter import; co-location was judged
+worth more. It can't cause an import cycle, because module dependencies run one way: expenses → categories; reports →
+expenses, categories; mcp → expenses, categories, reports; assistant → the rest; accounts and receipts depend on none.
+The mcp package still exports only its `contracts.py` and loads no server code (D166, D175).
 
 ### Why each module owns its tables
 
@@ -429,6 +433,13 @@ and perhaps `references/` and `assets/` files. The assistant shows them a level 
 The port is `core/skills.SkillLibrary`; its adapter `infrastructure/skills.FolderSkillLibrary` reads the folder once,
 keeps only skills that follow the format, and reads only files it listed (never a path the model sends). A skill's
 text is the app's own, so it's given to the model as instructions, the one exception to "tool results are data".
+
+**A skill's scripts are run by the server, never by the model** (D209). `SkillLibrary.run_script(name, script,
+payload)` runs one of the skill's listed `scripts/*.py` in a child process (`python -I`, no shell, from the skill's
+folder), with the payload as JSON on stdin and a 10-second limit, and returns the JSON object it prints. The model has
+no tool that runs code and never sees a script: the `monthly-report` skill tells it to call `get_monthly_report`, and
+the reports module runs `scripts/compute_report.py` on the person's own expenses and checks the answer
+(`reports.MonthlyReport`) before the model or the person sees it. A use case runs a script outside any unit of work.
 
 ## The agents (`agents/`), hosted by the backend
 
@@ -653,12 +664,12 @@ $assistant | Where-Object FullName -NotMatch '\\assistant\\(api|application)\\' 
 
 # 6. Each module package imports on its own, in a fresh interpreter. Expect no output. An error here usually means
 #    an import cycle between modules (importing a package also loads its slices, D175).
-foreach ($m in "accounts", "categories", "conversations", "expenses", "mcp", "receipts", "assistant") {
+foreach ($m in "accounts", "categories", "conversations", "expenses", "mcp", "receipts", "reports", "assistant") {
   .\.venv\Scripts\python.exe -c "import sys; sys.path.insert(0, 'backend'); import app.modules.$m"
 }
 
 # 7. Only a module's HTTP adapters import web/. Expect api.py (accounts, categories, conversations, expenses,
-#    receipts), account_api.py (accounts), http.py (mcp) and routes.py (the assistant's api/).
+#    receipts, reports), account_api.py (accounts), http.py (mcp) and routes.py (the assistant's api/).
 Get-ChildItem backend\app\modules -Recurse -Filter *.py | Select-String -Pattern 'app\.web\b' | Split-Path -Leaf |
   Sort-Object -Unique
 

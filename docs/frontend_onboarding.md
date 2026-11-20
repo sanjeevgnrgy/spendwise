@@ -188,7 +188,7 @@ is signed in (`GET /auth/user`, the auth feature's `useSignedInUser`) and gets a
 | File | Holds | Use it for |
 |---|---|---|
 | `shared/api/schema.gen.ts` | every route's types, plus enum value lists (`paymentMethodValues`) | `Schemas["ExpenseRead"]`, `paths`, enums |
-| `shared/api/contracts.gen.ts` | `API_PREFIX`, `LANGUAGES` (the server's), `LIMITS` (including `receiptBytes`), `RECEIPT_MEDIA_TYPES`, `PAYMENT_METHOD_LABELS` (by language), `A2UI` (catalogs, components, chart types, actions), `AGUI` (event names, metadata keys, `receiptProvider`) | any value the backend also uses |
+| `shared/api/contracts.gen.ts` | `API_PREFIX`, `LANGUAGES` (the server's), `LIMITS` (including `receiptBytes`), `RECEIPT_MEDIA_TYPES`, `PAYMENT_METHOD_LABELS` (by language), `A2UI` (catalogs, components, chart types, actions, client functions), `REPORT_FORMATS`, `MONTH_PATTERN`, `AGUI` (event names, metadata keys, `receiptProvider`) | any value the backend also uses |
 
 Never edit them. After a backend change: run `backend\scripts\export_contracts.py`, then `npm run gen:api`.
 
@@ -218,7 +218,7 @@ Never edit them. After a backend change: run `backend\scripts\export_contracts.p
 | `model/chat-types.ts` | the conversation's types (messages, tool activity) |
 | `api/agent-stream.ts`, `api/sse.ts`, `api/agent-events.ts` | `runAgent()`: POST the run, read the SSE stream (`sse.ts` splits it into events), validate each event with `@ag-ui/core`'s schemas; pure readers for event payloads |
 | `components/` | the panel (header), the transcript, the composer (its own state, so typing doesn't redraw the cards), a message bubble, a tool chip; `lazy-chat-panel.tsx` loads the panel's code in the background |
-| `a2ui/` | the A2UI renderer: `protocol.ts` (messages, data model, size check), `a2ui-surface.tsx` (draws a surface by looking each component up in `catalogs.ts`), `basic-components.tsx`, inputs, insights (Chart, Stat), pure `actions.ts` and `insight-data.ts`, `basic-catalog.ts` (the spec's vocabulary and limits) |
+| `a2ui/` | the A2UI renderer: `protocol.ts` (messages, data model, size check), `a2ui-surface.tsx` (draws a surface by looking each component up in `catalogs.ts`), `basic-components.tsx`, inputs, insights (Chart, Stat), pure `actions.ts` and `insight-data.ts`, `basic-catalog.ts` (the spec's vocabulary and limits), `use-button-click.ts` (a click sends the event or runs a client function), `functions/` (the allow-listed client functions: `downloadReport`, D209) |
 
 How it works end to end: [assistant_architecture.md](assistant_architecture.md).
 

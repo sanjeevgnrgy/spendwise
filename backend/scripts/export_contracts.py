@@ -3,8 +3,8 @@
 - web/openapi.json: the REST API (FastAPI's OpenAPI document). `npm run gen:api` turns it into
   TypeScript types (web/src/shared/api/schema.gen.ts).
 - web/src/shared/api/contracts.gen.ts: the names and limits that aren't in OpenAPI (A2UI catalogs and
-  actions, AG-UI event names and keys, payment-method labels, limits, and sign-in's header, page, parameters and
-  failure codes).
+  actions and functions, AG-UI event names and keys, payment-method labels, report formats, limits, and sign-in's
+  header, page, parameters and failure codes).
 
 Run from the project folder after changing an API or one of these values, then `cd web; npm run gen:api`:
     .\\.venv\\Scripts\\python.exe backend\\scripts\\export_contracts.py
@@ -20,9 +20,10 @@ sys.path.insert(0, str(BACKEND_DIR))
 
 from app.core.i18n import Language  # noqa: E402
 from app.core.money import DEFAULT_CURRENCY  # noqa: E402
+from app.core.months import YearMonth  # noqa: E402
 from app.infrastructure.config import API_PREFIX, PROJECT_DIR  # noqa: E402
 from app.main import create_app  # noqa: E402
-from app.modules.assistant.a2ui import MAX_USER_MESSAGE_LENGTH, ActionName, Catalog  # noqa: E402
+from app.modules.assistant.a2ui import MAX_USER_MESSAGE_LENGTH, ActionName, Catalog, ClientFunction  # noqa: E402
 from app.modules.assistant.a2ui.models import (  # noqa: E402
     A2UI_VERSION,
     MAX_CHART_POINTS,
@@ -43,6 +44,7 @@ from app.modules.assistant.api.schemas import MAX_MESSAGE_LENGTH  # noqa: E402
 from app.modules.conversations import THREAD_ID_MAX_LENGTH  # noqa: E402
 from app.modules.expenses import PaymentMethod, payment_method_label  # noqa: E402
 from app.modules.receipts import MAX_RECEIPT_BYTES, ReceiptMediaType  # noqa: E402
+from app.modules.reports import ReportFormat  # noqa: E402
 from app.modules.expenses.values import (  # noqa: E402
     DEFAULT_LIST_LIMIT,
     DEFAULT_TREND_MONTHS,
@@ -140,6 +142,10 @@ def main() -> None:
         },
         # The kinds of file a receipt may be (the chat's file picker offers these; the server checks the bytes).
         "RECEIPT_MEDIA_TYPES": [media_type.value for media_type in ReceiptMediaType],
+        # A monthly report's downloads (GET /reports/monthly/{month}/{format}); the report card's buttons name one.
+        "REPORT_FORMATS": [form.value for form in ReportFormat],
+        # How a month is written (YYYY-MM, 1900-2099): the browser checks a card's month against it.
+        "MONTH_PATTERN": YearMonth.PATTERN,
         "A2UI": {
             "version": A2UI_VERSION,
             "rootId": ROOT_ID,
@@ -156,6 +162,8 @@ def main() -> None:
                 "approveDelete": ActionName.APPROVE_DELETE.value,
                 "cancelDelete": ActionName.CANCEL_DELETE.value,
             },
+            # The functions the insights catalog declares for the browser to run on a click (D209).
+            "functions": {"downloadReport": ClientFunction.DOWNLOAD_REPORT.value},
         },
         "AUTH": _auth_contract(),
         "ACCOUNT": _account_contract(),

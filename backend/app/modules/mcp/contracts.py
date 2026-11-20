@@ -37,6 +37,7 @@ class ToolName(StrEnum):
     GET_SUMMARY = "get_summary"
     UPDATE_EXPENSE = "update_expense"
     DELETE_EXPENSE = "delete_expense"
+    GET_MONTHLY_REPORT = "get_monthly_report"
 
 
 # Argument names other code refers to. The server checks at start-up that its tools really have them.

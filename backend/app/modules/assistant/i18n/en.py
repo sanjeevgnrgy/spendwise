@@ -36,6 +36,14 @@ class ChatText(StrEnum):
     SUMMARY_EVERYTHING_ELSE = "cards.summary.everythingElse"
     SUMMARY_EXPENSE_COUNT = "cards.summary.expenseCount"
     SUMMARY_NO_EXPENSES = "cards.summary.noExpenses"
+    # The monthly report card (a2ui/report_card.py, D209)
+    REPORT_TITLE = "cards.report.title"
+    REPORT_DAILY_AVERAGE = "cards.report.dailyAverage"
+    REPORT_OVER_DAYS = "cards.report.overDays"
+    REPORT_CATEGORY_DETAILS = "cards.report.categoryDetails"
+    REPORT_BIGGEST = "cards.report.biggest"
+    REPORT_DOWNLOAD_CSV = "cards.report.downloadCsv"
+    REPORT_DOWNLOAD_MARKDOWN = "cards.report.downloadMarkdown"
     LIST_NONE = "cards.list.none"
     LIST_FOUND = "cards.list.found"
     LIST_ROW_DETAILS = "cards.list.rowDetails"
@@ -83,6 +91,9 @@ class ChatText(StrEnum):
     CHIP_SKILL_RUNNING = "chips.loadSkill.running"
     CHIP_SKILL_DONE = "chips.loadSkill.done"
     CHIP_SKILL_FAILED = "chips.loadSkill.failed"
+    CHIP_REPORT_RUNNING = "chips.getMonthlyReport.running"
+    CHIP_REPORT_DONE = "chips.getMonthlyReport.done"
+    CHIP_REPORT_FAILED = "chips.getMonthlyReport.failed"
     CHIP_INSIGHTS_RUNNING = "chips.askInsights.running"
     CHIP_INSIGHTS_DONE = "chips.askInsights.done"
     CHIP_INSIGHTS_FAILED = "chips.askInsights.failed"
@@ -145,6 +156,14 @@ EN: dict[ChatText, TextValue] = {
     ChatText.SUMMARY_EVERYTHING_ELSE: "Everything else",
     ChatText.SUMMARY_EXPENSE_COUNT: Plural(one="{count} expense", other="{count} expenses"),
     ChatText.SUMMARY_NO_EXPENSES: "No expenses in {month}",
+    # {month} is "November 2026"; {share} a percentage with one decimal ("84.9").
+    ChatText.REPORT_TITLE: "Monthly report: {month}",
+    ChatText.REPORT_DAILY_AVERAGE: "Daily average",
+    ChatText.REPORT_OVER_DAYS: Plural(one="over {count} day", other="over {count} days"),
+    ChatText.REPORT_CATEGORY_DETAILS: Plural(one="{share}% · {count} expense", other="{share}% · {count} expenses"),
+    ChatText.REPORT_BIGGEST: "Biggest expense: {merchant}, {amount} on {date}",
+    ChatText.REPORT_DOWNLOAD_CSV: "Download CSV",
+    ChatText.REPORT_DOWNLOAD_MARKDOWN: "Download report (.md)",
     ChatText.LIST_NONE: "No matching expenses",
     ChatText.LIST_FOUND: Plural(one="Found {count} expense", other="Found {count} expenses"),
     ChatText.LIST_ROW_DETAILS: "{ref} · {category} · {date}",
@@ -196,6 +215,9 @@ EN: dict[ChatText, TextValue] = {
     ChatText.CHIP_SKILL_RUNNING: "Reading a skill…",
     ChatText.CHIP_SKILL_DONE: "Read a skill",
     ChatText.CHIP_SKILL_FAILED: "Couldn't find that skill",
+    ChatText.CHIP_REPORT_RUNNING: "Making the month's report…",
+    ChatText.CHIP_REPORT_DONE: "Made the month's report",
+    ChatText.CHIP_REPORT_FAILED: "Couldn't make the month's report",
     # The agents the model hands requests to (delegation/, D206).
     ChatText.CHIP_INSIGHTS_RUNNING: "Asking the insights agent…",
     ChatText.CHIP_INSIGHTS_DONE: "Insights agent answered",

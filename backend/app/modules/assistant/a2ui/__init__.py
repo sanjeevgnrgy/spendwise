@@ -1,11 +1,11 @@
 """A2UI inside the assistant module: the allowed component catalog, message models, cards and forms.
 
-Presentation, internal to the assistant (other modules don't use it). The AG-UI adapter
-(api/agui_stream.py) sends cards and forms to the browser as CUSTOM events, and api/agui_request.py
-receives button clicks as A2UI actions; the agent (agent/: agent.py, prompts.py, surfaces.py) uses the
-show-form tool, its instructions and the "#14" expense references. models.py holds the shapes; cards.py and
-summary_card.py the ready-made cards, forms.py the form (all written in the request's language); form_tool.py
-what the model is told about the form (English); parts.py what cards and forms are built with.
+Presentation, internal to the assistant (other modules don't use it). The AG-UI adapter (api/agui_stream.py) sends cards
+and forms to the browser as CUSTOM events, and api/agui_request.py receives button clicks as A2UI actions; the agent
+(agent/: agent.py, prompts.py, surfaces.py) uses the show-form tool, its instructions and the "#14" expense references.
+models.py holds the shapes; cards.py, summary_card.py and report_card.py the ready-made cards, forms.py the form (all
+written in the request's language); form_tool.py what the model is told about the form (English); parts.py what cards
+and forms are built with.
 """
 
 from app.modules.assistant.a2ui.cards import approval_card, card_for
@@ -16,6 +16,7 @@ from app.modules.assistant.a2ui.models import (
     ActionMessage,
     ActionName,
     Catalog,
+    ClientFunction,
     CreateSurfaceMessage,
     UserAction,
 )
@@ -29,6 +30,7 @@ __all__ = [
     "ActionMessage",
     "ActionName",
     "Catalog",
+    "ClientFunction",
     "CreateSurfaceMessage",
     "FormSource",
     "UserAction",

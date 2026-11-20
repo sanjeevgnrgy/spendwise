@@ -2,7 +2,8 @@
 
 Presentation layer. The AG-UI adapter (api/agui_stream.py) asks card_for() for a card after each
 successful tool call, and approval_card() for a delete waiting for Approve. The month's summary card is in
-summary_card.py; parts.py has what every card is built with (surface ids, "#14").
+summary_card.py, the monthly report's in report_card.py; parts.py has what every card is built with (surface ids,
+"#14").
 
 Every value shown comes from the tool's actual result and is placed in a Text: data to show,
 never instructions or markup.
@@ -17,6 +18,7 @@ from pydantic import BaseModel, ValidationError
 
 from app.core.i18n import Language, format_day, text
 from app.core.money import format_money
+from app.modules import reports
 from app.modules.assistant.a2ui.models import (
     ROOT_ID,
     Action,
@@ -33,6 +35,7 @@ from app.modules.assistant.a2ui.models import (
     Text,
 )
 from app.modules.assistant.a2ui.parts import expense_ref, new_surface_id, surface
+from app.modules.assistant.a2ui.report_card import report_card
 from app.modules.assistant.a2ui.summary_card import summary_card
 from app.modules.assistant.i18n import ChatText
 from app.modules.mcp import (
@@ -166,6 +169,7 @@ _CARDS: dict[ToolName, tuple[type[BaseModel], CardBuilder]] = {
     ToolName.GET_EXPENSE: (ExpenseFound, _single("expense", ChatText.EXPENSE_FOUND, lambda r: r.expense)),
     ToolName.GET_SUMMARY: (MonthSpending, summary_card),
     ToolName.LIST_EXPENSES: (ExpenseSearch, expense_list_card),
+    ToolName.GET_MONTHLY_REPORT: (reports.MonthlyReport, report_card),
 }
 
 

@@ -35,8 +35,8 @@ doc before working in an area, and check [decisions.md](docs/decisions.md) (D1�
 ## 2. Backend: a modular monolith with CQRS (`backend/`)
 
 **Modules.** One per business domain, in `backend/app/modules/<name>/`: `accounts`, `categories`, `conversations`,
-`expenses`, `receipts`, `assistant`, `mcp`. Split by domain, never by technical layer (no app-wide `models/` or
-`routers/`).
+`expenses`, `receipts`, `reports`, `assistant`, `mcp`. Split by domain, never by technical layer (no app-wide `models/`
+or `routers/`).
 
 **Commands and queries.** Every operation is a **command** (changes data, returns at most an id) or a **query** (reads,
 changes nothing): a frozen Pydantic message with exactly one handler. Send them through the bus (`bus.execute`,
@@ -76,9 +76,9 @@ modules need it. Recipes: [backend_onboarding.md](docs/backend_onboarding.md).
   is passed in); only their HTTP adapters (`api.py`, `accounts/account_api.py`, `assistant/api/routes.py`,
   `mcp/http.py`) import `web/`.
 - Only `bootstrap.py` and `main.py` import a `module.py`.
-- Module dependencies stay one-way: expenses → categories; mcp → expenses, categories; assistant → the rest;
-  accounts and receipts depend on none. A new dependency must not create a cycle; if two modules
-  need each other, redesign (an event, or a third module).
+- Module dependencies stay one-way: expenses → categories; reports → expenses, categories; mcp → expenses,
+  categories, reports; assistant → the rest; accounts and receipts depend on none. A new dependency must not create a
+  cycle; if two modules need each other, redesign (an event, or a third module).
 - Inside the assistant, imports run `api/` → `application/` → `agent/`, `approvals/`, `tools/`, `receipt_agent/`,
   `delegation/`, `skills/`, `a2ui/`, never back (`delegation/` and `skills/` use `agent/`'s events and call handlers).
 - **A2A agents live outside the monolith**, in `agents/<name>/`, each its own process, built on the shared agent kit
@@ -172,7 +172,9 @@ skill's `name` and `description` are always in the prompt; `load_skill` gives th
 follows agentskills.io: `name` = the folder's name (lowercase, digits, single hyphens, at most 64 characters), a
 `description` saying what it does and "Use when..." (at most 1,024), a body under 500 lines, files only under
 `references/` or `assets/`, one level deep. Skills are trusted text in this repository: never load one from a person or
-an outside source, and never let the model run a skill's `scripts/` (the server runs them, D208).
+an outside source. The model never runs a skill's `scripts/` and never reads them: the server runs a listed script
+through `SkillLibrary.run_script` (a child process, JSON in and out, a time limit), on the signed-in person's own data,
+and checks its answer before anyone sees it (D209).
 
 **What the model sees is behaviour.** Prompts, tool declarations and the `/parse` schema decide what the model does.
 Changing them is a feature change, to be designed and verified as one.

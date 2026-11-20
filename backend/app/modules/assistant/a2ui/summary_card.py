@@ -35,8 +35,8 @@ from app.modules.mcp import MonthSpending
 DONUT_SLICES = 4
 
 
-def _versus(total: Decimal, previous: Decimal, previous_month: date, language: Language) -> tuple[str, Trend]:
-    """'+12% vs October', and which way it went."""
+def versus(total: Decimal, previous: Decimal, previous_month: date, language: Language) -> tuple[str, Trend]:
+    """'+12% vs October', and which way it went. The report card (report_card.py) says it the same way."""
     name = format_month(previous_month, language, with_year=False)
     if previous == 0:
         return text(language, ChatText.SUMMARY_NOTHING_BEFORE, month=name), Trend.FLAT
@@ -78,7 +78,7 @@ def summary_card(summary: MonthSpending, language: Language) -> CreateSurfaceMes
     t = partial(text, language)  # t(key, **values): a text in the request's language
     month = YearMonth.parse(summary.month).first_day()
     previous_month = YearMonth.parse(summary.previous_month.month).first_day()
-    change, trend = _versus(summary.total, summary.previous_month.total, previous_month, language)
+    change, trend = versus(summary.total, summary.previous_month.total, previous_month, language)
     month_and_year = format_month(month, language)
     components: list[Component] = [
         Text(id="title", text=t(ChatText.SUMMARY_TITLE, month=month_and_year), variant="caption"),

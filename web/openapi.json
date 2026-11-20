@@ -858,6 +858,111 @@
         }
       }
     },
+    "/api/v1/reports/monthly/{month}": {
+      "get": {
+        "tags": [
+          "reports"
+        ],
+        "summary": "Get Monthly Report",
+        "operationId": "get_monthly_report_api_v1_reports_monthly__month__get",
+        "parameters": [
+          {
+            "name": "month",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "pattern": "^(19|20)\\d{2}-(0[1-9]|1[0-2])$",
+              "examples": [
+                "2026-11"
+              ],
+              "title": "Month"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MonthlyReport"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/reports/monthly/{month}/{format}": {
+      "get": {
+        "tags": [
+          "reports"
+        ],
+        "summary": "Download Monthly Report",
+        "operationId": "download_monthly_report_api_v1_reports_monthly__month___format__get",
+        "parameters": [
+          {
+            "name": "month",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "pattern": "^(19|20)\\d{2}-(0[1-9]|1[0-2])$",
+              "examples": [
+                "2026-11"
+              ],
+              "title": "Month"
+            }
+          },
+          {
+            "name": "format",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "$ref": "#/components/schemas/ReportFormat"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "text/csv": {
+                "schema": {
+                  "type": "string"
+                }
+              },
+              "text/markdown": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/v1/parse": {
       "post": {
         "tags": [
@@ -1449,6 +1554,40 @@
         ],
         "title": "BackchannelLogoutForm"
       },
+      "BigExpense": {
+        "properties": {
+          "spent_on": {
+            "type": "string",
+            "format": "date",
+            "title": "Spent On"
+          },
+          "merchant": {
+            "type": "string",
+            "maxLength": 100,
+            "minLength": 1,
+            "title": "Merchant"
+          },
+          "category": {
+            "type": "string",
+            "maxLength": 50,
+            "minLength": 1,
+            "title": "Category"
+          },
+          "amount": {
+            "type": "string",
+            "title": "Amount"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "spent_on",
+          "merchant",
+          "category",
+          "amount"
+        ],
+        "title": "BigExpense"
+      },
       "Body_upload_receipt_api_v1_receipts_post": {
         "properties": {
           "file": {
@@ -1486,6 +1625,45 @@
         ],
         "title": "CategoryRead",
         "description": "A category as other code sees it: a frozen copy, never the table row."
+      },
+      "CategoryShare": {
+        "properties": {
+          "category": {
+            "type": "string",
+            "maxLength": 50,
+            "minLength": 1,
+            "title": "Category"
+          },
+          "total": {
+            "type": "string",
+            "title": "Total"
+          },
+          "count": {
+            "type": "integer",
+            "minimum": 1.0,
+            "title": "Count"
+          },
+          "share_percent": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Share Percent"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "category",
+          "total",
+          "count",
+          "share_percent"
+        ],
+        "title": "CategoryShare"
       },
       "CategoryTotal": {
         "properties": {
@@ -2254,6 +2432,97 @@
         ],
         "title": "MonthTotal"
       },
+      "MonthlyReport": {
+        "properties": {
+          "month": {
+            "type": "string",
+            "pattern": "^(19|20)\\d{2}-(0[1-9]|1[0-2])$",
+            "title": "Month",
+            "examples": [
+              "2026-11"
+            ]
+          },
+          "currency": {
+            "type": "string",
+            "pattern": "^[A-Z]{3}$",
+            "title": "Currency"
+          },
+          "total": {
+            "type": "string",
+            "title": "Total"
+          },
+          "previous_total": {
+            "type": "string",
+            "title": "Previous Total"
+          },
+          "change_percent": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Change Percent"
+          },
+          "expense_count": {
+            "type": "integer",
+            "minimum": 0.0,
+            "title": "Expense Count"
+          },
+          "days_counted": {
+            "type": "integer",
+            "maximum": 31.0,
+            "minimum": 1.0,
+            "title": "Days Counted"
+          },
+          "daily_average": {
+            "type": "string",
+            "title": "Daily Average"
+          },
+          "by_category": {
+            "items": {
+              "$ref": "#/components/schemas/CategoryShare"
+            },
+            "type": "array",
+            "maxItems": 50,
+            "title": "By Category"
+          },
+          "by_payment_method": {
+            "items": {
+              "$ref": "#/components/schemas/PaymentShare"
+            },
+            "type": "array",
+            "maxItems": 50,
+            "title": "By Payment Method"
+          },
+          "biggest": {
+            "items": {
+              "$ref": "#/components/schemas/BigExpense"
+            },
+            "type": "array",
+            "maxItems": 5,
+            "title": "Biggest"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "month",
+          "currency",
+          "total",
+          "previous_total",
+          "change_percent",
+          "expense_count",
+          "days_counted",
+          "daily_average",
+          "by_category",
+          "by_payment_method",
+          "biggest"
+        ],
+        "title": "MonthlyReport"
+      },
       "MonthlySummary": {
         "properties": {
           "total_minor": {
@@ -2543,6 +2812,42 @@
         ],
         "title": "PaymentMethod"
       },
+      "PaymentShare": {
+        "properties": {
+          "payment_method": {
+            "$ref": "#/components/schemas/PaymentMethod"
+          },
+          "total": {
+            "type": "string",
+            "title": "Total"
+          },
+          "count": {
+            "type": "integer",
+            "minimum": 1.0,
+            "title": "Count"
+          },
+          "share_percent": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Share Percent"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "payment_method",
+          "total",
+          "count",
+          "share_percent"
+        ],
+        "title": "PaymentShare"
+      },
       "ReasoningMessage": {
         "properties": {
           "subagentRunId": {
@@ -2632,6 +2937,14 @@
         ],
         "title": "ReceiptRead",
         "description": "An uploaded receipt file."
+      },
+      "ReportFormat": {
+        "type": "string",
+        "enum": [
+          "csv",
+          "md"
+        ],
+        "title": "ReportFormat"
       },
       "ResumeEntry": {
         "properties": {

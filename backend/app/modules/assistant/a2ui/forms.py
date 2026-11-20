@@ -160,8 +160,8 @@ def _model_form(form: Any, language: Language) -> CreateSurfaceMessage:
     if not buttons:
         raise ValueError(f"the form has no {ActionName.SAVE_EXPENSE} button")
     # Only the server may show approval buttons: a model-written button labelled "Save" must not be
-    # able to approve a delete.
-    if any(button.action.event.name != ActionName.SAVE_EXPENSE for button in buttons):
+    # able to approve a delete. Nor may a form run a function in the browser (a download, D209).
+    if any(button.action.event is None or button.action.event.name != ActionName.SAVE_EXPENSE for button in buttons):
         raise ValueError(f"a form's buttons may only use the {ActionName.SAVE_EXPENSE} action")
     _label_payment_options(surface.components, language)
     return CreateSurfaceMessage(create_surface=surface)

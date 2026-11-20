@@ -34,9 +34,9 @@ app (an amount must be positive, a category must exist, ...). It cannot delete b
 ### For other AI tools
 
 The same expense tools are available to any **MCP** client (MCP Inspector, Claude Desktop): `add_expense`,
-`list_expenses`, `get_expense`, `get_summary`, `update_expense`, `delete_expense`, and two resources
-(`expenses://categories`, `expenses://recent`). Over stdio with `backend\mcp_stdio.py`, or over HTTP at `/mcp/` with a
-bearer token ([api_endpoints.md](api_endpoints.md#mcp-tools-and-resources)).
+`list_expenses`, `get_expense`, `get_summary`, `update_expense`, `delete_expense`, `get_monthly_report`, and two
+resources (`expenses://categories`, `expenses://recent`). Over stdio with `backend\mcp_stdio.py`, or over HTTP at
+`/mcp/` with a bearer token ([api_endpoints.md](api_endpoints.md#mcp-tools-and-resources)).
 
 ## The tech stack
 

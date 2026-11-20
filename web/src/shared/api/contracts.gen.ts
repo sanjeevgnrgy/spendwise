@@ -49,6 +49,13 @@ export const RECEIPT_MEDIA_TYPES = [
   "application/pdf"
 ] as const
 
+export const REPORT_FORMATS = [
+  "csv",
+  "md"
+] as const
+
+export const MONTH_PATTERN = "^(19|20)\\d{2}-(0[1-9]|1[0-2])$" as const
+
 export const A2UI = {
   "version": "1.0",
   "rootId": "root",
@@ -88,6 +95,9 @@ export const A2UI = {
     "saveExpense": "save_expense",
     "approveDelete": "approve_delete",
     "cancelDelete": "cancel_delete"
+  },
+  "functions": {
+    "downloadReport": "downloadReport"
   }
 } as const
 

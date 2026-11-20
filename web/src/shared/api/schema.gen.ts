@@ -262,6 +262,40 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/reports/monthly/{month}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Monthly Report */
+        get: operations["get_monthly_report_api_v1_reports_monthly__month__get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/reports/monthly/{month}/{format}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Download Monthly Report */
+        get: operations["download_monthly_report_api_v1_reports_monthly__month___format__get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/parse": {
         parameters: {
             query?: never;
@@ -513,6 +547,20 @@ export interface components {
             /** Logout Token */
             logout_token: string;
         };
+        /** BigExpense */
+        BigExpense: {
+            /**
+             * Spent On
+             * Format: date
+             */
+            spent_on: string;
+            /** Merchant */
+            merchant: string;
+            /** Category */
+            category: string;
+            /** Amount */
+            amount: string;
+        };
         /** Body_upload_receipt_api_v1_receipts_post */
         Body_upload_receipt_api_v1_receipts_post: {
             /** File */
@@ -529,6 +577,17 @@ export interface components {
             name: string;
             /** Icon */
             icon: string;
+        };
+        /** CategoryShare */
+        CategoryShare: {
+            /** Category */
+            category: string;
+            /** Total */
+            total: string;
+            /** Count */
+            count: number;
+            /** Share Percent */
+            share_percent: string | null;
         };
         /** CategoryTotal */
         CategoryTotal: {
@@ -815,6 +874,34 @@ export interface components {
             /** Total */
             readonly total: string;
         };
+        /** MonthlyReport */
+        MonthlyReport: {
+            /**
+             * Month
+             * @example 2026-11
+             */
+            month: string;
+            /** Currency */
+            currency: string;
+            /** Total */
+            total: string;
+            /** Previous Total */
+            previous_total: string;
+            /** Change Percent */
+            change_percent: string | null;
+            /** Expense Count */
+            expense_count: number;
+            /** Days Counted */
+            days_counted: number;
+            /** Daily Average */
+            daily_average: string;
+            /** By Category */
+            by_category: components["schemas"]["CategoryShare"][];
+            /** By Payment Method */
+            by_payment_method: components["schemas"]["PaymentShare"][];
+            /** Biggest */
+            biggest: components["schemas"]["BigExpense"][];
+        };
         /** MonthlySummary */
         MonthlySummary: {
             /** Total Minor */
@@ -934,6 +1021,16 @@ export interface components {
          * @enum {string}
          */
         PaymentMethod: "cash" | "upi" | "card" | "netbanking" | "wallet" | "other";
+        /** PaymentShare */
+        PaymentShare: {
+            payment_method: components["schemas"]["PaymentMethod"];
+            /** Total */
+            total: string;
+            /** Count */
+            count: number;
+            /** Share Percent */
+            share_percent: string | null;
+        };
         /**
          * ReasoningMessage
          * @description A span of the agent's reasoning, materialised as a message. Stands alone
@@ -977,6 +1074,11 @@ export interface components {
              */
             created_at: string;
         };
+        /**
+         * ReportFormat
+         * @enum {string}
+         */
+        ReportFormat: "csv" | "md";
         /**
          * ResumeEntry
          * @description An answer to one interrupt, sent on the run that continues from it.
@@ -1842,6 +1944,70 @@ export interface operations {
             };
         };
     };
+    get_monthly_report_api_v1_reports_monthly__month__get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                month: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MonthlyReport"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    download_monthly_report_api_v1_reports_monthly__month___format__get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                month: string;
+                format: components["schemas"]["ReportFormat"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "text/csv": string;
+                    "text/markdown": string;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     parse_expense_api_v1_parse_post: {
         parameters: {
             query?: never;
@@ -2110,6 +2276,7 @@ export const imagePartTypeValues: ReadonlyArray<FlattenedDeepRequired<components
 export const messageKindValues: ReadonlyArray<FlattenedDeepRequired<components>["schemas"]["MessageKind"]> = ["user_text", "assistant_text", "tool_call", "tool_result", "reasoning"];
 export const paymentMethodValues: ReadonlyArray<FlattenedDeepRequired<components>["schemas"]["PaymentMethod"]> = ["cash", "upi", "card", "netbanking", "wallet", "other"];
 export const reasoningMessageRoleValues: ReadonlyArray<FlattenedDeepRequired<components>["schemas"]["ReasoningMessage"]["role"]> = ["reasoning"];
+export const reportFormatValues: ReadonlyArray<FlattenedDeepRequired<components>["schemas"]["ReportFormat"]> = ["csv", "md"];
 export const resumeEntryStatusValues: ReadonlyArray<FlattenedDeepRequired<components>["schemas"]["ResumeEntry"]["status"]> = ["resolved", "cancelled"];
 export const systemMessageRoleValues: ReadonlyArray<FlattenedDeepRequired<components>["schemas"]["SystemMessage"]["role"]> = ["system"];
 export const textPartTypeValues: ReadonlyArray<FlattenedDeepRequired<components>["schemas"]["TextPart"]["type"]> = ["text"];

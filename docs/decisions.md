@@ -2723,3 +2723,53 @@ is natural. It's still a soft, model-judged guard.
   (it didn't need the merchant list: the rules were enough).
 - **Revisit:** a skill's body read once per turn even if the model asks twice; per-person skills, if ever wanted, would
   need the trust rules rethought.
+
+### D209. A skill's script is run by the server; a monthly report module; a download as a client function on the card
+- **What:**
+  - **The skill:** `skills/monthly-report` (when to use it, the steps, what the reply says and its tone, the report's
+    sections) with `scripts/compute_report.py` (standard library only; JSON on stdin and stdout; decimals rounded half
+    up): the total against the month before, by category and by payment method with shares, the five biggest
+    expenses, the daily average (over the days so far for the running month).
+  - **Running a script:** `SkillLibrary.run_script(name, script, payload)`. `FolderSkillLibrary` lists each skill's
+    `scripts/*.py` when it reads the folder and runs only a listed one, as `python -I script` (isolated: no user site,
+    no current folder on the path), from the skill's folder, no shell, the payload on stdin, at most 10 seconds and
+    1 MB of output, which must be one JSON object. Anything else raises `SkillScriptError`. The model has no tool that
+    runs a script, and scripts are never readable through `load_skill`.
+  - **The reports module** (`modules/reports`, depends on expenses and categories, no tables): `MonthlyReports` reads
+    the person's expenses of the month and the month before through `ListExpenses` (a page at a time, at most 10,000;
+    more is refused, not reported in part) and the category names, runs the script with no database session open, and
+    validates its answer (`MonthlyReport`: no extra keys, amounts at least 0 with two decimals, shares 0-100, the month
+    asked for). A failure is a 502 with a catalogued text; the cause goes to the log at DEBUG. It writes the downloads
+    in the request's language: the markdown report (person-written names escaped) and a CSV of every expense of the
+    month (UTF-8 with a byte order mark; a cell of the person's text starting with `= + - @` or their full-width forms,
+    a tab, a carriage return or a line feed gets a leading apostrophe, OWASP's advice). Routes: `GET
+    /reports/monthly/{month}` and `/reports/monthly/{month}/{csv|md}` (an attachment).
+  - **The MCP tool** `get_monthly_report(month)`, registered after `delete_expense` so the tools before it reach the
+    model unchanged, answers with the figures. The assistant draws them as the report card (chip "Making the month's
+    report…", English and Hindi).
+  - **A2UI function calls:** a Button's action is now the spec's oneOf, an `event` or a `functionCall`
+    (`{"@call", "args", "catalogId"}`). The insights catalog declares one function, `downloadReport(month, format)`,
+    run by the renderer on a click. The browser runs only allow-listed functions from that catalog, checks the month
+    and the format, builds the address itself, and fetches with the person's session (`api`), then saves the file. A
+    model-written form may still use only the `save_expense` event: a function call is refused.
+- **Why the server runs the script:** a script is code. If the model could choose what runs, any instruction smuggled
+  into the conversation (a merchant name, a receipt) could become code execution. Running one listed script from the
+  repository, on the signed-in person's own expenses only, keeps the model to choosing a month. The script still earns
+  its place: the figures are exact and repeatable, not a model adding up numbers.
+- **Why a client function for the downloads:** a download needs neither the agent nor a run. An event would go through
+  the agent; a URL in the card would let a card point the browser anywhere. A function with only a month and a format
+  keeps the address the browser's own.
+- **Why a module of its own:** reports read two modules and run a skill; putting that in expenses would give expenses
+  a dependency on the skill library and documents it doesn't otherwise need.
+- **How it was verified:** 35 checks with a scripted model through the HTTP API: the model's input is unchanged apart
+  from the new tool (compared with the previous baseline); the figures (total, change, shares, payment methods, the
+  biggest, daily average); the CSV (attachment name, BOM, header, every expense of the month and none of others,
+  formulas neutralised, Hindi header and labels); the markdown (sections in order, names escaped, Hindi); an empty
+  month; a bad month or format (422); another person's report (none of the first's expenses); signed out (401); the
+  script failing, adding a key, giving a negative total or another month (502, text for people, no cause); the skill
+  in the catalog without its body or script, the tool's result, the chips, the card's two function-call buttons and no
+  address in it; a form with a function call, or an action with both kinds, refused; an unlisted script refused. Every
+  earlier suite passes. Live, 2 Gemini calls: for "Can I get my monthly report for this month?", Gemini called
+  `load_skill("monthly-report")` on its own, then `get_monthly_report("2026-11")`.
+- **Revisit:** a rate limit on the download routes if reports get heavy (each runs a short process); a PDF, if wanted,
+  would be another format on the same route.

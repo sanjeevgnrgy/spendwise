@@ -32,7 +32,7 @@ from app.infrastructure.identity import ClientCredentials, OidcIdentityProvider,
 from app.infrastructure.llm.gemini import GeminiModel
 from app.infrastructure.sealing import FernetSealer
 from app.infrastructure.skills import FolderSkillLibrary
-from app.modules import accounts, expenses
+from app.modules import accounts, expenses, reports
 from app.modules.accounts import module as accounts_module
 from app.modules.assistant import module as assistant_module
 from app.modules.categories import module as categories_module
@@ -40,9 +40,11 @@ from app.modules.conversations import module as conversations_module
 from app.modules.expenses import module as expenses_module
 from app.modules.mcp import module as mcp_module
 from app.modules.receipts import module as receipts_module
+from app.modules.reports import module as reports_module
 from app.web.auth import SessionCookies
 
-# Every module with handlers or tables. (The mcp module has neither: it's an adapter over the bus.)
+# Every module with handlers or tables. (The mcp module has neither: it's an adapter over the bus. Nor has the reports
+# module: it reads through other modules' queries.)
 MODULES = (
     accounts_module, categories_module, expenses_module, conversations_module, receipts_module, assistant_module
 )
@@ -66,6 +68,8 @@ class Services:
     agents: RemoteAgents
     # Saves expenses, converting an amount in another currency to INR first (D204): the REST routes and MCP share it.
     recorder: expenses.ExpenseRecorder
+    # Monthly reports (D209): the REST routes and MCP's get_monthly_report share it.
+    reports: reports.MonthlyReports
     # The Agent Skills the assistant may read (D208): SKILL.md folders, by default the project's skills/.
     skills: SkillLibrary
     mcp_server: MCPServer
@@ -130,7 +134,9 @@ def build(
     # The agents run inside this process, with the same model (D207); the multi-server branch reaches them as services.
     agents = agents_host.hosted_agents(llm, clock) if agents is None else agents
     recorder = expenses_module.create_recorder(bus, agents)
-    mcp_server = mcp_module.create_server(bus, recorder)
+    # The monthly reports: the monthly-report skill's script works the figures out, run by the server (D209).
+    monthly_reports = reports_module.create_reports(bus, skills, clock)
+    mcp_server = mcp_module.create_server(bus, recorder, monthly_reports)
     if tools is None:
         # The assistant's tools: this app's own MCP server, in-process. Each run binds them to the signed-in person.
         tools = assistant_module.McpExpenseTools(mcp_server)
@@ -147,6 +153,7 @@ def build(
         files=files,
         agents=agents,
         recorder=recorder,
+        reports=monthly_reports,
         skills=skills,
         mcp_server=mcp_server,
         access_tokens=accounts_module.create_access_tokens(bus, clock),
@@ -206,8 +213,9 @@ def api_routers(services: Services) -> list[APIRouter]:
     """Every other module's REST routes; main.py puts the X-CSRF and session checks in front of all of them. Their
     order is the OpenAPI document's order.
 
-    The expenses, receipts and assistant routers are built from `services` (the recorder, the file store, the tools, the
-    model and the remote agents): the expenses routes save through the recorder, the receipts routes take uploads, and
+    The expenses, receipts, reports and assistant routers are built from `services` (the recorder, the file store, the
+    monthly reports, the tools, the model and the remote agents): the expenses routes save through the recorder, the
+    receipts routes take uploads, the reports routes answer with the monthly reports, and
     the assistant hands an attached receipt's file (ReceiptFiles, for its owner only) to the receipt agent. The account
     router (the signed-in person's sessions and access tokens) gets the bus, the provider and the tokens. The others are
     fixed routers that read the bus and the clock from `app.state` at request time (web/dependencies), which create_app
@@ -219,6 +227,7 @@ def api_routers(services: Services) -> list[APIRouter]:
         expenses_module.create_router(services.recorder),
         conversations_module.router,
         receipts_module.create_router(services.bus, services.files),
+        reports_module.create_router(services.reports),
         assistant_module.create_router(
             services.bus, services.tools, services.llm, receipt_files, services.agents, services.clock, services.skills
         ),

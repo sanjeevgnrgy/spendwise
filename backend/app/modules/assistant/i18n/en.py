@@ -80,6 +80,9 @@ class ChatText(StrEnum):
     CHIP_RECEIPT_FAILED = "chips.readReceipt.failed"
     CHIP_TASK = "chips.task"
     CHIP_TASK_WAITING = "chips.taskWaiting"
+    CHIP_SKILL_RUNNING = "chips.loadSkill.running"
+    CHIP_SKILL_DONE = "chips.loadSkill.done"
+    CHIP_SKILL_FAILED = "chips.loadSkill.failed"
     CHIP_INSIGHTS_RUNNING = "chips.askInsights.running"
     CHIP_INSIGHTS_DONE = "chips.askInsights.done"
     CHIP_INSIGHTS_FAILED = "chips.askInsights.failed"
@@ -189,6 +192,10 @@ EN: dict[ChatText, TextValue] = {
     ChatText.CHIP_TASK: "A2A task {task}",
     # The same, for a task that stopped to ask the person something (the reply asks it).
     ChatText.CHIP_TASK_WAITING: "A2A task {task} · waiting for your answer",
+    # The model reading one of SpendWise's skills (D208).
+    ChatText.CHIP_SKILL_RUNNING: "Reading a skill…",
+    ChatText.CHIP_SKILL_DONE: "Read a skill",
+    ChatText.CHIP_SKILL_FAILED: "Couldn't find that skill",
     # The agents the model hands requests to (delegation/, D206).
     ChatText.CHIP_INSIGHTS_RUNNING: "Asking the insights agent…",
     ChatText.CHIP_INSIGHTS_DONE: "Insights agent answered",

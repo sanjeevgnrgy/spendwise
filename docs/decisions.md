@@ -2633,3 +2633,87 @@ is natural. It's still a soft, model-judged guard.
     are covered by the scripted checks.
 - **Revisit:** offering the receipt agent once a chat can hand it a file; asking the model, not a rule, whether a
   message answers the agent's question, if people often change the subject.
+
+---
+
+## One server (after Phase 25)
+
+> The backend hosts the three A2A agents in its own process, on its own port; the version with separate services is
+> kept on the `multi-server` branch (this one). The refactor note, `docs/phases/refactor-single-server.md`, is on
+> `main`.
+
+### D207. On main, the backend hosts the A2A agents in-process; multi-server is a branch
+- **What:**
+  - **Branches (the owner's choice):** `main` is the single-server version; `multi-server` keeps the code as of
+    Phase 25 (`9265950`), where each agent is its own service on 9001-9003.
+  - **Hosting:** `app/agents_host.py`, part of the composition root, builds the receipt, insights and currency agents'
+    web apps with the backend's own model (`bootstrap.build(llm=...)`, so a check's fake reaches them too), clock, the
+    mock rates, and a random key per agent made at startup; `A2AAgents` reaches each through `httpx.ASGITransport`, in
+    memory. Everything else is unchanged: cards (read at startup), skills, tasks, input-required, the gate, the task
+    store, and every check of an agent's answer.
+  - **The A2A adapter** runs every call on one background event loop (`infrastructure/a2a/loop.py`, a daemon thread
+    started on first use) instead of a fresh loop per call: the hosted agents' handlers, task stores and locks are made
+    once and belong to one loop.
+  - **Settings:** the backend no longer reads `RECEIPT_AGENT_URL`/`KEY`, `INSIGHTS_AGENT_URL`/`KEY` or
+    `CURRENCY_AGENT_URL`/`KEY`. The agents' own settings remain, for running one alone with `run-agent.ps1`.
+  - **Rules:** in `backend/`, only `agents_host.py` imports the agents (scan 10); it puts `agents/` on the import path
+    itself, so `run.ps1`, `seed.py`, `mcp_stdio.py` and the export script need nothing new. The agents' loggers are
+    shown with the backend's.
+- **Why:** one process to deploy and run (`run.ps1` alone), with no ports, keys or start order to manage, while the
+  multi-agent design (separate code, A2A contracts, the orchestrator) stays intact: moving an agent back out is a
+  configuration of `agents_host.py`, as the branch shows.
+- **Chosen with the owner:** `main` single-server, the current code on a `multi-server` branch; Next.js stays its own
+  server (it already gives the browser one origin, D184). Recommended instead: a setting on one branch, to avoid the
+  two drifting; the owner chose branches.
+- **Trade-offs:** the agents share the backend's process: a crash or a slow call in one affects the backend, and they
+  can't be scaled or deployed separately (that's the branch). Later work must be applied to both branches.
+- **How it was verified:** the app as `bootstrap.build()` makes it, with no agent process running and nothing on
+  9001-9003, through the HTTP API with a fake model (10 checks): the hosted cards read at startup and both agents
+  offered; a receipt read with a form and a chip; a USD expense converted (₹338.00); an insights question asked and
+  resumed; the agents using the backend's model; 60 agent calls from 12 threads at once all completing. The earlier
+  suites (26, 32, 35, 26, 30) still pass, an ordinary turn is unchanged, the real server boots as `run.ps1` starts it
+  (only `backend` on the path) on a copy of the database, reads both cards and answers `/health`, and the export
+  script leaves the web contract unchanged. Honest note: the 60-call test also passed with the old fresh-loop-per-call
+  adapter; the single loop is a precaution (asyncio objects bind to the loop that first waits on them), not the fix
+  for a failure that was reproduced.
+- **Revisit:** a setting instead of two branches, if keeping both up to date becomes a chore.
+
+---
+
+## Agent Skills (Phase 26)
+
+> SKILL.md folders the assistant reads a level at a time: categorization (Part 1), a monthly report (Part 2). On both
+> branches. Phase note: [phases/phase-26-agent-skills.md](phases/phase-26-agent-skills.md).
+
+### D208. Agent Skills: a catalog in the instruction, a load_skill tool, trusted instructions read from the repository
+- **What:**
+  - **The skills** live in the repository's `skills/` (setting `SKILLS_DIR`), in the agentskills.io format. Part 1:
+    `categorization` (the eight categories, steps, rules by kind of merchant, and when a purchase overrides the
+    merchant) with `references/merchants.md` (common Indian merchants and their category).
+  - **The port and adapter:** `core/skills.SkillLibrary` (`catalog()`, `read(name, file?)`); `infrastructure/skills.
+    FolderSkillLibrary` reads the folder once, keeps a skill only if its frontmatter has a valid `name` (the folder's,
+    lowercase, digits and single hyphens, at most 64) and a `description` (1-1,024), and lists its readable files
+    (under `references/` and `assets/`, at most 64 KB; never `scripts/`). Only `key: value` frontmatter lines are read:
+    no YAML library is installed for two fields. `bootstrap.build(skills=...)` is a seam.
+  - **In the assistant** (`assistant/skills/SkillTool`, an extension of the agent loop): the catalog (each skill's name
+    and description) goes into the system instruction with a rule: when a task matches, call `load_skill` first and
+    follow it; read a file only when the skill says so; `load_skill`'s result is instructions, the one exception to
+    "tool results are data". `load_skill(name, file?)` takes enums of the names and files; its result is the body (no
+    frontmatter) or the file; anything else is "not found". A chip "Reading a skill…" (English, Hindi).
+  - **The agent loop's extensions:** `Agent(extensions=...)` replaces Phase 25's `delegation=`: each extension (the
+    delegator, the skills) gives its tools, handlers and instruction lines, and nothing when it has nothing to offer.
+- **Why progressive disclosure:** every token in the instruction is paid on every step of every turn. The catalog costs
+  a few lines (313 characters for categorization) where the full skill is 3,815 (SKILL.md and merchants.md); the model
+  pays for the rest only on a turn that needs it, and new skills don't make every other turn dearer or noisier.
+- **Why a dedicated tool:** the model can't read files itself; the integration guide's "dedicated tool activation",
+  with the names as an enum, lets the server decide what can be read.
+- **How it was verified:** 16 checks with a scripted model through `/agent`: with no skills the model's input is
+  exactly as before (rebuilt from the previous commit); the catalog in the instruction without the body; the tool's
+  enums; the body (without frontmatter) as instructions, then the file only when asked; chips (English, Hindi); the
+  expense saved under Transport; `../../.env`, an unknown skill and a script refused; the folder rules (a bad name, a
+  mismatch, no description, `--`, too long a description, no frontmatter skipped; quotes stripped; only references and
+  assets, not too big). Every earlier suite passes. Live, 2 Gemini calls: for "Add 250 for a Rapido ride to office
+  today, paid by UPI", Gemini called `load_skill("categorization")` on its own, then `add_expense` with Transport
+  (it didn't need the merchant list: the rules were enough).
+- **Revisit:** a skill's body read once per turn even if the model asks twice; per-person skills, if ever wanted, would
+  need the trust rules rethought.

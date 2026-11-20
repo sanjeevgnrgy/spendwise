@@ -13,6 +13,7 @@ from fastapi import APIRouter
 from app.core.agents import RemoteAgents
 from app.core.clock import Clock
 from app.core.cqrs import MessageBus
+from app.core.skills import SkillLibrary
 from app.core.llm import LanguageModel
 from app.modules import receipts
 from app.modules.assistant.api import routes
@@ -51,6 +52,7 @@ def create_router(
     receipt_files: receipts.ReceiptFiles,
     agents: RemoteAgents,
     clock: Clock,
+    skills: SkillLibrary,
 ) -> APIRouter:
     """The assistant's routes (/parse, /chat, /agent), around the use cases built from what's passed in.
 
@@ -58,13 +60,14 @@ def create_router(
     (ExpenseParser); each is given only the side it needs. A receipt attached in the web panel is taken from
     `receipt_files` (for its owner only) and read by the receipt agent, one of `agents`. The others' cards are read
     here, as the app starts, for the model to delegate to (D206); one that can't be read yet is tried again later.
+    `skills` are offered to the model a level at a time (D208).
     """
     reader = AgentReceiptReader(agents)
     directory = AgentDirectory(agents, delegable_skills(bus), clock)
     directory.load()
     assistant = Assistant(
         bus=bus, tools=tools, llm=llm, receipt_files=receipt_files, receipt_reader=reader, directory=directory,
-        agents=agents,
+        agents=agents, skills=skills,
     )
     return routes.create_router(assistant, ExpenseParser(bus=bus, llm=llm))
 

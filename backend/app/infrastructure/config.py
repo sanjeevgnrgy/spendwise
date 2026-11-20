@@ -69,6 +69,9 @@ class Settings(BaseSettings):
     # an expense in another currency can't be saved (it says why); INR expenses need it never.
     currency_agent_url: str = "http://127.0.0.1:9003"
     currency_agent_key: SecretStr | None = None
+    # The Agent Skills the assistant may read (D208): one folder per skill, each with its SKILL.md. Part of the
+    # repository; read once, at the first turn.
+    skills_dir: Path = PROJECT_DIR / "skills"
 
     # Sign-in (Phase 22): the OpenID Connect provider people sign in with (D185). Any provider that implements the
     # standard works; these are its issuer URL and this app's registration there (a confidential "web" client).

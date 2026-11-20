@@ -13,6 +13,7 @@ from app.modules.assistant.api.protocol import ToolLabels
 from app.modules.assistant.delegation import ASK_CURRENCY, ASK_INSIGHTS
 from app.modules.assistant.i18n import ChatText
 from app.modules.assistant.receipt_agent.port import READ_RECEIPT
+from app.modules.assistant.skills import LOAD_SKILL
 from app.modules.mcp import ToolName
 
 
@@ -71,6 +72,10 @@ TOOL_CHIPS: dict[str, _ChipTexts] = {
         running=ChatText.CHIP_CURRENCY_RUNNING,
         done=ChatText.CHIP_CURRENCY_DONE,
         failed=ChatText.CHIP_CURRENCY_FAILED,
+    ),
+    # Not an MCP tool: the model reading one of SpendWise's skills (skills/, D208).
+    LOAD_SKILL: _ChipTexts(
+        running=ChatText.CHIP_SKILL_RUNNING, done=ChatText.CHIP_SKILL_DONE, failed=ChatText.CHIP_SKILL_FAILED
     ),
     # Not an MCP tool: the receipt agent reading an attached receipt (application/receipt_turn.py).
     READ_RECEIPT: _ChipTexts(

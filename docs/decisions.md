@@ -2816,3 +2816,39 @@ is natural. It's still a soft, model-judged guard.
   `no-store`. Every earlier suite passes (the model's input is unchanged: Part 1 adds no tools). Migration 0010 up,
   down, up and `alembic check` on a copy of the database.
 - **Revisit:** limits that differ by month, if wanted; rollover of unspent amounts; budgets shared by a household.
+
+### D211. Budgets in the assistant: two MCP tools, a budget card, and alerts in the save tools' results
+- **What:**
+  - **Tools** (after `get_monthly_report`, so the tools before them reach the model unchanged): `get_budgets(month?)`
+    answers the budgets module's status (the current month by the clock when `month` is empty); `set_budget(limit,
+    category?)` sets a category's limit (by name, like `add_expense`) or the overall one, then answers the current
+    month's status. No tool removes a budget: that's on the Budgets page.
+  - **Alerts:** `add_expense` and `update_expense` ask for the month's budget status before and after the save
+    (`mcp/tools/budget_watch.py`, each ask its own unit of work, the save in between) and answer `budget_alerts`: the
+    budgets whose state got worse (on track to near the limit, or into over the limit), found by the budgets module's
+    `crossed()`. The month is the expense's (the new date's, for an update). Their descriptions tell the model to
+    mention any alert in one sentence.
+  - **In the chat:** the budget card for `get_budgets` and `set_budget` (the overall budget as a Stat, each category
+    with a limit, how much of the month has gone by; or how to set one); an expense card's footer lists its save's
+    alerts ("Food budget: 84.0% used (₹4,200.00 of ₹5,000.00)"). Chips for both tools, English and Hindi. A
+    `set_budget` changes data, so the web app's pages (the Budgets page and the Dashboard's card) reload.
+- **Why alerts on a change of state only:** a budget near its limit would otherwise warn on every save, and warnings
+  that always appear stop being read.
+- **Why in the tools' results:** the alert is a fact about the save, so every MCP client gets it; the card shows it
+  even when the model doesn't mention it.
+- **Why `set_budget` has no confirmation:** it replaces a standing limit that can be set again at once; nothing a
+  person recorded is lost, unlike a deleted expense (which needs `confirmed` and Approve).
+- **How it was verified:** 24 checks with a scripted model through `/agent`: the model's input differs from the
+  previous baseline only by the two tools and the alerts sentence; the schemas (no owner); setting two limits (saved,
+  chips, a data-change event, the card, the status as the result); an alert at 84% (result and card footer); no repeat
+  while still near; an overall alert at 83%; an update over the limit (Food over; overall, already near, no new
+  alert); the alert in Hindi; a save in another month measured against that month; `get_budgets` now, for October and
+  in Hindi, read-only (no data-change event); an unknown category, a zero limit and a bad month as tool errors (the
+  limit unchanged); another person's chat seeing none of the first's budgets. Every earlier suite passes (the exact
+  input comparisons of Phase 26 see the new tools, as expected). Live, 2 Gemini calls succeeded:
+  `set_budget(category="Food", limit="5000")` for "Set my food budget to 5000 a month" and `get_budgets()` for "How
+  are my budgets doing this month?". The third (the reply after a crossing save) was refused: the save was a scripted
+  function call without Gemini's thought signature (troubleshooting.md), so the model's wording of an alert is
+  unverified live.
+- **Revisit:** a proactive alert when the app opens (the roadmap's "proactive alerts"); a `remove_budget` tool if
+  people ask for it in chat.

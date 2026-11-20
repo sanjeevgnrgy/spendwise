@@ -77,8 +77,8 @@ modules need it. Recipes: [backend_onboarding.md](docs/backend_onboarding.md).
   `mcp/http.py`) import `web/`.
 - Only `bootstrap.py` and `main.py` import a `module.py`.
 - Module dependencies stay one-way: expenses → categories; budgets → expenses, categories; reports → expenses,
-  categories; mcp → expenses, categories, reports; assistant → the rest; accounts and receipts depend on none. A new
-  dependency must not create a cycle; if two modules need each other, redesign (an event, or a third module).
+  categories; mcp → expenses, categories, reports, budgets; assistant → the rest; accounts and receipts depend on none.
+  A new dependency must not create a cycle; if two modules need each other, redesign (an event, or a third module).
 - Inside the assistant, imports run `api/` → `application/` → `agent/`, `approvals/`, `tools/`, `receipt_agent/`,
   `delegation/`, `skills/`, `a2ui/`, never back (`delegation/` and `skills/` use `agent/`'s events and call handlers).
 - **A2A agents live outside the monolith**, in `agents/<name>/`, each its own process, built on the shared agent kit

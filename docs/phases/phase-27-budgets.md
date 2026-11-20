@@ -3,7 +3,7 @@
 **Goal:** people set monthly spending limits, overall and per category, and see at a glance how the month is going;
 the assistant can set and check them and warns when a saved expense crosses a line. Part 1: the budgets module, its
 API, the Budgets page and a budget card on the Dashboard. Part 2: the assistant (tools, a budget card in the chat,
-warnings). On both branches (`main` and `multi-server`). Decisions: D210 (Part 1).
+warnings). On both branches (`main` and `multi-server`). Decisions: D210 (Part 1), D211 (Part 2).
 
 **The owner's choices** (asked before building): an overall limit and one per category, each a standing monthly
 amount (the same every month until it's changed); full assistant support in Part 2 (set and check in chat, a card, a
@@ -43,3 +43,31 @@ with `alembic check`, the architecture scans, and the web app's type-check, lint
 
 Open **Budgets**, set an overall limit and one for Food, then add a Food expense: the bars, the states and the
 Dashboard's Budget card move with it. The arrows beside the month show earlier months against the same limits.
+
+## Part 2: budgets in the assistant
+
+"Set my food budget to 8000", "How are my budgets doing?", and a warning when a save crosses a line.
+
+| Where | What |
+|---|---|
+| `mcp/tools/get_budgets.py`, `set_budget.py` | two MCP tools after `get_monthly_report`: the status of a month (the current one by default); set a limit by category name, or overall, and answer with this month's status |
+| `mcp/tools/budget_watch.py`, `budgets/domain/alerts.py` | `add_expense` and `update_expense` look at the month's budgets before and after the save; `budget_alerts` in their results lists the budgets that moved near (80%) or over the limit |
+| `assistant/a2ui/budget_card.py` | the budget card (the overall budget, each category with a limit, how much of the month has gone by), and the alerts as the expense card's footer |
+| chips | "Checking your budgets…", "Setting the budget…" (English, Hindi) |
+
+**Why alerts only on a change of state.** A budget already near its limit doesn't warn again on every coffee: the
+alert comes when a save moves it from on track to near, or into over. **Why in the tool's result.** Every MCP client
+(Claude Desktop too) gets the warning, the model can say it in its own words, and the chat's expense card shows it
+whatever the model says. **Why no "remove a budget" tool.** Removing is rare and easily done on the Budgets page; one
+fewer tool keeps the model's choice simple.
+
+**How it was checked:** 24 checks with a scripted model through `/agent` (D211), every earlier suite, and 2 of the 3
+allowed live calls succeeding: for "Set my food budget to 5000 a month" Gemini called `set_budget(category="Food",
+limit="5000")`, and for "How are my budgets doing this month?" `get_budgets()`. The third, Gemini's reply after a
+save that crossed 80%, was refused because the save in the script was a scripted call Gemini hadn't made
+(troubleshooting.md); the alert itself is checked offline.
+
+### Try it
+
+In the chat: "Set my food budget to 5000", then "Add 4200 at Swiggy today, UPI": the saved expense's card says
+"Food budget: 84.0% used (₹4,200.00 of ₹5,000.00)". "How are my budgets?" shows the budget card.

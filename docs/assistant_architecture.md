@@ -193,6 +193,8 @@ catalog, money and dates through CLDR):
 | `list_expenses` | up to 10 rows, "Showing the newest 10 of N" |
 | `get_summary` | the insight card: "Spent in November" with "+12% vs October", the biggest category, a donut of the top 4 + "Everything else" |
 | `get_monthly_report` | the report card (D209): "Spent in November" with "+330% vs October", the daily average, each category with its share and count, the biggest expense, and **Download CSV** / **Download report (.md)**, which run the browser's `downloadReport` function (no message to the agent) |
+| `get_budgets` / `set_budget` | the budget card (D211): the overall budget ("₹5,700.50 of ₹10,000.00", "57.0% used · on track" or "Over by ..."), each category with a limit and its share used, how much of the month has gone by |
+| `add_expense` / `update_expense` with `budget_alerts` | the expense card, with the alerts as its footer: "Food budget: 84.0% used (₹4,200.00 of ₹5,000.00)" |
 | a delete in the web panel | the approval card: the expense, "Nothing is deleted unless you press Approve", **Approve** / **Cancel** |
 
 **Forms** (`a2ui/forms.py`): when details are missing, the model calls `show_expense_form` with an A2UI form it wrote,

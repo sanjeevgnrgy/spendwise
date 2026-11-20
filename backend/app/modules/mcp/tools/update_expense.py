@@ -4,7 +4,8 @@ Part of the mcp adapter. register_update_expense adds the tool to a server; serv
 TOOL_REGISTRARS order. The tool only translates: it turns the fields given into the expenses module's
 UpdateExpense, sent through the expenses module's recorder (which converts a new amount, currency or date in
 another currency to INR first, D204), so MCP callers get exactly the REST API's rules (and the version is raised),
-then answers with the expense after the change (ExpenseUpdated).
+then answers with the expense after the change (ExpenseUpdated) and the budgets the change pushed near or over
+their limit (budget_watch.py).
 
 What clients see comes from the tool function: the SDK builds the input schema (titled
 "update_expenseArguments") from its name, parameters and annotations, and the description from `description=`.
@@ -28,6 +29,7 @@ from app.modules.mcp.tools.support import (
     require_arguments,
     tool_errors,
 )
+from app.modules.mcp.tools.budget_watch import BUDGET_ALERTS_NOTE, watch_budgets
 from app.modules.mcp.tools.context import ToolContext
 
 
@@ -45,7 +47,7 @@ def register_update_expense(server: MCPServer, context: ToolContext) -> None:
         name=ToolName.UPDATE_EXPENSE,
         annotations=CHANGES_DATA,
         description="Change some fields of an existing expense. Only pass the fields that should change. "
-        f"To remove the note, pass {CLEAR_NOTE_ARGUMENT}=true.",
+        f"To remove the note, pass {CLEAR_NOTE_ARGUMENT}=true. " + BUDGET_ALERTS_NOTE,
     )
     def update_expense(
         expense_id: ExpenseIdArg,
@@ -78,8 +80,11 @@ def register_update_expense(server: MCPServer, context: ToolContext) -> None:
             if not changes:
                 # Saying "updated" when nothing changed would mislead the caller (and the user).
                 raise BusinessRuleError("Nothing to change: pass at least one field to update.")
+            checked = expenses.ExpenseChanges(**changes)
+            # The month whose budgets can only go up: the new date's, or the expense's own (D211).
+            day = checked.spent_on or views.find(owner, expense_id).spent_on
             # Through the recorder: a new amount, currency or date is converted to INR again (D204).
-            recorder.update(owner, expense_id, expenses.ExpenseChanges(**changes))
-            return ExpenseUpdated(updated=views.find(owner, expense_id))
+            _, alerts = watch_budgets(context.bus, owner, day, lambda: recorder.update(owner, expense_id, checked))
+            return ExpenseUpdated(updated=views.find(owner, expense_id), budget_alerts=alerts)
 
     require_arguments(update_expense, EXPENSE_ID_ARGUMENT, CLEAR_NOTE_ARGUMENT)

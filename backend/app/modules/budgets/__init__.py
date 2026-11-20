@@ -9,17 +9,21 @@ expenses module's monthly summary (every currency at its INR amount, D204), cate
 module: this module stores only the limits. Every command and query names its owner (D190).
 
 Depends on: expenses, categories. Who uses it: the composition root (its routes), the web contract (BudgetState and
-the thresholds), and in Phase 27 part 2 the MCP tools and the assistant.
+the thresholds), the MCP tools (get_budgets and set_budget; add_expense and update_expense, for the alerts crossed()
+finds) and the assistant (the budget card, and the alerts on the expense card).
 """
 
 from app.modules.budgets.commands.remove_budget import RemoveBudget
 from app.modules.budgets.commands.set_budget import BudgetChange, SetBudget
+from app.modules.budgets.domain.alerts import crossed
+from app.modules.budgets.models import BudgetAlert
 from app.modules.budgets.queries.get_budget_status import BudgetLine, BudgetStatus, CategoryBudgetLine, GetBudgetStatus
 from app.modules.budgets.values import FULL_PERCENT, NEAR_LIMIT_PERCENT, BudgetLimit, BudgetState
 
 __all__ = [
     "FULL_PERCENT",
     "NEAR_LIMIT_PERCENT",
+    "BudgetAlert",
     "BudgetChange",
     "BudgetLimit",
     "BudgetLine",
@@ -29,4 +33,5 @@ __all__ = [
     "GetBudgetStatus",
     "RemoveBudget",
     "SetBudget",
+    "crossed",
 ]

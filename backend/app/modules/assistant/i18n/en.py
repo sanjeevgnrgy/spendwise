@@ -44,6 +44,20 @@ class ChatText(StrEnum):
     REPORT_BIGGEST = "cards.report.biggest"
     REPORT_DOWNLOAD_CSV = "cards.report.downloadCsv"
     REPORT_DOWNLOAD_MARKDOWN = "cards.report.downloadMarkdown"
+    # The budget card (a2ui/budget_card.py) and the budget alerts on an expense card (Phase 27, D211)
+    BUDGETS_TITLE = "cards.budgets.title"
+    BUDGETS_NONE = "cards.budgets.none"
+    BUDGET_OVERALL = "cards.budgets.overall"
+    BUDGET_NO_OVERALL = "cards.budgets.noOverall"
+    BUDGET_SPENT_OF = "cards.budgets.spentOf"
+    BUDGET_USED = "cards.budgets.used"
+    BUDGET_OVER_BY = "cards.budgets.overBy"
+    BUDGET_ELAPSED = "cards.budgets.elapsed"
+    BUDGET_STATE_ON_TRACK = "cards.budgets.state.onTrack"
+    BUDGET_STATE_NEAR_LIMIT = "cards.budgets.state.nearLimit"
+    BUDGET_STATE_OVER_LIMIT = "cards.budgets.state.overLimit"
+    BUDGET_ALERT_NEAR = "cards.budgets.alertNear"
+    BUDGET_ALERT_OVER = "cards.budgets.alertOver"
     LIST_NONE = "cards.list.none"
     LIST_FOUND = "cards.list.found"
     LIST_ROW_DETAILS = "cards.list.rowDetails"
@@ -94,6 +108,12 @@ class ChatText(StrEnum):
     CHIP_REPORT_RUNNING = "chips.getMonthlyReport.running"
     CHIP_REPORT_DONE = "chips.getMonthlyReport.done"
     CHIP_REPORT_FAILED = "chips.getMonthlyReport.failed"
+    CHIP_GET_BUDGETS_RUNNING = "chips.getBudgets.running"
+    CHIP_GET_BUDGETS_DONE = "chips.getBudgets.done"
+    CHIP_GET_BUDGETS_FAILED = "chips.getBudgets.failed"
+    CHIP_SET_BUDGET_RUNNING = "chips.setBudget.running"
+    CHIP_SET_BUDGET_DONE = "chips.setBudget.done"
+    CHIP_SET_BUDGET_FAILED = "chips.setBudget.failed"
     CHIP_INSIGHTS_RUNNING = "chips.askInsights.running"
     CHIP_INSIGHTS_DONE = "chips.askInsights.done"
     CHIP_INSIGHTS_FAILED = "chips.askInsights.failed"
@@ -164,6 +184,21 @@ EN: dict[ChatText, TextValue] = {
     ChatText.REPORT_BIGGEST: "Biggest expense: {merchant}, {amount} on {date}",
     ChatText.REPORT_DOWNLOAD_CSV: "Download CSV",
     ChatText.REPORT_DOWNLOAD_MARKDOWN: "Download report (.md)",
+    # {month} is "November 2026"; amounts are formatted money; {percent} has one decimal ("84.0").
+    ChatText.BUDGETS_TITLE: "Budgets for {month}",
+    ChatText.BUDGETS_NONE: "No budgets yet. Ask me to set one, or open Budgets.",
+    ChatText.BUDGET_OVERALL: "Overall",
+    ChatText.BUDGET_NO_OVERALL: "No overall limit",
+    ChatText.BUDGET_SPENT_OF: "{spent} of {limit}",
+    ChatText.BUDGET_USED: "{percent}% used · {state}",
+    ChatText.BUDGET_OVER_BY: "Over by {amount}",
+    ChatText.BUDGET_ELAPSED: "{percent}% of the month has gone by",
+    ChatText.BUDGET_STATE_ON_TRACK: "on track",
+    ChatText.BUDGET_STATE_NEAR_LIMIT: "near the limit",
+    ChatText.BUDGET_STATE_OVER_LIMIT: "over the limit",
+    # Under a saved expense: {name} is a category's name, or "Overall".
+    ChatText.BUDGET_ALERT_NEAR: "{name} budget: {percent}% used ({spent} of {limit})",
+    ChatText.BUDGET_ALERT_OVER: "{name} budget: over the limit ({spent} of {limit})",
     ChatText.LIST_NONE: "No matching expenses",
     ChatText.LIST_FOUND: Plural(one="Found {count} expense", other="Found {count} expenses"),
     ChatText.LIST_ROW_DETAILS: "{ref} · {category} · {date}",
@@ -218,6 +253,12 @@ EN: dict[ChatText, TextValue] = {
     ChatText.CHIP_REPORT_RUNNING: "Making the month's report…",
     ChatText.CHIP_REPORT_DONE: "Made the month's report",
     ChatText.CHIP_REPORT_FAILED: "Couldn't make the month's report",
+    ChatText.CHIP_GET_BUDGETS_RUNNING: "Checking your budgets…",
+    ChatText.CHIP_GET_BUDGETS_DONE: "Checked your budgets",
+    ChatText.CHIP_GET_BUDGETS_FAILED: "Couldn't check your budgets",
+    ChatText.CHIP_SET_BUDGET_RUNNING: "Setting the budget…",
+    ChatText.CHIP_SET_BUDGET_DONE: "Budget set",
+    ChatText.CHIP_SET_BUDGET_FAILED: "Couldn't set the budget",
     # The agents the model hands requests to (delegation/, D206).
     ChatText.CHIP_INSIGHTS_RUNNING: "Asking the insights agent…",
     ChatText.CHIP_INSIGHTS_DONE: "Insights agent answered",

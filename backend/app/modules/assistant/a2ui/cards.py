@@ -2,8 +2,8 @@
 
 Presentation layer. The AG-UI adapter (api/agui_stream.py) asks card_for() for a card after each
 successful tool call, and approval_card() for a delete waiting for Approve. The month's summary card is in
-summary_card.py, the monthly report's in report_card.py; parts.py has what every card is built with (surface ids,
-"#14").
+summary_card.py, the monthly report's in report_card.py, the budgets' (and a save's budget alerts) in budget_card.py;
+parts.py has what every card is built with (surface ids, "#14").
 
 Every value shown comes from the tool's actual result and is placed in a Text: data to show,
 never instructions or markup.
@@ -18,7 +18,7 @@ from pydantic import BaseModel, ValidationError
 
 from app.core.i18n import Language, format_day, text
 from app.core.money import format_money
-from app.modules import reports
+from app.modules import budgets, reports
 from app.modules.assistant.a2ui.models import (
     ROOT_ID,
     Action,
@@ -36,6 +36,7 @@ from app.modules.assistant.a2ui.models import (
 )
 from app.modules.assistant.a2ui.parts import expense_ref, new_surface_id, surface
 from app.modules.assistant.a2ui.report_card import report_card
+from app.modules.assistant.a2ui.budget_card import alert_texts, budget_card
 from app.modules.assistant.a2ui.summary_card import summary_card
 from app.modules.assistant.i18n import ChatText
 from app.modules.mcp import (
@@ -155,12 +156,23 @@ def _single(prefix: str, title: ChatText, pick: Callable[[Any], ExpenseView]) ->
     return lambda result, language: _expense_card(new_surface_id(prefix), text(language, title), pick(result), language)
 
 
+def _saved(prefix: str, title: ChatText, pick: Callable[[Any], ExpenseView]) -> CardBuilder:
+    """Like _single, for a save (add_expense, update_expense): the budgets it pushed near or over their limit are the
+    card's footer (D211)."""
+
+    def build(result: ExpenseSaved | ExpenseUpdated, language: Language) -> CreateSurfaceMessage:
+        footer = " ".join(alert_texts(result.budget_alerts, language)) or None
+        return _expense_card(new_surface_id(prefix), text(language, title), pick(result), language, footer)
+
+    return build
+
+
 # Which successful tool results get a card: the result's model, and how to draw it.
 _CARDS: dict[ToolName, tuple[type[BaseModel], CardBuilder]] = {
-    ToolName.ADD_EXPENSE: (ExpenseSaved, _single("expense_saved", ChatText.EXPENSE_SAVED, lambda r: r.saved)),
+    ToolName.ADD_EXPENSE: (ExpenseSaved, _saved("expense_saved", ChatText.EXPENSE_SAVED, lambda r: r.saved)),
     ToolName.UPDATE_EXPENSE: (
         ExpenseUpdated,
-        _single("expense_updated", ChatText.EXPENSE_UPDATED, lambda r: r.updated),
+        _saved("expense_updated", ChatText.EXPENSE_UPDATED, lambda r: r.updated),
     ),
     ToolName.DELETE_EXPENSE: (
         ExpenseDeleted,
@@ -170,6 +182,8 @@ _CARDS: dict[ToolName, tuple[type[BaseModel], CardBuilder]] = {
     ToolName.GET_SUMMARY: (MonthSpending, summary_card),
     ToolName.LIST_EXPENSES: (ExpenseSearch, expense_list_card),
     ToolName.GET_MONTHLY_REPORT: (reports.MonthlyReport, report_card),
+    ToolName.GET_BUDGETS: (budgets.BudgetStatus, budget_card),
+    ToolName.SET_BUDGET: (budgets.BudgetStatus, budget_card),
 }
 
 

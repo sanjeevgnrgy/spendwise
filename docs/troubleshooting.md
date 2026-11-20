@@ -157,6 +157,14 @@ is in the backend terminal (D180).
   to keep cost down. Older turns are still stored (`GET /threads/{id}`), but the model doesn't see them.
 - **Fix:** repeat the detail, or start a new thread for a new topic.
 
+### A live check gets "Request contains an invalid argument" after a scripted tool call
+- **Cause:** a check that scripts a function call (one Gemini didn't make) and then asks Gemini for the next step
+  sends a history Gemini refuses: every step it returned must come back unchanged, with its thought signature, and a
+  scripted call has none (sources.md, section 1). The app itself never does this: in a real turn, Gemini makes every
+  call in the history.
+- **Fix:** in a live check, let Gemini make the calls before any real step, or script only the steps after the last
+  real one (Phase 27's third live call was lost to this).
+
 ### `/parse` returns 422 "There are no categories yet"
 - **Fix:** run `.\.venv\Scripts\python.exe backend\seed.py`. Parsing needs the category list to choose from.
 

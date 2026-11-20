@@ -24,6 +24,8 @@ All backend settings are one Pydantic `Settings` class in `backend/app/infrastru
 | `MODEL_REQUESTS_PER_MINUTE`, `MODEL_REQUESTS_PER_DAY` | `10`, `300` | How many requests to the routes that call the model (`/agent`, `/chat`, `/parse`; a receipt is read through `/agent`) each person may make per minute and per day (UTC); one more is a 429 (D194). Counted in memory, per server process |
 | `RECEIPT_AGENT_URL` | `http://127.0.0.1:9001` | Where the backend reaches the receipt agent (Phase 24). Its Agent Card must name this same address, or the backend refuses to send it anything (D199) |
 | `RECEIPT_AGENT_KEY` | not set | The receipt agent's key (below): the backend sends it, the agent checks it. Without it, an attached receipt can't be read (the chat says the reader isn't available); everything else works |
+| `INSIGHTS_AGENT_URL` | `http://127.0.0.1:9002` | Where the backend reaches the insights agent (Phase 25); its card must name this same address |
+| `INSIGHTS_AGENT_KEY` | not set | The insights agent's key (below). Without it (or the agent), the model simply isn't offered it (D206) |
 | `CURRENCY_AGENT_URL` | `http://127.0.0.1:9003` | Where the backend reaches the currency agent (Phase 25); its card must name this same address |
 | `CURRENCY_AGENT_KEY` | not set | The currency agent's key (below). Without it, an expense in another currency can't be saved (a 502 that says so); INR expenses never need it |
 | `UPLOADS_DIR` | `<project>/backend/uploads` | The folder uploaded receipts are kept in, by random names (created on the first upload; git-ignored). It goes with the database: a copy of one needs a copy of the other |

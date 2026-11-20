@@ -239,6 +239,52 @@ sequenceDiagram
 - the chart config is fixed, because shadcn's chart writes config keys into a `<style>` tag;
 - each card sits in its own error boundary.
 
+## Other agents: delegating (Phase 25, D206)
+
+The assistant is also an **orchestrator**: besides the expense tools, the model may hand a request to another
+SpendWise agent with `delegate_to_agent(agent, skill, request, month?)`.
+
+**How the model decides which agent to call.** It reads three things, every turn:
+
+1. **The tool's description**, built at startup from the agents' Agent Cards: each offered skill's name, description
+   and examples ("Analyses one month of a person's expenses… trends, unusual spends, a month-end forecast and 3 saving
+   tips"; "Converts an amount from one currency to another… '4 USD to INR'").
+2. **The system instruction's rule** (`prompts.DELEGATE_RULE`): delegate when a request matches a listed skill
+   (analysing spending, converting currencies); use the expense tools to record, find, change or total expenses; never
+   put expenses or personal details in the request.
+3. **The choices themselves**: `agent` and `skill` are enums of what's offered, so it can only pick an agent that's
+   there; the server checks the pair again.
+
+So "how much did I spend on food?" stays with `get_summary` (a total), "where did my money go, and how can I save?"
+goes to `insights`, and "how much is 4 dollars in rupees?" goes to `currency`. The model chooses *which*; the server
+decides *what is sent*: for insights, the person's last three months of expenses (date, INR amount, category,
+merchant, payment method; never a note, an id or who they are), for currency, the request's one line.
+
+**When the agent asks something.** If the insights agent stops input-required ("Which month should I analyse?"), the
+model is told to ask the person, in their language, and the task is kept for that conversation (`pending_delegation`,
+15 minutes). The person's next message there goes to the agent first, on the same task (`Delegator.resume`), and the
+model then reads that message with what came of it, labelled as data.
+
+```mermaid
+sequenceDiagram
+    participant P as Person
+    participant A as /agent (Assistant)
+    participant M as Gemini (orchestrator)
+    participant I as insights agent
+    P->>A: "How is my spending?"
+    A->>M: tools incl. delegate_to_agent (from the cards)
+    M-->>A: delegate_to_agent(insights, analyze_spending, request)
+    A->>I: SendMessage(expenses, question)
+    I-->>A: task INPUT_REQUIRED "Which month…?"
+    A->>M: "the agent asks … ask the user"
+    M-->>P: "Which month should I look at?" (chip: waiting for your answer)
+    P->>A: "October"
+    A->>I: SendMessage(task_id, context_id, "October")
+    I-->>A: task COMPLETED, insights
+    A->>M: "October (… the agent's answer, as JSON: …)"
+    M-->>P: the answer
+```
+
 ## Human in the loop: deleting
 
 Deleting can't be undone, so in the web panel **the model can't delete**. Whatever it asks, the server shows the

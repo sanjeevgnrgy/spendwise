@@ -128,6 +128,10 @@ backend/
                            tools/        port.py (the ExpenseTools port), mcp_adapter.py (McpExpenseTools)
                            receipt_agent/ port.py (the ReceiptReader port), agent_reader.py (AgentReceiptReader:
                                          the receipt agent through core/agents.RemoteAgents, D199, D201)
+                           delegation/   the other agents the model may hand requests to (D206): skills.py (what
+                                         the server sends each), directory.py (cards read at startup, the
+                                         delegate_to_agent tool), delegator.py (a call, and resuming a waiting task),
+                                         models.py, commands/ and persistence/ (pending_delegation)
                            a2ui/         cards, forms
                            module.py     what the composition root plugs in
       mcp/               MCP adapter: contracts.py (tool and argument names, bearer scheme, typed results; all
@@ -417,7 +421,7 @@ Known limits, to address when the load calls for it (D174):
 | Agent | Port | Skill | Model | Used by |
 |---|---|---|---|---|
 | `agents/receipt` (Phase 24) | 9001 | `extract_receipt` | Gemini, one call | the assistant, for a receipt attached in the chat |
-| `agents/insights` (Phase 25) | 9002 | `analyze_spending` | Gemini, one call (the tips; the numbers are code) | the assistant, from Part 3; it may stop input-required to ask which month (D205) |
+| `agents/insights` (Phase 25) | 9002 | `analyze_spending` | Gemini, one call (the tips; the numbers are code) | the assistant, when the model delegates to it (D206); it may stop input-required to ask which month (D205) |
 | `agents/currency` (Phase 25) | 9003 | `convert_currency` | none: a `RateProvider` (mock rates for now, D203) | the expenses module, to store every expense in INR too (D204) |
 
 **What they share is the agent kit** (`agents/agent_kit/`, D202): `AgentGate` (the key check, the request limit,
@@ -428,7 +432,15 @@ settings.
 **The backend reaches them through one port**, `core/agents.RemoteAgents` (D201): `send(agent, skill, parts,
 artifact)` returns the finished task (its id, outcome, the artifact's data, the agent's message). `A2AAgents`
 (`infrastructure/a2a/`) fetches each agent's card, refuses one that doesn't offer the skill at the configured
-address, and sends the agent's key.
+address, and sends the agent's key; it also reads an agent's skills (`skills(agent)`) and resumes a task that stopped
+to ask something (`send(..., resume=TaskRef)`).
+
+**The assistant is the orchestrator** (D206). At startup it reads the insights and currency agents' cards and offers
+the model one more tool, `delegate_to_agent(agent, skill, request, month?)`, whose description is the cards' skills
+and whose choices are those names. The model decides; the server builds what the agent is sent (the person's data
+for insights, the request's line for currency), shows a chip with the A2A task id, and gives the model the checked
+answer as data. An agent's question is relayed by the model; the person's next message in that conversation resumes
+the same task.
 
 - **A remote agent, not a module.** It has no database, no bus and no person: a client agent (the assistant's
   `A2AReceiptReader`, D199) sends a task (a receipt and the choices it may pick from), the agent works on it and

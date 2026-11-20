@@ -112,9 +112,9 @@ def build(
     - identity: the OpenID Connect provider in OIDC_ISSUER (nothing is fetched from it until someone signs in), or,
       if a sign-in setting is missing, one that refuses every sign-in (D185);
     - sealer: Fernet, with SESSION_ENCRYPTION_KEYS;
-    - agents: the A2A agents at RECEIPT_AGENT_URL and CURRENCY_AGENT_URL, with their keys (nothing is fetched from
-      one until it's needed). A check passes a fake RemoteAgents, or an A2AAgents whose transports reach the agents'
-      apps in-process.
+    - agents: the A2A agents at RECEIPT_AGENT_URL, INSIGHTS_AGENT_URL and CURRENCY_AGENT_URL, with their keys (the
+      cards of the ones the model may delegate to are read when the routes are built; nothing else until needed). A
+      check passes a fake RemoteAgents, or an A2AAgents whose transports reach the agents' apps in-process.
     """
     clock = SystemClock() if clock is None else clock
     engine = db.engine if engine is None else engine
@@ -154,10 +154,12 @@ def build(
 
 def _remote_agents() -> RemoteAgents:
     """The one place that picks the remote agents' adapter: A2A, to each agent's address and key from the settings.
-    The names are the ones the modules ask for (the assistant's "receipt", the expenses module's "currency")."""
+    The names are the ones the modules ask for (the assistant's "receipt" and, to delegate to, "insights" and
+    "currency"; the expenses module's "currency")."""
     return A2AAgents(
         {
             "receipt": AgentEndpoint(settings.receipt_agent_url, settings.receipt_agent_key),
+            "insights": AgentEndpoint(settings.insights_agent_url, settings.insights_agent_key),
             "currency": AgentEndpoint(settings.currency_agent_url, settings.currency_agent_key),
         }
     )
@@ -224,7 +226,7 @@ def api_routers(services: Services) -> list[APIRouter]:
         conversations_module.router,
         receipts_module.create_router(services.bus, services.files),
         assistant_module.create_router(
-            services.bus, services.tools, services.llm, receipt_files, services.agents
+            services.bus, services.tools, services.llm, receipt_files, services.agents, services.clock
         ),
         accounts_module.create_account_router(services.bus, services.identity, services.access_tokens),
     ]

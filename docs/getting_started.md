@@ -62,7 +62,7 @@ a key in `.env` (any random 32+ characters, e.g. from `python -c "import secrets
 
 - `.\run-agent.ps1 receipt` (`RECEIPT_AGENT_KEY`, http://127.0.0.1:9001) reads receipts attached in the chat;
 - `.\run-agent.ps1 insights` (`INSIGHTS_AGENT_KEY`, http://127.0.0.1:9002) analyses a month of spending (the assistant
-  asks it from Phase 25 part 3);
+  hands it questions like "where did my money go?");
 - `.\run-agent.ps1 currency` (`CURRENCY_AGENT_KEY`, http://127.0.0.1:9003) converts expenses in other currencies to INR.
 
 Everything else works without them.

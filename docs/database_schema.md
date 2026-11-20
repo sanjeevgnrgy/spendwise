@@ -208,6 +208,18 @@ provider's private data (Gemini's thought signature, needed to continue after a 
 At most 200 are kept per person (their oldest forgotten first). Taking a card removes it, so each card decides once; if the decision
 fails midway, the card is put back unchanged (same age).
 
+## `pending_delegation`
+
+A remote agent's task waiting for the person's answer (Phase 25, D206): one per conversation. Private to the
+assistant module.
+
+| Column | Type | Notes |
+|---|---|---|
+| `owner_id`, `thread_id` | INTEGER, VARCHAR(32); together the primary key | whose conversation: only their next message there answers it (D190) |
+| `agent`, `skill` | VARCHAR(32), VARCHAR(64) | the app's name for the agent, and the skill (`insights`, `analyze_spending`) |
+| `task_id`, `context_id` | VARCHAR(64) | the A2A ids to resume the task with (checked to look like ids) |
+| `created_at` | DATETIME with time zone, indexed | forgotten 15 minutes later; at most 50 per person |
+
 ## `receipt_file`
 
 | Column | Type | Notes |
@@ -314,6 +326,7 @@ The tables are created and changed only by **Alembic migrations** in `backend/mi
 | `0006_accounts` | adds `app_user`, `user_identity`, `user_session` and `login_attempt` (Phase 22); downgrade drops them, which signs everyone out and forgets them |
 | `0007_owners` | **deletes the expenses, conversations, delete cards and receipt rows made before sign-in** (they belonged to nobody), then adds `owner_id` to those four tables with their new indexes, `access_token`, and `user_session.user_agent` (Phase 23). The receipt files stay in `UPLOADS_DIR`. Downgrade removes the additions; the deleted rows don't come back |
 | `0008_base_amounts` | adds `expense.base_amount_minor`, `exchange_rate` and `rate_date` (Phase 25), filled in for expenses already in INR (their own amount, rate `1`, their own date); expenses in other currencies stay null (a migration can't call the currency agent). Downgrade drops the three columns |
+| `0009_pending_delegations` | adds `pending_delegation` (Phase 25); downgrade drops it (a question still waiting is forgotten) |
 
 - `.\run.ps1` runs `alembic upgrade head` before starting; `seed.py` and `mcp_stdio.py` do too. The app itself only
   checks, and refuses to start on an out-of-date database with the command to fix it.

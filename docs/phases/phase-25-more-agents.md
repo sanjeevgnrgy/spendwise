@@ -2,7 +2,7 @@
 
 **Goal:** more specialist agents beside the receipt agent (a currency agent and an insights agent), every expense kept
 in INR as well as its own currency, and the assistant choosing which agent to ask, including agents that need to ask
-the person something before they can finish. Decisions: D201–D204 (Part 1), D205 (Part 2).
+the person something before they can finish. Decisions: D201–D204 (Part 1), D205 (Part 2), D206 (Part 3).
 
 **The owner's choices** (asked before building):
 
@@ -114,3 +114,54 @@ not followed. 3 live calls remain for Part 3.
 # .env: INSIGHTS_AGENT_KEY=<32+ random characters>
 .\run-agent.ps1 insights      # http://127.0.0.1:9002; the assistant starts asking it in Part 3
 ```
+
+## Part 3: the assistant as orchestrator
+
+**How the orchestrator decides which agent to call.** The orchestrator is the assistant's own model (Gemini), and it
+chooses the way it chooses any tool: by reading. At startup the backend reads the other agents' **Agent Cards** and
+turns the skills on them into one more tool, `delegate_to_agent`, whose description is the cards' words: "Analyses
+one month of a person's expenses… trends, unusual spends, a month-end forecast and 3 saving tips", "Converts an amount
+from one currency to another… '4 USD to INR'". The system instruction adds one rule: hand a request over when it
+matches a listed skill, and keep recording, finding, changing and totalling expenses for the expense tools. And the
+tool's `agent` and `skill` arguments are lists of exactly what's offered. So the model reads the question, compares it
+with what each tool and skill says it's for, and picks: "where did my money go, and how can I save?" goes to the
+insights agent; "how much is 4 dollars in rupees?" to the currency agent; "add a coffee" stays with `add_expense`.
+What it can't choose is the data: the server builds what each agent is sent, from the signed-in person's own
+expenses, and nothing personal goes in the model's request. Like a receptionist with a directory of specialists: they
+decide who to send you to from each specialist's listing, but your file goes from the records office, not from them.
+
+**When the agent asks back.** If the insights agent stops to ask "Which month?", the model asks the person in their
+language, and the server keeps the task for that conversation. The person's next message there goes to the agent
+first, on the same task, and the model then answers with what came back.
+
+**What was built** (D206):
+
+| Where | What |
+|---|---|
+| `core/agents.py`, `infrastructure/a2a/` | the port reads an agent's skills (its card) and resumes a task (`TaskRef`) |
+| `assistant/delegation/skills.py` | the two skills the server knows how to feed, what each sends, and how each answer is checked |
+| `assistant/delegation/directory.py` | `AgentDirectory`: cards read at startup, re-read when missing (once a minute), the tool |
+| `assistant/delegation/delegator.py` | `Delegator`: a call (chip, send, answer or question), and resuming a waiting task |
+| `assistant/delegation/` models, commands, persistence | `pending_delegation` (migration 0009), `RememberTask`, `TakeTask` |
+| agent loop, prompts | the tool and its handler when offered, and `DELEGATE_RULE` |
+| chips | "Asking the insights agent…", "Asking the currency agent…", "· waiting for your answer" (English, Hindi) |
+
+**How it was checked:** an ordinary turn recorded before and after with no agent reachable (identical); 26 checks with
+the real agents in-process and a scripted chat model (D206); every earlier suite; migration 0009 on a copy of the
+database; and live, Gemini choosing the insights agent for "Where did my money go this month, and how can I save?",
+with real tips coming back.
+
+### Try it
+
+```powershell
+# .env: INSIGHTS_AGENT_KEY and CURRENCY_AGENT_KEY (32+ random characters each)
+.\run-agent.ps1 insights       # terminal 1
+.\run-agent.ps1 currency       # terminal 2
+.\run.ps1                      # terminal 3: the backend (reads the agents' cards as it starts; applies 0009)
+cd web; npm run dev             # terminal 4
+```
+
+In the chat: "Where did my money go this month, and how can I save?" (a chip "Asking the insights agent… · A2A task
+…", then the answer with tips); "How is my spending?" with expenses in several months (the assistant asks which month;
+answer "October"); "How much is 50 euros in rupees?" (the currency agent). Stop an agent and restart the backend: the
+model isn't offered it; start it again, and within a minute it is.

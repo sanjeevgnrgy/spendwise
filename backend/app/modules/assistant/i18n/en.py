@@ -79,6 +79,13 @@ class ChatText(StrEnum):
     CHIP_RECEIPT_DONE = "chips.readReceipt.done"
     CHIP_RECEIPT_FAILED = "chips.readReceipt.failed"
     CHIP_TASK = "chips.task"
+    CHIP_TASK_WAITING = "chips.taskWaiting"
+    CHIP_INSIGHTS_RUNNING = "chips.askInsights.running"
+    CHIP_INSIGHTS_DONE = "chips.askInsights.done"
+    CHIP_INSIGHTS_FAILED = "chips.askInsights.failed"
+    CHIP_CURRENCY_RUNNING = "chips.askCurrency.running"
+    CHIP_CURRENCY_DONE = "chips.askCurrency.done"
+    CHIP_CURRENCY_FAILED = "chips.askCurrency.failed"
     # Replies the server writes itself (agent/agent.py, application/decisions.py)
     TOO_MANY_STEPS = "replies.tooManySteps"
     FORM_SHOWN = "replies.formShown"
@@ -180,6 +187,15 @@ EN: dict[ChatText, TextValue] = {
     ChatText.CHIP_RECEIPT_FAILED: "Couldn't read the receipt",
     # Shown after a chip's text when a remote agent did the work: {task} is the start of its A2A task id.
     ChatText.CHIP_TASK: "A2A task {task}",
+    # The same, for a task that stopped to ask the person something (the reply asks it).
+    ChatText.CHIP_TASK_WAITING: "A2A task {task} · waiting for your answer",
+    # The agents the model hands requests to (delegation/, D206).
+    ChatText.CHIP_INSIGHTS_RUNNING: "Asking the insights agent…",
+    ChatText.CHIP_INSIGHTS_DONE: "Insights agent answered",
+    ChatText.CHIP_INSIGHTS_FAILED: "The insights agent couldn't answer",
+    ChatText.CHIP_CURRENCY_RUNNING: "Asking the currency agent…",
+    ChatText.CHIP_CURRENCY_DONE: "Currency agent answered",
+    ChatText.CHIP_CURRENCY_FAILED: "The currency agent couldn't answer",
     ChatText.TOO_MANY_STEPS: (
         "Sorry, that took too many steps, so I stopped. Could you try a simpler or more specific request?"
     ),

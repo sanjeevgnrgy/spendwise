@@ -1,8 +1,9 @@
 """Remote agents, independent of the protocol: the RemoteAgents port (core layer: plain types and a Protocol, no I/O).
 
-SpendWise's A2A agents (agents/: receipt, currency) are separate services. What the app asks of them is here: send one
-agent a message for one of its skills (a file, some data, some text), and get back the task it became: its id, how
-it ended, its data artifacts, and what the agent said. The composition root builds the adapter
+SpendWise's A2A agents (agents/: receipt, insights, currency) are separate services. What the app asks of them is
+here: read what an agent offers (its card's skills), send it a message for one of its skills (a file, some data, some
+text), or answer a task that stopped to ask something (resume it), and get back the task: its id, how it ended, its
+data artifacts, and what the agent said. The composition root builds the adapter
 (infrastructure/a2a/: the A2A SDK, each agent's card checked, D201) and passes it in; the modules' own adapters
 (the assistant's receipt reader, the expenses module's exchange rates) use only this port, so no module imports an
 agent SDK, and a check can pass a fake.
@@ -59,6 +60,26 @@ Part = FilePart | DataPart | TextPart
 
 
 @dataclass(frozen=True)
+class SkillCard:
+    """One skill an agent's card offers: which agent (by the app's name for it), the skill's id, and the card's own
+    name, description and examples for it (the agent's words: outside data, for a model to choose by, D206)."""
+
+    agent: str
+    skill_id: str
+    name: str
+    description: str
+    examples: tuple[str, ...] = ()
+
+
+@dataclass(frozen=True)
+class TaskRef:
+    """A task to resume: its id and context id, as the agent gave them."""
+
+    task_id: str
+    context_id: str
+
+
+@dataclass(frozen=True)
 class AgentTask:
     """What a message became: the agent's task id and context id, how it ended, the data parts of the artifacts with
     the name asked for (in order), and the agent's own words on the task's status (a reason, or a question)."""
@@ -73,7 +94,15 @@ class AgentTask:
 class RemoteAgents(Protocol):
     """The app's remote agents, each known by its name (the key the composition root registered it under)."""
 
-    def send(self, agent: str, skill: str, parts: Sequence[Part], artifact: str) -> AgentTask:
-        """Send `parts` to `agent` for `skill`, wait for the task to end, and return it with the data of its artifacts
-        named `artifact`. Raises AgentUnavailableError if the agent can't be asked (or doesn't offer `skill`)."""
+    def skills(self, agent: str) -> list[SkillCard]:
+        """The skills `agent`'s card offers. Raises AgentUnavailableError if its card can't be read or isn't served
+        at the agent's configured address."""
+        ...
+
+    def send(
+        self, agent: str, skill: str, parts: Sequence[Part], artifact: str, resume: TaskRef | None = None
+    ) -> AgentTask:
+        """Send `parts` to `agent` for `skill` (as a new task, or answering the task `resume` names), wait for it to
+        end or stop, and return it with the data of its artifacts named `artifact`. Raises AgentUnavailableError if
+        the agent can't be asked (or doesn't offer `skill`)."""
         ...

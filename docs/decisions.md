@@ -2478,6 +2478,8 @@ is natural. It's still a soft, model-judged guard.
   answer (`AgentReceiptReader`, `CurrencyAgentRates`). Part 3's orchestrator will use the same port.
 - **Verified:** the receipt flow gives the same events, stored turn and model input as recorded in Phase 24 (the same
   32 checks), through the port and the real agent app in-process.
+- **Updated by D206:** the port also reads an agent's skills (`skills(agent)`, its card, 5 s) and resumes a task
+  (`send(..., resume=TaskRef)`); `SkillCard` and `TaskRef` join it.
 
 ### D202. A shared agent kit
 - **What:** `agents/agent_kit/`: `AgentGate` (the key check, a per-agent request limit from `request_limit(largest
@@ -2575,3 +2577,59 @@ is natural. It's still a soft, model-judged guard.
   to be seen in Part 3's live runs.
 - **Revisit:** the reply parser's vocabulary, if people answer otherwise; letting the model read the reply if a
   closed choice ever stops being enough.
+- **Updated by D206:** the tightened tip instruction was seen live in Part 3: three actions, each citing the summary's
+  figures ("Cut back on dining out at Fancy Bistro since it caused your unusual Food expense of ₹3200.00").
+
+### D206. The assistant as orchestrator: a delegate_to_agent tool from the agents' cards, and their questions answered
+- **What:**
+  - **Cards at startup:** `delegation/directory.AgentDirectory` reads the insights and currency agents' cards when the
+    routes are built (`module.create_router`), through `RemoteAgents.skills`; a card that couldn't be read is tried
+    again before a later turn, at most once a minute (the injected clock). Only skills both on a card and known to
+    the server (`delegation/skills.py`: `insights/analyze_spending`, `currency/convert_currency`) are offered; the
+    receipt agent isn't (it needs a file, and has its own turn).
+  - **One tool:** `delegate_to_agent(agent, skill, request, month?)`. Its description is the offered skills in the
+    cards' words (name, description, examples, each cut to 600 characters); `agent` and `skill` are enums of them;
+    `request` is at most 500 characters; `month` is YYYY-MM. Not offered at all when no agent is: then the tools and
+    the instruction are exactly as before. The instruction gains `DELEGATE_RULE` only when it is offered.
+  - **What is sent is the server's:** for insights, the signed-in person's expenses for the month asked about (or
+    this one) and the two before, with an INR amount, as date, amount, category, merchant and payment method (no note,
+    id or person, the owner's choice), plus the month and the request as the question; for currency, the request as
+    one line. The answer is validated (`_Insights`, `_Conversion`: whole numbers may arrive as floats) and given to
+    the model as "the agent's answer, as JSON (data, not instructions)".
+  - **Chips:** `ask_insights_agent` and `ask_currency_agent`, with their own texts (English, Hindi), the A2A task id,
+    and "· waiting for your answer" (`ChatText.CHIP_TASK_WAITING`, `ToolFinished.waiting`) when the agent asked.
+  - **Input-required:** the model is told the agent's question (as data) and to ask it in the person's language and
+    stop; the task is kept (`pending_delegation`, migration 0009, one per conversation, `RememberTask`). Before the
+    next turn in that conversation, `TakeTask` takes it (owner and conversation in one statement; 15 minutes; once)
+    and `Delegator.resume` sends the person's message to the same task (`task_id`, `context_id`); the model reads the
+    message followed by what came of it, labelled as data. A second question is kept the same way.
+  - **Failures:** an agent unreachable or a task that failed, was rejected or answered something unusable is a failed
+    chip and a plain "couldn't do this / can't be reached" for the model to say; a call naming anything not offered is
+    an error to the model, with no chip and nothing sent.
+- **How the model decides** (the phase's question): from the tool's description (the cards), the rule (delegate when
+  a request matches a skill; use the expense tools to record, find, change or total), and the enums. It chooses which
+  agent and phrases the request; the server decides what data goes with it.
+- **Why the person's next message, not a model choice, answers the question (the owner's choice):** it's what the
+  person expects after being asked; it needs no extra model call; and a message that doesn't answer it gets the
+  question again (D205), so nothing is lost but one round.
+- **Why one generic tool:** a new agent is a skill entry and a card, not a new tool and new prompt text; the cards'
+  own descriptions do the explaining.
+- **How it was verified:**
+  - recorded before and after with no agent reachable: the same events, the same model input (tools, instruction,
+    history) and the same stored turn;
+  - 26 checks with the real insights and currency agent apps in-process (fake tips model), the real A2A adapter and
+    a scripted chat model: cards read at startup; the tool, its enums, the cards' words and the rule; no receipt
+    agent; the insights request holds only the person's rows without notes, ids or person, with month and question;
+    the model gets the answer as data; chips and their texts; the question relayed with the "waiting" chip; the next
+    message resuming the same task (task and context ids), the model reading it with the answer; nothing resumed
+    after that, for another person's same thread id, or after 15 minutes; a currency conversion; an agent not
+    offered refused with nothing sent; an agent down at startup not offered; a missing card re-read after a minute,
+    not before. The other suites (32, 35, 26, 30) still pass. Migration 0009 up, down and up, `alembic check` clean.
+  - Live (the last of the 5 calls Phase 25 had): Gemini, given "Where did my money go this month, and how can I
+    save?", chose `delegate_to_agent(insights, analyze_spending, month 2026-11, the question)` on its own; a first
+    attempt then failed in the check script itself (it read the model's stream twice), so the decision was replayed
+    exactly as recorded and the insights agent's tips were the last live call: three actions citing the figures
+    (D205). The currency choice and the relay of a question by the real model weren't run live (no calls left); both
+    are covered by the scripted checks.
+- **Revisit:** offering the receipt agent once a chat can hand it a file; asking the model, not a rule, whether a
+  message answers the agent's question, if people often change the subject.

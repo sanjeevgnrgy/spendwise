@@ -143,7 +143,7 @@ class _Writer:
         # task (if one did the work) for the chip to show after its text (D200).
         metadata: dict[str, object] = {MetadataKey.OK: event.ok}
         if event.task_id is not None:
-            metadata[MetadataKey.DETAIL] = task_detail(event.task_id, self.language)
+            metadata[MetadataKey.DETAIL] = task_detail(event.task_id, self.language, event.waiting)
         yield ToolCallResultEvent(
             message_id=uuid4().hex, tool_call_id=event.call_id, content=NO_TOOL_CONTENT, metadata=metadata
         )

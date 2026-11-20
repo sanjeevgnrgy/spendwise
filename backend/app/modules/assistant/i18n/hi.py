@@ -70,6 +70,13 @@ HI: dict[ChatText, TextValue] = {
     ChatText.CHIP_RECEIPT_DONE: "रसीद पढ़ ली गई",
     ChatText.CHIP_RECEIPT_FAILED: "रसीद नहीं पढ़ी जा सकी",
     ChatText.CHIP_TASK: "A2A टास्क {task}",
+    ChatText.CHIP_TASK_WAITING: "A2A टास्क {task} · आपके जवाब का इंतज़ार है",
+    ChatText.CHIP_INSIGHTS_RUNNING: "इनसाइट्स एजेंट से पूछा जा रहा है…",
+    ChatText.CHIP_INSIGHTS_DONE: "इनसाइट्स एजेंट ने जवाब दिया",
+    ChatText.CHIP_INSIGHTS_FAILED: "इनसाइट्स एजेंट जवाब नहीं दे सका",
+    ChatText.CHIP_CURRENCY_RUNNING: "करेंसी एजेंट से पूछा जा रहा है…",
+    ChatText.CHIP_CURRENCY_DONE: "करेंसी एजेंट ने जवाब दिया",
+    ChatText.CHIP_CURRENCY_FAILED: "करेंसी एजेंट जवाब नहीं दे सका",
     ChatText.TOO_MANY_STEPS: (
         "माफ़ कीजिए, इसमें बहुत ज़्यादा चरण लग गए, इसलिए मैंने रोक दिया। "
         "क्या आप कोई आसान या ज़्यादा स्पष्ट अनुरोध आज़मा सकते हैं?"

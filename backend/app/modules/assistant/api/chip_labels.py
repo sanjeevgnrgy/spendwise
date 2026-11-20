@@ -10,6 +10,7 @@ from dataclasses import dataclass
 from app.core.i18n import Language, text
 from app.modules.assistant.agent.events import ToolIntent
 from app.modules.assistant.api.protocol import ToolLabels
+from app.modules.assistant.delegation import ASK_CURRENCY, ASK_INSIGHTS
 from app.modules.assistant.i18n import ChatText
 from app.modules.assistant.receipt_agent.port import READ_RECEIPT
 from app.modules.mcp import ToolName
@@ -60,6 +61,17 @@ TOOL_CHIPS: dict[str, _ChipTexts] = {
         done=ChatText.CHIP_SUMMARY_DONE,
         failed=ChatText.CHIP_SUMMARY_FAILED,
     ),
+    # Not MCP tools: the agents the model delegates to (delegation/, D206), each with its own texts.
+    ASK_INSIGHTS: _ChipTexts(
+        running=ChatText.CHIP_INSIGHTS_RUNNING,
+        done=ChatText.CHIP_INSIGHTS_DONE,
+        failed=ChatText.CHIP_INSIGHTS_FAILED,
+    ),
+    ASK_CURRENCY: _ChipTexts(
+        running=ChatText.CHIP_CURRENCY_RUNNING,
+        done=ChatText.CHIP_CURRENCY_DONE,
+        failed=ChatText.CHIP_CURRENCY_FAILED,
+    ),
     # Not an MCP tool: the receipt agent reading an attached receipt (application/receipt_turn.py).
     READ_RECEIPT: _ChipTexts(
         running=ChatText.CHIP_RECEIPT_RUNNING,
@@ -93,6 +105,8 @@ def labels_for(name: str, intent: ToolIntent, language: Language) -> ToolLabels:
 TASK_ID_SHOWN = 8
 
 
-def task_detail(task_id: str, language: Language) -> str:
-    """What a chip shows after its own text for work a remote agent did: "A2A task 3f2a9c1e", in `language`."""
-    return text(language, ChatText.CHIP_TASK, task=task_id[:TASK_ID_SHOWN])
+def task_detail(task_id: str, language: Language, waiting: bool = False) -> str:
+    """What a chip shows after its own text for work a remote agent did: "A2A task 3f2a9c1e", or, if the task is
+    waiting for the person's answer, "A2A task 3f2a9c1e · waiting for your answer", in `language`."""
+    key = ChatText.CHIP_TASK_WAITING if waiting else ChatText.CHIP_TASK
+    return text(language, key, task=task_id[:TASK_ID_SHOWN])

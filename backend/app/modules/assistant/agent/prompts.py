@@ -8,6 +8,7 @@ chat's don't. The instruction itself is English in every language; it tells the 
 Every string here is sent to the model as is: changing one changes what the assistant does.
 """
 
+from collections.abc import Sequence
 from dataclasses import dataclass
 from datetime import date
 
@@ -47,6 +48,17 @@ DELETE_IN_WEB_PANEL = (
     "only their Approve deletes it."
 )
 
+# ---------- when other agents are offered (D206) ----------
+
+# How the model chooses: the skills' descriptions (from the agents' cards) say what each agent does; this says when to
+# hand over and what never to put in the request. The server, not the model, sends the agent the person's data.
+DELEGATE_RULE = (
+    "Some requests are better answered by SpendWise's other agents: call delegate_to_agent when one matches a "
+    "listed skill (for example analysing spending: trends, unusual expenses, a month-end forecast or saving tips; "
+    "or converting an amount between currencies). Use the expense tools to record, find, change or total expenses. "
+    "The server sends the agent the data it needs, so never put expenses or personal details in the request."
+)
+
 # The id the examples below use. Any id would do; this one appears in the instruction's text.
 EXAMPLE_EXPENSE_ID = 14
 
@@ -64,11 +76,14 @@ class PromptRules:
     cards: str
 
 
-def system_instruction(today: date, category_names: list[str], rules: PromptRules, language: Language) -> str:
+def system_instruction(
+    today: date, category_names: list[str], rules: PromptRules, language: Language, extra: Sequence[str] = ()
+) -> str:
     """The whole system instruction for one turn, one rule per line, without trailing blank lines.
 
     Built per turn because today's date and the categories can change between messages, and each request names
-    the language the app is shown in (the one the model is asked to reply in).
+    the language the app is shown in (the one the model is asked to reply in). `extra` holds rules that apply only
+    sometimes (DELEGATE_RULE, when other agents are offered); they come after the tool rules.
     """
     example = a2ui.expense_ref(EXAMPLE_EXPENSE_ID)
     return "\n".join(
@@ -79,6 +94,7 @@ def system_instruction(today: date, category_names: list[str], rules: PromptRule
             "Amounts are in Indian rupees (INR) unless the user says otherwise. Show them like ₹450.50.",
             f"Expense categories: {', '.join(category_names)}.",
             "Use the tools to read or change expenses. Never make up numbers you haven't looked up.",
+            *extra,
             rules.missing,
             rules.deleting,
             # The app shows ids this way (cards, the Expenses table), so users can point at one exactly.

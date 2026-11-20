@@ -24,7 +24,16 @@ from a2a.types import AgentCard, Message, Part, Role, SendMessageConfiguration, 
 from a2a.utils.constants import TransportProtocol
 from pydantic import SecretStr
 
-from app.core.agents import AgentTask, AgentUnavailableError, DataPart, FilePart, TaskOutcome, TextPart
+from app.core.agents import (
+    AgentTask,
+    AgentUnavailableError,
+    DataPart,
+    FilePart,
+    SkillCard,
+    TaskOutcome,
+    TaskRef,
+    TextPart,
+)
 from app.core.agents import Part as PortPart
 
 logger = logging.getLogger(__name__)
@@ -32,6 +41,9 @@ logger = logging.getLogger(__name__)
 # How long to wait for one task, card included. The receipt agent's one Gemini call may be tried twice for up to
 # 60 s each by its adapter: wait a little longer than that.
 TIMEOUT_SECONDS = 150
+# How long to wait for a card alone (reading what an agent offers, at startup): an agent that's down shouldn't hold
+# the backend up.
+CARD_TIMEOUT_SECONDS = 5
 JSON_MEDIA_TYPE = "application/json"
 _OUTCOMES = {
     TaskState.TASK_STATE_COMPLETED: TaskOutcome.COMPLETED,
@@ -43,6 +55,7 @@ _OUTCOMES = {
 UNKNOWN_AGENT = "no agent named {agent} is configured"
 NO_KEY = "{agent}: its key isn't set"
 WRONG_CARD = "the card at {url} doesn't offer {skill} over JSON-RPC at that address"
+NOT_SERVED_HERE = "the card at {url} doesn't name JSON-RPC at that address"
 NO_TASK = "the agent answered without a task"
 
 
@@ -64,15 +77,34 @@ class A2AAgents:
         self._endpoints = dict(endpoints)
         self._transports = dict(transports or {})
 
-    def send(self, agent: str, skill: str, parts: Sequence[PortPart], artifact: str) -> AgentTask:
-        """Send `parts` to `agent` for `skill` and return the finished task. Raises AgentUnavailableError if it can't
-        be asked (unknown, no key, unreachable, 401, a wrong card, a protocol error or a timeout)."""
-        endpoint = self._endpoints.get(agent)
-        if endpoint is None or endpoint.key is None:
-            reason = (UNKNOWN_AGENT if endpoint is None else NO_KEY).format(agent=agent)
-            logger.warning("agent not asked: %s", reason)
-            raise AgentUnavailableError(reason)
-        sending = self._send(agent, endpoint, skill, [_to_a2a(part) for part in parts])
+    def skills(self, agent: str) -> list[SkillCard]:
+        """The skills `agent`'s card offers, if the card names JSON-RPC at the agent's configured address. Raises
+        AgentUnavailableError if it can't be read (unknown agent, unreachable, a timeout, another address)."""
+        endpoint = self._endpoint(agent)
+        try:
+            card = asyncio.run(asyncio.wait_for(self._card(agent, endpoint), CARD_TIMEOUT_SECONDS))
+        except Exception as exc:  # unreachable, a timeout, a malformed card...
+            logger.warning("agent %s's card at %s unreadable: %r", agent, endpoint.url, exc)
+            raise AgentUnavailableError(f"{agent}'s card unreadable") from exc
+        if not _served_at(card, endpoint.url.rstrip("/")):
+            logger.warning("agent %s: %s", agent, NOT_SERVED_HERE.format(url=endpoint.url))
+            raise AgentUnavailableError(f"{agent}'s card names another address")
+        return [
+            SkillCard(agent=agent, skill_id=s.id, name=s.name, description=s.description, examples=tuple(s.examples))
+            for s in card.skills
+        ]
+
+    def send(
+        self, agent: str, skill: str, parts: Sequence[PortPart], artifact: str, resume: TaskRef | None = None
+    ) -> AgentTask:
+        """Send `parts` to `agent` for `skill` (resuming `resume`'s task if given) and return the task once it ends or
+        stops to ask. Raises AgentUnavailableError if it can't be asked (unknown, no key, unreachable, 401, a wrong
+        card, a protocol error, an unknown task or a timeout)."""
+        endpoint = self._endpoint(agent)
+        if endpoint.key is None:
+            logger.warning("agent not asked: %s", NO_KEY.format(agent=agent))
+            raise AgentUnavailableError(NO_KEY.format(agent=agent))
+        sending = self._send(agent, endpoint, skill, [_to_a2a(part) for part in parts], resume)
         try:
             task = asyncio.run(asyncio.wait_for(sending, TIMEOUT_SECONDS))
         except Exception as exc:  # unreachable, 401, a bad card, a timeout, a protocol error...
@@ -80,8 +112,24 @@ class A2AAgents:
             raise AgentUnavailableError(f"{agent} unavailable") from exc
         return _task_of(task, artifact)
 
-    async def _send(self, agent: str, endpoint: AgentEndpoint, skill: str, parts: list[Part]) -> Task:
-        """Fetch and check the card, send one message with the agent's key, and return the finished task."""
+    def _endpoint(self, agent: str) -> AgentEndpoint:
+        """The agent's endpoint. Raises AgentUnavailableError for an agent that isn't configured."""
+        endpoint = self._endpoints.get(agent)
+        if endpoint is None:
+            logger.warning("agent not asked: %s", UNKNOWN_AGENT.format(agent=agent))
+            raise AgentUnavailableError(UNKNOWN_AGENT.format(agent=agent))
+        return endpoint
+
+    async def _card(self, agent: str, endpoint: AgentEndpoint) -> AgentCard:
+        """The agent's card, fetched without a key (cards are open)."""
+        async with httpx.AsyncClient(transport=self._transports.get(agent), timeout=CARD_TIMEOUT_SECONDS) as http:
+            return await A2ACardResolver(httpx_client=http, base_url=endpoint.url.rstrip("/")).get_agent_card()
+
+    async def _send(
+        self, agent: str, endpoint: AgentEndpoint, skill: str, parts: list[Part], resume: TaskRef | None
+    ) -> Task:
+        """Fetch and check the card, send one message with the agent's key, and return the task as it ended (or
+        stopped)."""
         url = endpoint.url.rstrip("/")
         key = endpoint.key.get_secret_value() if endpoint.key else ""
         headers = {"Authorization": f"Bearer {key}"}
@@ -91,6 +139,9 @@ class A2AAgents:
             _check(card, url, skill)
             client = await create_client(card, ClientConfig(streaming=False, httpx_client=http))
             message = Message(role=Role.ROLE_USER, message_id=uuid4().hex, parts=parts)
+            if resume is not None:
+                # Naming the task (and its context) continues it: the agent picks up where it stopped (D206).
+                message.task_id, message.context_id = resume.task_id, resume.context_id
             # history_length=0: the answer needn't echo our message (and any file in it) back.
             configuration = SendMessageConfiguration(history_length=0, accepted_output_modes=[JSON_MEDIA_TYPE])
             task = None
@@ -102,14 +153,17 @@ class A2AAgents:
         return task
 
 
-def _check(card: AgentCard, url: str, skill: str) -> None:
-    """Refuse a card that doesn't offer `skill` over JSON-RPC at `url`: it isn't the agent we were configured for."""
-    offers_skill = any(offered.id == skill for offered in card.skills)
-    served_here = any(
+def _served_at(card: AgentCard, url: str) -> bool:
+    """Whether the card names JSON-RPC at `url`: otherwise the key and the data would go wherever it said."""
+    return any(
         interface.protocol_binding == TransportProtocol.JSONRPC and interface.url.rstrip("/") == url
         for interface in card.supported_interfaces
     )
-    if not (offers_skill and served_here):
+
+
+def _check(card: AgentCard, url: str, skill: str) -> None:
+    """Refuse a card that doesn't offer `skill` over JSON-RPC at `url`: it isn't the agent we were configured for."""
+    if not (any(offered.id == skill for offered in card.skills) and _served_at(card, url)):
         raise ValueError(WRONG_CARD.format(url=url, skill=skill))
 
 

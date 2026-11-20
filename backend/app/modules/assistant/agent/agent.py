@@ -15,6 +15,7 @@ from collections.abc import Generator, Iterator, Mapping
 from dataclasses import dataclass, field
 from datetime import date
 from functools import partial
+from typing import Protocol
 
 from app.core import llm
 from app.core.i18n import Language, text, translatable
@@ -31,7 +32,7 @@ from app.core.llm import (
 )
 from app.modules.assistant import a2ui
 from app.modules.assistant.agent.events import AgentEvent, FormRequested, TextDelta, ToolCallSummary, TurnFinished
-from app.modules.assistant.agent.prompts import system_instruction
+from app.modules.assistant.agent.prompts import DELEGATE_RULE, system_instruction
 from app.modules.assistant.agent.surfaces import CallHandler, CallOutcome, Surface
 from app.modules.assistant.agent.tool_runs import run_and_report
 from app.modules.assistant.i18n import ChatText
@@ -91,12 +92,26 @@ class _Turn:
         yield self.finished()
 
 
+class Delegation(Protocol):
+    """Other agents the model may hand requests to (delegation/delegator.py): their tool, and its handler."""
+
+    def specs(self) -> list[ToolSpec]:
+        """delegate_to_agent if any agent is offered, else nothing."""
+        ...
+
+    def handlers(self) -> Mapping[str, CallHandler]:
+        """The handler that carries its calls out."""
+        ...
+
+
 @dataclass(frozen=True)
 class Agent:
-    """Answers messages with a model and the expense tools. Cheap to build: the Assistant makes one per turn."""
+    """Answers messages with a model, the expense tools and, if given, other agents. Cheap to build: the Assistant
+    makes one per turn."""
 
     llm: ToolCallingModel
     tools: ExpenseTools
+    delegation: Delegation | None = None
 
     def run(
         self, message: str, today: date, history: list[Message], surface: Surface, language: Language
@@ -119,12 +134,17 @@ class Agent:
             logger.warning("tools unavailable, not calling the model: %s", exc)
             yield from turn.end_with(text(language, ChatText.TOOLS_UNAVAILABLE))
             return
-        specs = surface.tool_specs(specs)
+        delegate = self.delegation.specs() if self.delegation is not None else []
+        specs = surface.tool_specs(specs) + delegate
         rules = surface.prompt_rules(category_names)
-        instruction = system_instruction(today, category_names, rules, language)
+        # The rule about other agents only when one is offered: without them the instruction is as before.
+        extra = [DELEGATE_RULE] if delegate else []
+        instruction = system_instruction(today, category_names, rules, language, extra)
         # The form is shown on either surface: a model may ask for one even where the tool wasn't offered.
         form = partial(_show_form, category_names, today, language)
         handlers: Mapping[str, CallHandler] = {a2ui.SHOW_FORM_TOOL_NAME: form, **surface.call_handlers(self.tools)}
+        if self.delegation is not None:
+            handlers = {**handlers, **self.delegation.handlers()}
 
         for step in range(1, MAX_STEPS + 1):
             logger.info("step %d/%d: asking the model", step, MAX_STEPS)

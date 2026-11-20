@@ -61,6 +61,10 @@ class Settings(BaseSettings):
     # says so); everything else works.
     receipt_agent_url: str = "http://127.0.0.1:9001"
     receipt_agent_key: SecretStr | None = None
+    # The insights agent (Phase 25, agents/insights): the assistant hands it spending questions (D206). Without its
+    # key, the model isn't offered it; everything else works.
+    insights_agent_url: str = "http://127.0.0.1:9002"
+    insights_agent_key: SecretStr | None = None
     # The currency agent (Phase 25, agents/currency): rates for expenses in other currencies (D204). Without its key,
     # an expense in another currency can't be saved (it says why); INR expenses need it never.
     currency_agent_url: str = "http://127.0.0.1:9003"

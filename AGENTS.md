@@ -80,7 +80,7 @@ modules need it. Recipes: [backend_onboarding.md](docs/backend_onboarding.md).
   accounts and receipts depend on none. A new dependency must not create a cycle; if two modules
   need each other, redesign (an event, or a third module).
 - Inside the assistant, imports run `api/` → `application/` → `agent/`, `approvals/`, `tools/`, `receipt_agent/`,
-  `a2ui/`, never back.
+  `delegation/`, `a2ui/`, never back (`delegation/` uses `agent/`'s events and call handlers).
 - **A2A agents live outside the monolith**, in `agents/<name>/`, each its own process, built on the shared agent kit
   (`agents/agent_kit/`: the key check, the task store, the app, D202). An agent imports only `app.core`, plus the Gemini
   adapter and `setup_logging` in a `server.py` (D196); never a module, `web/` or the backend's settings. The backend

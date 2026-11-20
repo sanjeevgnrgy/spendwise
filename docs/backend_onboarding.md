@@ -86,8 +86,8 @@ another slice's message to send it through the bus (`create_category` asks `Find
 `expenses.CreateExpense`; they never import a slice file. Because `__init__.py` re-exports from the slices, importing
 the package also loads the module's handlers and tables (not its routes, and not the database engine): the price of
 keeping each message beside its handler. Module dependencies run one way (expenses → categories; budgets → expenses,
-categories; reports → expenses, categories; mcp → expenses, categories, reports; assistant → the rest), so this can't
-create an import cycle. See D175.
+categories; reports → expenses, categories; mcp → expenses, categories, reports, budgets; assistant → the rest), so this
+can't create an import cycle. See D175.
 
 A handler gets a `Context`: `ctx.session` (the unit of work's session), `ctx.bus` (to ask other modules, in the same
 transaction) and `ctx.clock`.

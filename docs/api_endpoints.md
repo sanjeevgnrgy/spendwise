@@ -545,16 +545,20 @@ change only that person's expenses. Every tool returns a typed result: its JSON 
 
 | Tool | Annotations | Arguments | Returns |
 |---|---|---|---|
-| `add_expense` | adds data | `amount`, `category` (name), `merchant`, `spent_on`, `payment_method`, `note?`, `currency?` | `{saved: ExpenseView}` |
+| `add_expense` | adds data | `amount`, `category` (name), `merchant`, `spent_on`, `payment_method`, `note?`, `currency?` | `{saved: ExpenseView, budget_alerts: [BudgetAlert]}` |
 | `list_expenses` | read-only | `start_date?`, `end_date?`, `category?`, `merchant?`, `search?` | `{count, expenses: [ExpenseView] (≤ 50), truncated}` |
 | `get_expense` | read-only | `expense_id` | `{expense: ExpenseView}` |
 | `get_summary` | read-only | `month` (YYYY-MM), `currency?` | the month summary plus `previous_month` |
-| `update_expense` | changes data | `expense_id`, any of `amount`, `category`, `merchant`, `spent_on`, `payment_method`, `currency`, `note`, `clear_note` | `{updated: ExpenseView}` |
+| `update_expense` | changes data | `expense_id`, any of `amount`, `category`, `merchant`, `spent_on`, `payment_method`, `currency`, `note`, `clear_note` | `{updated: ExpenseView, budget_alerts: [BudgetAlert]}` |
 | `delete_expense` | destructive | `expense_id`, `confirmed` (must be exactly `true`), `expected_version?` | `{deleted: ExpenseView}` |
 | `get_monthly_report` | read-only | `month` (YYYY-MM) | the month's report, as `GET /reports/monthly/{month}` (D209) |
+| `get_budgets` | read-only | `month?` (YYYY-MM; empty: this month) | the budgets' status, as `GET /budgets` (D211) |
+| `set_budget` | adds data | `limit` (rupees), `category?` (name; empty: overall) | this month's budgets' status |
 
 - `ExpenseView`: `id`, `amount` (rupees), `currency`, `category` (name), `merchant`, `note`, `spent_on`,
   `payment_method`, `version`.
+- `BudgetAlert`: `category` (null for the overall budget), `state` (`near_limit` or `over_limit`), `spent`, `limit`,
+  `used_percent`: a budget the save moved near (80%) or over its monthly limit (D211; empty when none).
 - Optional text arguments treat `""` as "not given".
 - `delete_expense` deletes nothing unless `confirmed` is the boolean `true` (not `"true"` or `1`). With
   `expected_version`, it deletes only if the expense is still at that version: show the user the expense

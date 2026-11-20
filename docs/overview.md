@@ -27,6 +27,7 @@ note, and every design decision is recorded with its reasoning ([README.md](READ
 | *"Show my Swiggy orders"* | A **list card** of matching expenses, each with its id (`#14`). |
 | *"Change #14 to 300"* | It updates the expense and shows the result. |
 | *"Delete #14"* | A card with **Approve** and **Cancel**. Nothing is deleted until you press Approve. |
+| *"Set my food budget to 8000"*, *"How are my budgets?"* | It sets the limit, or checks them, and shows a **budget card**. A saved expense that pushes a budget past 80% or over its limit says so on its card. |
 
 The assistant reads and changes data only through the same tools any MCP client gets, under the same rules as the web
 app (an amount must be positive, a category must exist, ...). It cannot delete by itself.
@@ -34,9 +35,9 @@ app (an amount must be positive, a category must exist, ...). It cannot delete b
 ### For other AI tools
 
 The same expense tools are available to any **MCP** client (MCP Inspector, Claude Desktop): `add_expense`,
-`list_expenses`, `get_expense`, `get_summary`, `update_expense`, `delete_expense`, `get_monthly_report`, and two
-resources (`expenses://categories`, `expenses://recent`). Over stdio with `backend\mcp_stdio.py`, or over HTTP at
-`/mcp/` with a bearer token ([api_endpoints.md](api_endpoints.md#mcp-tools-and-resources)).
+`list_expenses`, `get_expense`, `get_summary`, `update_expense`, `delete_expense`, `get_monthly_report`, `get_budgets`,
+`set_budget`, and two resources (`expenses://categories`, `expenses://recent`). Over stdio with `backend\mcp_stdio.py`,
+or over HTTP at `/mcp/` with a bearer token ([api_endpoints.md](api_endpoints.md#mcp-tools-and-resources)).
 
 ## The tech stack
 

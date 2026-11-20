@@ -223,9 +223,9 @@ A module's public contract is still its package: other modules write `from app.m
 files, so importing a module's package also loads its handlers and tables (not its routes, and not the database engine).
 The earlier layout, where the package loaded only a `contracts.py`, gave the lighter import; co-location was judged
 worth more. It can't cause an import cycle, because module dependencies run one way: expenses → categories; budgets →
-expenses, categories; reports → expenses, categories; mcp → expenses, categories, reports; assistant → the rest;
-accounts and receipts depend on none. The mcp package still exports only its `contracts.py` and loads no server code
-(D166, D175).
+expenses, categories; reports → expenses, categories; mcp → expenses, categories, reports, budgets; assistant → the
+rest; accounts and receipts depend on none. The mcp package still exports only its `contracts.py` and loads no server
+code (D166, D175).
 
 ### Why each module owns its tables
 

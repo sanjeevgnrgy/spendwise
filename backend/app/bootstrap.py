@@ -140,7 +140,7 @@ def build(
     recorder = expenses_module.create_recorder(bus, agents)
     # The monthly reports: the monthly-report skill's script works the figures out, run by the server (D209).
     monthly_reports = reports_module.create_reports(bus, skills, clock)
-    mcp_server = mcp_module.create_server(bus, recorder, monthly_reports)
+    mcp_server = mcp_module.create_server(bus, recorder, monthly_reports, clock)
     if llm is None:
         # The one place that picks the LLM provider: Gemini, behind the LanguageModel port.
         llm = GeminiModel(settings.gemini_api_key, settings.gemini_model)

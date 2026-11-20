@@ -18,6 +18,7 @@ from enum import StrEnum
 
 from pydantic import BaseModel, ConfigDict
 
+from app.modules.budgets import BudgetAlert
 from app.modules.expenses import MonthlySummary, MonthTotal, PaymentMethod
 
 # How a client authenticates to /mcp/ over HTTP: "Authorization: Bearer <personal access token>" (D191).
@@ -38,6 +39,8 @@ class ToolName(StrEnum):
     UPDATE_EXPENSE = "update_expense"
     DELETE_EXPENSE = "delete_expense"
     GET_MONTHLY_REPORT = "get_monthly_report"
+    GET_BUDGETS = "get_budgets"
+    SET_BUDGET = "set_budget"
 
 
 # Argument names other code refers to. The server checks at start-up that its tools really have them.
@@ -76,9 +79,11 @@ class ExpenseView(BaseModel):
     version: int  # raised on every change; pass it to delete_expense as expected_version
 
 
-# add_expense's result: the expense as stored.
+# add_expense's result: the expense as stored, and the budgets the save pushed near (80%) or over their monthly limit
+# (Phase 27, D211; empty when none).
 class ExpenseSaved(BaseModel):
     saved: ExpenseView
+    budget_alerts: list[BudgetAlert] = []
 
 
 # get_expense's result.
@@ -86,9 +91,11 @@ class ExpenseFound(BaseModel):
     expense: ExpenseView
 
 
-# update_expense's result: the expense after the change (its version raised by one).
+# update_expense's result: the expense after the change (its version raised by one), and the budgets the change pushed
+# near or over their limit, as for add_expense.
 class ExpenseUpdated(BaseModel):
     updated: ExpenseView
+    budget_alerts: list[BudgetAlert] = []
 
 
 # delete_expense's result: the expense as it was just before it was deleted.

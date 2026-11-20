@@ -67,6 +67,16 @@ TOOL_CHIPS: dict[str, _ChipTexts] = {
         done=ChatText.CHIP_REPORT_DONE,
         failed=ChatText.CHIP_REPORT_FAILED,
     ),
+    ToolName.GET_BUDGETS: _ChipTexts(
+        running=ChatText.CHIP_GET_BUDGETS_RUNNING,
+        done=ChatText.CHIP_GET_BUDGETS_DONE,
+        failed=ChatText.CHIP_GET_BUDGETS_FAILED,
+    ),
+    ToolName.SET_BUDGET: _ChipTexts(
+        running=ChatText.CHIP_SET_BUDGET_RUNNING,
+        done=ChatText.CHIP_SET_BUDGET_DONE,
+        failed=ChatText.CHIP_SET_BUDGET_FAILED,
+    ),
     # Not MCP tools: the agents the model delegates to (delegation/, D206), each with its own texts.
     ASK_INSIGHTS: _ChipTexts(
         running=ChatText.CHIP_INSIGHTS_RUNNING,

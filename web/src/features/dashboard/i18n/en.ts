@@ -45,6 +45,19 @@ const en = {
   charts: {
     spent: "Spent",
   },
+  budget: {
+    title: "Budget",
+    description: "This month against your limits",
+    open: "Open Budgets",
+    spentOf: "{{spent}} of {{limit}}",
+    meter: "Overall: {{percent}}% of the limit used",
+    noLimit: "No overall limit yet.",
+    setLimits: "Set limits",
+    attention_one: "{{count}} category is near or over its limit",
+    attention_other: "{{count}} categories are near or over their limits",
+    allOnTrack: "Every category with a limit is on track",
+    loadFailed: "Couldn't load your budgets.",
+  },
   addExpense: "Add an expense",
 }
 

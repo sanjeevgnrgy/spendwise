@@ -15,7 +15,7 @@ note, and every design decision is recorded with its reasoning ([README.md](READ
 | **Dashboard** | This month's total, the number of expenses, the top category, a bar chart by category, a 6-month trend line, and the 5 most recent expenses. Reloads by itself when the assistant changes something. |
 | **Expenses** | A sortable table of every expense, with search, a category filter and a date range (all filtered on the server). Add expenses in a dialog, edit them in place, delete one or several (after a confirmation). |
 | **Assistant panel** | A chat on every page (a side panel on desktop, a sheet on phones). Its replies stream in as they're written. |
-| **Budgets, Settings** | Placeholders for later phases. |
+| **Budgets** | A monthly limit for all spending and one per category, each with a bar coloured by its state (on track, near the limit, over); the overall bar marks how much of the month has gone by. Set, change or remove a limit in a dialog; step back through earlier months. The Dashboard shows a Budget card too. |
 
 ### With the assistant
 

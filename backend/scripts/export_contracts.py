@@ -3,8 +3,8 @@
 - web/openapi.json: the REST API (FastAPI's OpenAPI document). `npm run gen:api` turns it into
   TypeScript types (web/src/shared/api/schema.gen.ts).
 - web/src/shared/api/contracts.gen.ts: the names and limits that aren't in OpenAPI (A2UI catalogs and
-  actions and functions, AG-UI event names and keys, payment-method labels, report formats, limits, and sign-in's
-  header, page, parameters and failure codes).
+  actions and functions, AG-UI event names and keys, payment-method labels, report formats, budget states,
+  limits, and sign-in's header, page, parameters and failure codes).
 
 Run from the project folder after changing an API or one of these values, then `cd web; npm run gen:api`:
     .\\.venv\\Scripts\\python.exe backend\\scripts\\export_contracts.py
@@ -45,6 +45,7 @@ from app.modules.conversations import THREAD_ID_MAX_LENGTH  # noqa: E402
 from app.modules.expenses import PaymentMethod, payment_method_label  # noqa: E402
 from app.modules.receipts import MAX_RECEIPT_BYTES, ReceiptMediaType  # noqa: E402
 from app.modules.reports import ReportFormat  # noqa: E402
+from app.modules.budgets import FULL_PERCENT, NEAR_LIMIT_PERCENT, BudgetState  # noqa: E402
 from app.modules.expenses.values import (  # noqa: E402
     DEFAULT_LIST_LIMIT,
     DEFAULT_TREND_MONTHS,
@@ -146,6 +147,12 @@ def main() -> None:
         "REPORT_FORMATS": [form.value for form in ReportFormat],
         # How a month is written (YYYY-MM, 1900-2099): the browser checks a card's month against it.
         "MONTH_PATTERN": YearMonth.PATTERN,
+        # Budgets (Phase 27): each state's value, and where "near the limit" and "the limit" are, in percent.
+        "BUDGETS": {
+            "states": {state.name.lower(): state.value for state in BudgetState},
+            "nearLimitPercent": NEAR_LIMIT_PERCENT,
+            "fullPercent": FULL_PERCENT,
+        },
         "A2UI": {
             "version": A2UI_VERSION,
             "rootId": ROOT_ID,

@@ -1,13 +1,14 @@
 // The app's TanStack Query client: the one cache of server data, its retry rule, THE rule for what reloads after a
 // kind of data changes, and what a 401 means. Part of the app composition (app/): it's the only place that knows the
-// Expenses, Dashboard, account and auth features together, so a feature only says "I changed expenses" (a mutation's
-// `meta.changes`, or the assistant's onDataChanged) and this file decides what that makes out of date.
+// Expenses, Dashboard, Budgets, account and auth features together, so a feature only says "I changed expenses" (a
+// mutation's `meta.changes`, or the assistant's onDataChanged) and this file decides what that makes out of date.
 // Used by providers.tsx (QueryClientProvider, and the assistant's refresh).
 
 import { MutationCache, QueryCache, QueryClient, type QueryKey } from "@tanstack/react-query"
 
 import { accountKeys } from "@/features/account"
 import { authKeys, isSignedOut } from "@/features/auth"
+import { budgetKeys } from "@/features/budgets"
 import { dashboardKeys } from "@/features/dashboard"
 import { expenseKeys } from "@/features/expenses"
 import { ApiError } from "@/shared/api/http"
@@ -27,12 +28,14 @@ function isClientError(error: unknown): boolean {
 /**
  * THE rule for "this kind of data changed", in one place: for each data scope, the query keys a change to it
  * makes out of date. Every scope must have an entry (a missing one is a compile error), so a new scope can't be
- * forgotten here. Expenses: every expense list, and the Dashboard's totals (which add expenses up). Sessions and
+ * forgotten here. Expenses: every expense list, the Dashboard's totals and the budgets (which add expenses up).
+ * Budgets: the budgets' status (the Budgets page and the Dashboard's card). Sessions and
  * access tokens: the Settings page's own lists.
  * Each key is a prefix: expenseKeys.all matches every expense list, whatever its filters.
  */
 export const STALE_AFTER: Readonly<Record<DataScope, readonly QueryKey[]>> = {
-  [DATA_SCOPES.expenses]: [expenseKeys.all, dashboardKeys.all],
+  [DATA_SCOPES.expenses]: [expenseKeys.all, dashboardKeys.all, budgetKeys.all],
+  [DATA_SCOPES.budgets]: [budgetKeys.all],
   [DATA_SCOPES.sessions]: [accountKeys.sessions],
   [DATA_SCOPES.accessTokens]: [accountKeys.tokens],
 }

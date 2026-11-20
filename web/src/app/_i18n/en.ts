@@ -12,9 +12,6 @@ const en = {
     // Only the browser tab's title (the sign-in page has its own heading).
     signIn: "Sign in",
   },
-  comingSoon: {
-    budgets: "Monthly limits per category will live here.",
-  },
   notFound: {
     title: "Page not found",
     description: "There's no page at this address.",

@@ -327,6 +327,40 @@ spending are included with 0, so a chart has no gaps. In INR, like the summary.
 {"currency": "INR", "months": [{"month": "2026-06", "expense_count": 0, "total_minor": 0, "total": "0.00"}]}
 ```
 
+## Budgets
+
+A person's monthly limits, overall and per category (D210): each is a standing amount in INR, the same every month
+until it's changed. Spending is the month's summary (every expense at its INR amount).
+
+### `GET /api/v1/budgets?month=2026-11`
+
+The month's spending against the budgets; without `month`, the current month. `month_elapsed_percent` is how much of
+the month has gone by (100 for a past month, 0 for a future one). Every category has a line: those with a limit first
+(most used first), then the others by spending. A line without a limit has only `spent`; `remaining` is negative once
+over. `state` is `on_track` (below 80% of the limit), `near_limit` (80% up to the limit) or `over_limit`.
+
+```json
+{
+  "month": "2026-11", "currency": "INR", "month_elapsed_percent": "66.7",
+  "overall": {"spent": "5700.50", "limit": "10000.00", "remaining": "4299.50", "used_percent": "57.0", "state": "on_track"},
+  "categories": [
+    {"category_id": 3, "category_name": "Transport", "spent": "1200.50", "limit": "1000.00", "remaining": "-200.50",
+     "used_percent": "120.1", "state": "over_limit"},
+    {"category_id": 2, "category_name": "Travel", "spent": "300.00", "limit": null, "remaining": null,
+     "used_percent": null, "state": null}
+  ]
+}
+```
+
+### `PUT /api/v1/budgets/overall`, `PUT /api/v1/budgets/categories/{category_id}`
+
+Set (or change) a monthly limit: `{"limit": "8000"}`, above 0, at most two decimals. **204 No Content**. A bad limit or
+an unknown field is a 422; a category that doesn't exist is a 422 `business-rule` problem.
+
+### `DELETE /api/v1/budgets/overall`, `DELETE /api/v1/budgets/categories/{category_id}`
+
+Remove a limit. **204**, or 404 if there was none (another person's budgets are never touched).
+
 ## Reports
 
 A person's monthly report (D209). The figures are worked out by the monthly-report skill's script, which the server

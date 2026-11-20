@@ -37,6 +37,13 @@ erDiagram
         JSON content "a provider-neutral message"
         DATETIME created_at
     }
+    budget {
+        INTEGER id PK
+        INTEGER owner_id "the person; unique with category_id"
+        INTEGER category_id "nullable: null is the overall budget"
+        INTEGER limit_minor "paise, monthly"
+        DATETIME updated_at "UTC"
+    }
     pending_approval {
         VARCHAR_64 approval_id PK "the card's surface id"
         INTEGER owner_id "the person; indexed"
@@ -219,6 +226,23 @@ assistant module.
 | `agent`, `skill` | VARCHAR(32), VARCHAR(64) | the app's name for the agent, and the skill (`insights`, `analyze_spending`) |
 | `task_id`, `context_id` | VARCHAR(64) | the A2A ids to resume the task with (checked to look like ids) |
 | `created_at` | DATETIME with time zone, indexed | forgotten 15 minutes later; at most 50 per person |
+
+## `budget`
+
+A person's monthly limits (Phase 27, D210): one per category, and one overall. Private to the budgets module. Only
+limits are stored: what was spent always comes from the `expense` table, through the expenses module.
+
+| Column | Type | Notes |
+|---|---|---|
+| `id` | INTEGER, primary key | |
+| `owner_id` | INTEGER, not null | whose budget (D190); every read and change names it |
+| `category_id` | INTEGER, nullable | the category (no foreign key, checked through the categories module), or null for the overall budget |
+| `limit_minor` | INTEGER, not null | the monthly limit in paise (INR), the same every month until changed; above 0 |
+| `updated_at` | DATETIME with time zone, not null | when the limit was last set (UTC) |
+
+**One budget per scope.** A unique index `uq_budget_owner_id_category_id` on `(owner_id, category_id)`; since SQL
+treats NULLs as distinct, a partial unique index `uq_budget_owner_id_overall` on `owner_id` where `category_id IS NULL`
+allows one overall budget per person (migration 0010; Postgres supports the same partial index).
 
 ## `receipt_file`
 

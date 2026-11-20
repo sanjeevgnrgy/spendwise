@@ -17,10 +17,8 @@ export const appTexts = defineNamespace("app", {
 /** The app frame's texts in a component: `const { t } = useTexts()`, then t("pages.dashboard"), typed. */
 export const useTexts = appTexts.useTexts
 
-/** A page's name: its key under "pages" (and, for a page still to come, under "comingSoon"). */
+/** A page's name: its key under "pages". */
 export type PageName = keyof typeof en.pages
-/** A page that isn't built yet: it also has a "comingSoon" text. */
-export type ComingSoonName = keyof typeof en.comingSoon
 
 // Gives t("pages.dashboard") and the other app keys their types (a misspelt key is a compile error).
 declare module "i18next" {

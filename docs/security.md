@@ -181,6 +181,15 @@ about addresses, ports and plain HTTP below apply when an agent runs on its own,
 | A waiting task lost, or kept forever | A task waiting for an answer is forgotten last when the store is full (20 tasks); nothing is written to disk |
 | A wrong rate saved | The answer must be for the currencies asked about, a positive decimal written as a string, for no later day than asked; anything else is "not available" and nothing is saved |
 
+## Agent Skills (D208)
+
+| Risk | Defence |
+|---|---|
+| A skill's text overriding the rules | Skills are text in this repository, reviewed like code; the model is told only `load_skill`'s results are instructions, every other tool result stays data |
+| The model reading files it shouldn't | It names a skill and, at most, a file the library listed when it read the folder (only under `references/` or `assets/`, at most 64 KB); its argument is looked up, never joined to a path, so `../../.env` is "not found" |
+| A skill's script being run by the model | Scripts are never read out and never run by the model; the server runs a skill's script itself (Phase 26 part 2) |
+| A malformed or foreign skill | Only folders whose frontmatter follows the format are loaded; others are skipped with a warning; skills come only from `SKILLS_DIR` |
+
 ## The A2UI renderer
 
 Cards and forms are data from the server (partly written by the model), drawn by the browser. The renderer treats

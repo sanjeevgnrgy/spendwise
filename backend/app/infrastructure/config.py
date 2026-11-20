@@ -56,6 +56,9 @@ class Settings(BaseSettings):
     # The folder uploaded files (receipts) are kept in, by random names. Git-ignored: it's your data, like the
     # database.
     uploads_dir: Path = BACKEND_DIR / "uploads"
+    # The Agent Skills the assistant may read (D208): one folder per skill, each with its SKILL.md. Part of the
+    # repository; read once, at the first turn.
+    skills_dir: Path = PROJECT_DIR / "skills"
 
     # Sign-in (Phase 22): the OpenID Connect provider people sign in with (D185). Any provider that implements the
     # standard works; these are its issuer URL and this app's registration there (a confidential "web" client).

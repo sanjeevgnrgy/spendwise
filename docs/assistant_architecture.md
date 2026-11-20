@@ -239,6 +239,15 @@ sequenceDiagram
 - the chart config is fixed, because shadcn's chart writes config keys into a `<style>` tag;
 - each card sits in its own error boundary.
 
+## Skills: instructions loaded when needed (Phase 26, D208)
+
+The model also has **Agent Skills**: SpendWise's own instructions for particular tasks, in `skills/<name>/SKILL.md`.
+Only each skill's name and description sit in the system instruction ("categorization: Chooses the right SpendWise
+category for an expense… Use when recording or changing an expense and the user didn't name the category"). When a task
+matches, the model calls `load_skill("categorization")` and gets the skill's steps and rules; if they tell it to, it
+calls `load_skill("categorization", "references/merchants.md")` for the merchant list. A chip shows each read
+("Reading a skill…"). Unlike other tool results, a skill's text is instructions to follow: the instruction says so.
+
 ## Other agents: delegating (Phase 25, D206)
 
 The assistant is also an **orchestrator**: besides the expense tools, the model may hand a request to another

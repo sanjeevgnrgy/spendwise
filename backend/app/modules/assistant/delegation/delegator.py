@@ -27,6 +27,7 @@ from app.core.cqrs import MessageBus
 from app.core.llm import ToolCall, ToolResult, ToolSpec
 from app.core.months import YearMonth
 from app.modules.assistant.agent.events import AgentEvent, ToolCallSummary, ToolFinished, ToolStarted
+from app.modules.assistant.agent.prompts import DELEGATE_RULE
 from app.modules.assistant.agent.surfaces import CallHandler, CallOutcome
 from app.modules.assistant.delegation.commands.remember_task import RememberTask
 from app.modules.assistant.delegation.commands.take_task import TakeTask
@@ -78,6 +79,10 @@ class Delegator:
     def handlers(self) -> Mapping[str, CallHandler]:
         """The handler for delegate_to_agent calls."""
         return {DELEGATE_TOOL: self._delegate}
+
+    def rules(self) -> list[str]:
+        """The rule on when to delegate, if any agent is offered."""
+        return [] if self._spec is None else [DELEGATE_RULE]
 
     def resume(self, message: str) -> Generator[AgentEvent, None, str]:
         """If an agent is waiting for the person's answer here, send `message` to it on the same task; return the

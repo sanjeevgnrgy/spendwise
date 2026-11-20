@@ -1,6 +1,6 @@
 # Sources: what the official docs and libraries say
 
-The facts that Phases 14 to 25 and the refactors are built on: where each came from, what it says, and what SpendWise
+The facts that Phases 14 to 26 and the refactors are built on: where each came from, what it says, and what SpendWise
 does with it. Earlier phases' doc facts are in [gemini.md](gemini.md) and the phase notes.
 
 All checked on **2026-11-13**. Each fact is marked with where it came from:
@@ -866,6 +866,30 @@ a client reading the insights artifact must accept them.
 
 **Used in:** `agents/currency/contract.py`, `agents/insights/executor.py`,
 `backend/app/modules/expenses/conversion/currency_agent.py`, D203–D205.
+
+---
+
+## 34. Agent Skills: the format and progressive disclosure (Phase 26)
+
+Checked on 2026-11-20.
+
+**Web:**
+- https://agentskills.io/specification: `name` "Must be 1-64 characters", "lowercase alphanumeric characters (`a-z`,
+  `0-9`) and hyphens", not starting or ending with a hyphen, no `--`, "Must match the parent directory name";
+  `description` "Must be 1-1024 characters", "Should describe both what the skill does and when to use it"; optional
+  `license`, `compatibility`, `metadata`, `allowed-tools`; folders `scripts/`, `references/`, `assets/`; "use relative
+  paths from the skill root"; "Keep file references one level deep"; progressive disclosure: metadata "~100 tokens"
+  loaded at startup, instructions "< 5000 tokens recommended" when activated, resources "as needed"; "Keep your main
+  `SKILL.md` under 500 lines".
+- https://agentskills.io/client-implementation/adding-skills-support.md: the catalog (name, description) in the system
+  prompt or a tool description; "Dedicated tool activation" (e.g. `activate_skill`) when the model can't read files,
+  with the name as an enum; lenient parsing; skip a skill without a description.
+- https://platform.claude.com/docs/en/agents-and-tools/agent-skills/overview: the same three levels; scripts are run
+  "and [Claude] receives only the output (the script code itself never enters context)"; "Use Skills only from trusted
+  sources".
+
+**Used in:** `skills/`, `backend/app/core/skills.py`, `backend/app/infrastructure/skills.py`,
+`backend/app/modules/assistant/skills/`, D208.
 
 ---
 

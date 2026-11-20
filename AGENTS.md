@@ -80,7 +80,7 @@ modules need it. Recipes: [backend_onboarding.md](docs/backend_onboarding.md).
   accounts and receipts depend on none. A new dependency must not create a cycle; if two modules
   need each other, redesign (an event, or a third module).
 - Inside the assistant, imports run `api/` → `application/` → `agent/`, `approvals/`, `tools/`, `receipt_agent/`,
-  `delegation/`, `a2ui/`, never back (`delegation/` uses `agent/`'s events and call handlers).
+  `delegation/`, `skills/`, `a2ui/`, never back (`delegation/` and `skills/` use `agent/`'s events and call handlers).
 - **A2A agents live outside the monolith**, in `agents/<name>/`, each its own process, built on the shared agent kit
   (`agents/agent_kit/`: the key check, the task store, the app, D202). An agent imports only `app.core`, plus the Gemini
   adapter and `setup_logging` in a `server.py` (D196); never a module, `web/` or the backend's settings. The backend
@@ -166,6 +166,13 @@ D193): don't remove them, and don't let a route cache a person's data.
 - A tool function's name, signature and docstring are runtime data: the MCP SDK builds the schema from them.
 - A tool acts for `current_caller()` (`mcp/caller.py`), set by the transport from a personal access token or the
   signed-in run; it never takes a person as an argument.
+
+**Agent Skills** (`skills/<name>/SKILL.md`, D208) are instructions the model reads a level at a time: only each
+skill's `name` and `description` are always in the prompt; `load_skill` gives the body, then a listed file. A skill
+follows agentskills.io: `name` = the folder's name (lowercase, digits, single hyphens, at most 64 characters), a
+`description` saying what it does and "Use when..." (at most 1,024), a body under 500 lines, files only under
+`references/` or `assets/`, one level deep. Skills are trusted text in this repository: never load one from a person or
+an outside source, and never let the model run a skill's `scripts/` (the server runs them, D208).
 
 **What the model sees is behaviour.** Prompts, tool declarations and the `/parse` schema decide what the model does.
 Changing them is a feature change, to be designed and verified as one.

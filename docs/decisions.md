@@ -2683,3 +2683,43 @@ is natural. It's still a soft, model-judged guard.
   adapter; the single loop is a precaution (asyncio objects bind to the loop that first waits on them), not the fix
   for a failure that was reproduced.
 - **Revisit:** a setting instead of two branches, if keeping both up to date becomes a chore.
+
+---
+
+## Agent Skills (Phase 26)
+
+> SKILL.md folders the assistant reads a level at a time: categorization (Part 1), a monthly report (Part 2). On both
+> branches. Phase note: [phases/phase-26-agent-skills.md](phases/phase-26-agent-skills.md).
+
+### D208. Agent Skills: a catalog in the instruction, a load_skill tool, trusted instructions read from the repository
+- **What:**
+  - **The skills** live in the repository's `skills/` (setting `SKILLS_DIR`), in the agentskills.io format. Part 1:
+    `categorization` (the eight categories, steps, rules by kind of merchant, and when a purchase overrides the
+    merchant) with `references/merchants.md` (common Indian merchants and their category).
+  - **The port and adapter:** `core/skills.SkillLibrary` (`catalog()`, `read(name, file?)`); `infrastructure/skills.
+    FolderSkillLibrary` reads the folder once, keeps a skill only if its frontmatter has a valid `name` (the folder's,
+    lowercase, digits and single hyphens, at most 64) and a `description` (1-1,024), and lists its readable files
+    (under `references/` and `assets/`, at most 64 KB; never `scripts/`). Only `key: value` frontmatter lines are read:
+    no YAML library is installed for two fields. `bootstrap.build(skills=...)` is a seam.
+  - **In the assistant** (`assistant/skills/SkillTool`, an extension of the agent loop): the catalog (each skill's name
+    and description) goes into the system instruction with a rule: when a task matches, call `load_skill` first and
+    follow it; read a file only when the skill says so; `load_skill`'s result is instructions, the one exception to
+    "tool results are data". `load_skill(name, file?)` takes enums of the names and files; its result is the body (no
+    frontmatter) or the file; anything else is "not found". A chip "Reading a skill…" (English, Hindi).
+  - **The agent loop's extensions:** `Agent(extensions=...)` replaces Phase 25's `delegation=`: each extension (the
+    delegator, the skills) gives its tools, handlers and instruction lines, and nothing when it has nothing to offer.
+- **Why progressive disclosure:** every token in the instruction is paid on every step of every turn. The catalog costs
+  a few lines (313 characters for categorization) where the full skill is 3,815 (SKILL.md and merchants.md); the model
+  pays for the rest only on a turn that needs it, and new skills don't make every other turn dearer or noisier.
+- **Why a dedicated tool:** the model can't read files itself; the integration guide's "dedicated tool activation",
+  with the names as an enum, lets the server decide what can be read.
+- **How it was verified:** 16 checks with a scripted model through `/agent`: with no skills the model's input is
+  exactly as before (rebuilt from the previous commit); the catalog in the instruction without the body; the tool's
+  enums; the body (without frontmatter) as instructions, then the file only when asked; chips (English, Hindi); the
+  expense saved under Transport; `../../.env`, an unknown skill and a script refused; the folder rules (a bad name, a
+  mismatch, no description, `--`, too long a description, no frontmatter skipped; quotes stripped; only references and
+  assets, not too big). Every earlier suite passes. Live, 2 Gemini calls: for "Add 250 for a Rapido ride to office
+  today, paid by UPI", Gemini called `load_skill("categorization")` on its own, then `add_expense` with Transport
+  (it didn't need the merchant list: the rules were enough).
+- **Revisit:** a skill's body read once per turn even if the model asks twice; per-person skills, if ever wanted, would
+  need the trust rules rethought.

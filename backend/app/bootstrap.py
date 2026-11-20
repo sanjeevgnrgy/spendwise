@@ -23,6 +23,7 @@ from app.core.identity import IdentityProvider
 from app.core.llm import LanguageModel
 from app.core.rate_limit import RateLimiter
 from app.core.sealing import Sealer
+from app.core.skills import SkillLibrary
 from app import agents_host
 from app.infrastructure import db
 from app.infrastructure.config import API_PREFIX, settings
@@ -30,6 +31,7 @@ from app.infrastructure.files import LocalFileStore
 from app.infrastructure.identity import ClientCredentials, OidcIdentityProvider, UnconfiguredIdentityProvider
 from app.infrastructure.llm.gemini import GeminiModel
 from app.infrastructure.sealing import FernetSealer
+from app.infrastructure.skills import FolderSkillLibrary
 from app.modules import accounts, expenses
 from app.modules.accounts import module as accounts_module
 from app.modules.assistant import module as assistant_module
@@ -64,6 +66,8 @@ class Services:
     agents: RemoteAgents
     # Saves expenses, converting an amount in another currency to INR first (D204): the REST routes and MCP share it.
     recorder: expenses.ExpenseRecorder
+    # The Agent Skills the assistant may read (D208): SKILL.md folders, by default the project's skills/.
+    skills: SkillLibrary
     mcp_server: MCPServer
     # Personal access tokens (D191): the account routes make them; MCP over HTTP and the stdio server resolve one to
     # the person it acts for.
@@ -100,6 +104,7 @@ def build(
     identity: IdentityProvider | None = None,
     sealer: Sealer | None = None,
     agents: RemoteAgents | None = None,
+    skills: SkillLibrary | None = None,
 ) -> Services:
     """Everything the app is made of. Each argument left out gets the real one, configured from the settings.
 
@@ -117,6 +122,7 @@ def build(
     """
     clock = SystemClock() if clock is None else clock
     engine = db.engine if engine is None else engine
+    skills = FolderSkillLibrary(settings.skills_dir) if skills is None else skills
     bus = build_bus(clock, engine)
     if llm is None:
         # The one place that picks the LLM provider: Gemini, behind the LanguageModel port.
@@ -141,6 +147,7 @@ def build(
         files=files,
         agents=agents,
         recorder=recorder,
+        skills=skills,
         mcp_server=mcp_server,
         access_tokens=accounts_module.create_access_tokens(bus, clock),
         model_quota=RateLimiter(clock, settings.model_requests_per_minute, settings.model_requests_per_day),
@@ -213,7 +220,7 @@ def api_routers(services: Services) -> list[APIRouter]:
         conversations_module.router,
         receipts_module.create_router(services.bus, services.files),
         assistant_module.create_router(
-            services.bus, services.tools, services.llm, receipt_files, services.agents, services.clock
+            services.bus, services.tools, services.llm, receipt_files, services.agents, services.clock, services.skills
         ),
         accounts_module.create_account_router(services.bus, services.identity, services.access_tokens),
     ]

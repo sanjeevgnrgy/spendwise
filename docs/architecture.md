@@ -128,6 +128,8 @@ backend/
                            tools/        port.py (the ExpenseTools port), mcp_adapter.py (McpExpenseTools)
                            receipt_agent/ port.py (the ReceiptReader port), agent_reader.py (AgentReceiptReader:
                                          the receipt agent through core/agents.RemoteAgents, D199, D201)
+                           skills/       Agent Skills in the turn (D208): skill_tool.py (the catalog in the
+                                         instruction, the load_skill tool and its handler)
                            delegation/   the other agents the model may hand requests to (D206): skills.py (what
                                          the server sends each), directory.py (cards read at startup, the
                                          delegate_to_agent tool), delegator.py (a call, and resuming a waiting task),
@@ -414,6 +416,20 @@ Known limits, to address when the load calls for it (D174):
   Postgres (already supported through `DATABASE_URL`), removes that.
 - **Long threads:** `GET /threads/{id}` returns a whole thread, unpaged; the model's history is capped by turns, not size.
 
+## Agent Skills (`skills/`)
+
+**Skills are instructions the model loads when it needs them** (D208). Each is a folder in the repository's `skills/`
+(agentskills.io format): a `SKILL.md` with a short `name` and `description` in its frontmatter, then the instructions,
+and perhaps `references/` and `assets/` files. The assistant shows them a level at a time (progressive disclosure):
+
+1. every skill's name and description are always in the system instruction (`assistant/skills/SkillTool.rules`);
+2. `load_skill(name)` returns the skill's body when the model decides a task matches it;
+3. `load_skill(name, file)` returns one of its listed files when the skill says to read it.
+
+The port is `core/skills.SkillLibrary`; its adapter `infrastructure/skills.FolderSkillLibrary` reads the folder once,
+keeps only skills that follow the format, and reads only files it listed (never a path the model sends). A skill's
+text is the app's own, so it's given to the model as instructions, the one exception to "tool results are data".
+
 ## The agents (`agents/`), hosted by the backend
 
 **The A2A agents are their own code, outside the monolith's modules** (D12, D195), **and on `main` the backend hosts
@@ -627,8 +643,8 @@ Get-ChildItem backend -Recurse -Filter *.py | Select-String -Pattern 'import mod
 #    and the receipt and insights agents' server.py (the currency agent uses no model).
 Get-ChildItem backend, agents -Recurse -Filter *.py | Select-String -Pattern 'llm\.gemini|from google'
 
-# 5. Inside the assistant, imports run api/ -> application/ -> agent/, approvals/, tools/, receipt_agent/, a2ui/,
-#    never back.
+# 5. Inside the assistant, imports run api/ -> application/ -> agent/, approvals/, tools/, receipt_agent/,
+#    delegation/, skills/, a2ui/, never back.
 #    Expect only module.py, which builds the router and the use cases.
 $assistant = Get-ChildItem backend\app\modules\assistant -Recurse -Filter *.py
 $assistant | Where-Object FullName -NotMatch '\\assistant\\api\\' | Select-String -Pattern 'assistant\.api\b'

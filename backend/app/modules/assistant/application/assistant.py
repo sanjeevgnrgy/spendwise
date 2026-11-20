@@ -18,6 +18,7 @@ from uuid import uuid4
 
 from app.core.agents import RemoteAgents
 from app.core.cqrs import MessageBus
+from app.core.skills import SkillLibrary
 from app.core.errors import NotFoundError
 from app.core.i18n import Language, translatable
 from app.core.llm import ToolCallingModel
@@ -30,6 +31,7 @@ from app.modules.assistant.application.receipt_turn import receipt_turn
 from app.modules.assistant.approvals import ExpenseSnapshot, RequestApproval, RestoreApproval, TakeApproval
 from app.modules.assistant.delegation import AgentDirectory, Delegator
 from app.modules.assistant.receipt_agent.port import ReceiptReader
+from app.modules.assistant.skills import SkillTool
 from app.modules.assistant.tools.port import ExpenseTools
 from app.modules.mcp import ExpenseView
 
@@ -56,7 +58,7 @@ class Assistant:
 
     module.create_router builds it from the bus, the tools adapter, the language model, the receipts module's
     ReceiptFiles, the receipt reader (the receipt agent, over A2A), and the agents the model may delegate to (their
-    directory and the remote agents, D206), and the routes (api/routes.py) call it:
+    directory and the remote agents, D206) and the skills (D208), and the routes (api/routes.py) call it:
     run_turn, read_receipt and decide through api/agui_stream.py for POST /agent, chat for POST /chat.
     """
 
@@ -67,6 +69,7 @@ class Assistant:
     receipt_reader: ReceiptReader
     directory: AgentDirectory
     agents: RemoteAgents
+    skills: SkillLibrary
 
     def _next_turn(self, owner_id: int, thread_id: str) -> int:
         """The number the owner's thread's next turn gets: 1 for a new thread."""
@@ -110,7 +113,9 @@ class Assistant:
         # An agent waiting for this person's answer here gets this message first, on its own task (D206); the
         # model then reads the message with what came of it.
         text = yield from delegator.resume(text)
-        agent = Agent(llm=self.llm, tools=self.tools.acting_for(owner_id), delegation=delegator)
+        # Beside the expense tools: other agents to delegate to, and the skills to read (each offers nothing if empty).
+        extensions = (delegator, SkillTool(self.skills))
+        agent = Agent(llm=self.llm, tools=self.tools.acting_for(owner_id), extensions=extensions)
         for event in agent.run(text, today, history, surface, language):
             if isinstance(event, TurnFinished):
                 self._save(owner_id, thread_id, turn, event)

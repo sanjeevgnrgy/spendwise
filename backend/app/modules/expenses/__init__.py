@@ -12,14 +12,25 @@ the write side's repository). This file only re-exports the contract names from 
 Every command and query about expenses names its owner (`owner_id`, a core.ids.UserId): one person's expenses are
 never visible to, or changeable by, anyone else (D190).
 
-Who uses it: the MCP server (every command and query, behind its tools), the assistant (PaymentMethod
-and payment_method_label for its forms, MAX_NOTE_LENGTH for a receipt's note), the receipts module (PaymentMethod,
-in what a receipt is read into) and seed.py (CreateExpense, ListExpenses).
+Saving goes through ExpenseRecorder (application/record_expense.py), which converts an amount in another currency
+to INR first, through the ExchangeRates port (conversion/; the currency agent behind it, D204); every expense keeps
+both amounts.
+
+Who uses it: the MCP server (the recorder for its add and update tools, the commands and queries behind the others),
+the assistant (PaymentMethod and payment_method_label for its forms, MAX_NOTE_LENGTH for a receipt's note) and
+seed.py (CreateExpense, in INR, and ListExpenses).
 """
 
+from app.modules.expenses.application.record_expense import ExpenseRecorder
 from app.modules.expenses.commands.create_expense import CreateExpense, NewExpense
 from app.modules.expenses.commands.delete_expense import DeleteExpense
 from app.modules.expenses.commands.update_expense import ExpenseChanges, UpdateExpense
+from app.modules.expenses.conversion.port import (
+    ExchangeRate,
+    ExchangeRates,
+    RatesUnavailableError,
+    UnsupportedCurrencyError,
+)
 from app.modules.expenses.i18n import ExpenseText, payment_method_label
 from app.modules.expenses.models import ExpenseList, ExpenseRead
 from app.modules.expenses.queries.get_expense import GetExpense
@@ -34,12 +45,15 @@ __all__ = [
     "CategoryTotal",
     "CreateExpense",
     "DeleteExpense",
+    "ExchangeRate",
+    "ExchangeRates",
     "ExpenseChanges",
     "ExpenseFilters",
     "ExpenseId",
     "ExpenseList",
     "ExpenseText",
     "ExpenseRead",
+    "ExpenseRecorder",
     "GetExpense",
     "GetMonthlySummary",
     "GetMonthlyTrend",
@@ -49,6 +63,8 @@ __all__ = [
     "MonthlyTrend",
     "NewExpense",
     "PaymentMethod",
+    "RatesUnavailableError",
+    "UnsupportedCurrencyError",
     "UpdateExpense",
     "payment_method_label",
 ]

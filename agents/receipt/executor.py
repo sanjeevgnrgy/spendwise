@@ -15,12 +15,13 @@ import logging
 
 from pydantic import ValidationError
 
-from a2a.helpers import get_data_parts, new_data_part, new_task_from_user_message, new_text_part
+from a2a.helpers import get_data_parts, new_data_part
 from a2a.server.agent_execution import AgentExecutor, RequestContext
 from a2a.server.events import EventQueue
-from a2a.server.tasks import TaskUpdater
 from a2a.types import Message, Part
 from a2a.utils.errors import TaskNotCancelableError
+
+from agent_kit.tasks import fail, reject, start_task
 from app.core.llm import LlmError
 from receipt.contract import (
     ARTIFACT_NAME,
@@ -55,18 +56,12 @@ class ReceiptExecutor(AgentExecutor):
     async def execute(self, context: RequestContext, event_queue: EventQueue) -> None:
         """Read the request's receipt and publish the task's states and its artifact. Raises nothing for a bad
         request or a failed reading: they end the task as REJECTED or FAILED, with a reason."""
-        message = context.message
-        if message is None:  # the handler always sets it for SendMessage; nothing to read otherwise
-            raise RuntimeError("no message in the request")
-        task = context.current_task or new_task_from_user_message(message)
-        if context.current_task is None:
-            await event_queue.enqueue_event(task)  # SUBMITTED: the client learns the task's id from here on
-        updater = TaskUpdater(event_queue, task.id, task.context_id)
+        message, updater = await start_task(context, event_queue)
         try:
             file, request = _inputs(message)
         except RejectedRequest as exc:
-            logger.info("task %s rejected: %s", task.id, exc)
-            await updater.reject(updater.new_agent_message([new_text_part(str(exc))]))
+            logger.info("task %s rejected: %s", updater.task_id, exc)
+            await reject(updater, str(exc))
             return
         await updater.start_work()
         try:
@@ -74,13 +69,13 @@ class ReceiptExecutor(AgentExecutor):
             extraction = await asyncio.to_thread(self._reader.read, file.raw, file.media_type, request)
         except LlmError as exc:
             # The model's own words go to the log only; the client gets a fixed reason.
-            logger.warning("task %s failed: %s", task.id, exc)
-            await updater.failed(updater.new_agent_message([new_text_part(NOT_READ)]))
+            logger.warning("task %s failed: %s", updater.task_id, exc)
+            await fail(updater, NOT_READ)
             return
         answer = new_data_part(extraction.model_dump(mode="json"), media_type=JSON_MEDIA_TYPE)
         await updater.add_artifact(parts=[answer], name=ARTIFACT_NAME, last_chunk=True)
         await updater.complete()
-        logger.info("task %s completed", task.id)
+        logger.info("task %s completed", updater.task_id)
 
     async def cancel(self, context: RequestContext, event_queue: EventQueue) -> None:
         """Not supported: a reading is one model call that can't be stopped half-way. Raises TaskNotCancelableError."""

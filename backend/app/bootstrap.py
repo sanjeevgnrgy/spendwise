@@ -3,10 +3,9 @@
 main.py (the web app), seed.py, mcp_stdio.py and the migrations (for the tables) all build the app from here,
 so there's exactly one list of modules, and nothing registers itself as a side effect of being imported.
 
-build() is also the one seam for replacing the outside world: pass it a clock, a language model, expense
-tools, a database engine, a file store, an identity provider, a sealer or a receipt reader, and everything built from
-the result (the bus, the MCP server, the session check, the routes, main.create_app(services)) uses those instead of
-the real ones.
+build() is also the one seam for replacing the outside world: pass it a clock, a language model, expense tools, a
+database engine, a file store, an identity provider, a sealer or the remote agents, and everything built from the result
+(the bus, the MCP server, the session check, the routes, main.create_app(services)) uses those instead of the real ones.
 """
 
 from dataclasses import dataclass
@@ -16,6 +15,7 @@ from mcp.server.mcpserver import MCPServer
 from sqlalchemy import Engine, MetaData
 from sqlmodel import SQLModel
 
+from app.core.agents import RemoteAgents
 from app.core.clock import Clock, SystemClock
 from app.core.cqrs import MessageBus
 from app.core.files import FileStore
@@ -24,12 +24,13 @@ from app.core.llm import LanguageModel
 from app.core.rate_limit import RateLimiter
 from app.core.sealing import Sealer
 from app.infrastructure import db
+from app.infrastructure.a2a import A2AAgents, AgentEndpoint
 from app.infrastructure.config import API_PREFIX, settings
 from app.infrastructure.files import LocalFileStore
 from app.infrastructure.identity import ClientCredentials, OidcIdentityProvider, UnconfiguredIdentityProvider
 from app.infrastructure.llm.gemini import GeminiModel
 from app.infrastructure.sealing import FernetSealer
-from app.modules import accounts
+from app.modules import accounts, expenses
 from app.modules.accounts import module as accounts_module
 from app.modules.assistant import module as assistant_module
 from app.modules.categories import module as categories_module
@@ -58,8 +59,11 @@ class Services:
     tools: assistant_module.ExpenseTools
     # Where uploaded files' bytes are kept (the receipts module's receipts).
     files: FileStore
-    # Who reads an attached receipt (the assistant's ReceiptReader port): the receipt agent, over A2A (Phase 24).
-    receipt_reader: assistant_module.ReceiptReader
+    # The A2A agents (agents/: receipt, currency), behind the RemoteAgents port (D201): the assistant reads receipts
+    # and the expenses recorder gets rates through them.
+    agents: RemoteAgents
+    # Saves expenses, converting an amount in another currency to INR first (D204): the REST routes and MCP share it.
+    recorder: expenses.ExpenseRecorder
     mcp_server: MCPServer
     # Personal access tokens (D191): the account routes make them; MCP over HTTP and the stdio server resolve one to
     # the person it acts for.
@@ -95,7 +99,7 @@ def build(
     files: FileStore | None = None,
     identity: IdentityProvider | None = None,
     sealer: Sealer | None = None,
-    receipt_reader: assistant_module.ReceiptReader | None = None,
+    agents: RemoteAgents | None = None,
 ) -> Services:
     """Everything the app is made of. Each argument left out gets the real one, configured from the settings.
 
@@ -108,14 +112,16 @@ def build(
     - identity: the OpenID Connect provider in OIDC_ISSUER (nothing is fetched from it until someone signs in), or,
       if a sign-in setting is missing, one that refuses every sign-in (D185);
     - sealer: Fernet, with SESSION_ENCRYPTION_KEYS;
-    - receipt_reader: the receipt agent at RECEIPT_AGENT_URL, with RECEIPT_AGENT_KEY (nothing is fetched from it
-      until a receipt is attached). A check passes a fake, or an A2AReceiptReader whose transport reaches the agent's
-      app in-process.
+    - agents: the A2A agents at RECEIPT_AGENT_URL and CURRENCY_AGENT_URL, with their keys (nothing is fetched from
+      one until it's needed). A check passes a fake RemoteAgents, or an A2AAgents whose transports reach the agents'
+      apps in-process.
     """
     clock = SystemClock() if clock is None else clock
     engine = db.engine if engine is None else engine
     bus = build_bus(clock, engine)
-    mcp_server = mcp_module.create_server(bus)
+    agents = _remote_agents() if agents is None else agents
+    recorder = expenses_module.create_recorder(bus, agents)
+    mcp_server = mcp_module.create_server(bus, recorder)
     if llm is None:
         # The one place that picks the LLM provider: Gemini, behind the LanguageModel port.
         llm = GeminiModel(settings.gemini_api_key, settings.gemini_model)
@@ -126,8 +132,6 @@ def build(
     identity = _identity_provider(clock) if identity is None else identity
     if sealer is None:
         sealer = FernetSealer([key.get_secret_value() for key in settings.session_encryption_keys])
-    if receipt_reader is None:
-        receipt_reader = assistant_module.A2AReceiptReader(settings.receipt_agent_url, settings.receipt_agent_key)
     return Services(
         clock=clock,
         engine=engine,
@@ -135,7 +139,8 @@ def build(
         llm=llm,
         tools=tools,
         files=files,
-        receipt_reader=receipt_reader,
+        agents=agents,
+        recorder=recorder,
         mcp_server=mcp_server,
         access_tokens=accounts_module.create_access_tokens(bus, clock),
         model_quota=RateLimiter(clock, settings.model_requests_per_minute, settings.model_requests_per_day),
@@ -144,6 +149,17 @@ def build(
         sessions=accounts_module.create_session_gate(bus, identity, clock),
         cookies=_session_cookies(),
         sign_in=_sign_in_config(),
+    )
+
+
+def _remote_agents() -> RemoteAgents:
+    """The one place that picks the remote agents' adapter: A2A, to each agent's address and key from the settings.
+    The names are the ones the modules ask for (the assistant's "receipt", the expenses module's "currency")."""
+    return A2AAgents(
+        {
+            "receipt": AgentEndpoint(settings.receipt_agent_url, settings.receipt_agent_key),
+            "currency": AgentEndpoint(settings.currency_agent_url, settings.currency_agent_key),
+        }
     )
 
 
@@ -194,20 +210,21 @@ def api_routers(services: Services) -> list[APIRouter]:
     """Every other module's REST routes; main.py puts the X-CSRF and session checks in front of all of them. Their
     order is the OpenAPI document's order.
 
-    The receipts and assistant routers are built from `services` (the file store, the tools, the model and the receipt
-    reader): the receipts routes take uploads, and the assistant hands an attached receipt's file (ReceiptFiles, for
-    its owner only) to the receipt reader. The account router (the signed-in person's sessions and access tokens) gets
-    the bus, the provider and the tokens. The others are fixed routers that read the bus and the clock from `app.state` at request time
-    (web/dependencies), which create_app sets from the same services.
+    The expenses, receipts and assistant routers are built from `services` (the recorder, the file store, the tools, the
+    model and the remote agents): the expenses routes save through the recorder, the receipts routes take uploads, and
+    the assistant hands an attached receipt's file (ReceiptFiles, for its owner only) to the receipt agent. The account
+    router (the signed-in person's sessions and access tokens) gets the bus, the provider and the tokens. The others are
+    fixed routers that read the bus and the clock from `app.state` at request time (web/dependencies), which create_app
+    sets from the same services.
     """
     receipt_files = receipts_module.create_files(services.bus, services.files)
     return [
         categories_module.router,
-        expenses_module.router,
+        expenses_module.create_router(services.recorder),
         conversations_module.router,
         receipts_module.create_router(services.bus, services.files),
         assistant_module.create_router(
-            services.bus, services.tools, services.llm, receipt_files, services.receipt_reader
+            services.bus, services.tools, services.llm, receipt_files, services.agents
         ),
         accounts_module.create_account_router(services.bus, services.identity, services.access_tokens),
     ]

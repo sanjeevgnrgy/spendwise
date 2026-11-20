@@ -14,7 +14,6 @@ from typing import Annotated
 from mcp.server.mcpserver import MCPServer
 from pydantic import Field
 
-from app.core.cqrs import MessageBus
 from app.modules import expenses
 from app.modules.mcp.caller import current_caller
 from app.modules.mcp.contracts import ExpenseSearch, ToolName
@@ -25,11 +24,12 @@ from app.modules.mcp.views import ExpenseViews, to_view
 MAX_ROWS = 50
 
 
-def register_list_expenses(server: MCPServer, bus: MessageBus, views: ExpenseViews) -> None:
+def register_list_expenses(server: MCPServer, context: ToolContext) -> None:
     """Add the list_expenses tool: the newest MAX_ROWS matching expenses, and how many match in all.
 
     The page's categories are named with one ListCategories, not one query per row.
     """
+    bus, views = context.bus, context.views
 
     # Filters combine with AND; "" leaves a filter out. A category is given by name and turned into an id
     # first, so an unknown name is a tool error that lists the real ones.

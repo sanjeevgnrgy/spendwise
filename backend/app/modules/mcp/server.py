@@ -15,9 +15,11 @@ from collections.abc import Callable
 from mcp.server.mcpserver import MCPServer
 
 from app.core.cqrs import MessageBus
+from app.modules import expenses
 from app.modules.mcp.contracts import SERVER_NAME
 from app.modules.mcp.resources import register_resources
 from app.modules.mcp.tools.add_expense import register_add_expense
+from app.modules.mcp.tools.context import ToolContext
 from app.modules.mcp.tools.delete_expense import register_delete_expense
 from app.modules.mcp.tools.get_expense import register_get_expense
 from app.modules.mcp.tools.get_summary import register_get_summary
@@ -28,9 +30,9 @@ from app.modules.mcp.views import ExpenseViews
 # What the server tells a client about itself when it connects.
 INSTRUCTIONS = "Tools and resources for one person's expense tracker. Amounts are in rupees (INR) by default."
 
-# Adds one tool to the server. Every registrar takes the same arguments, so adding a tool means writing a
-# registrar and listing it below, without touching create_server.
-ToolRegistrar = Callable[[MCPServer, MessageBus, ExpenseViews], None]
+# Adds one tool to the server. Every registrar takes the same arguments (the server and a ToolContext), so adding a
+# tool means writing a registrar and listing it below, without touching create_server.
+ToolRegistrar = Callable[[MCPServer, ToolContext], None]
 
 # The order the tools are registered in is the order clients list them, and so the order the model sees
 # them: keep it.
@@ -44,15 +46,17 @@ TOOL_REGISTRARS: tuple[ToolRegistrar, ...] = (
 )
 
 
-def create_server(bus: MessageBus) -> MCPServer:
-    """Build the MCP server around a bus. Called once by the composition root (bootstrap.py).
+def create_server(bus: MessageBus, recorder: expenses.ExpenseRecorder) -> MCPServer:
+    """Build the MCP server around a bus and the expenses recorder (its add and update tools save through it).
+    Called once by the composition root (bootstrap.py).
 
     Registers every tool in TOOL_REGISTRARS order, then the resources. Raises RuntimeError if a tool lacks
     an argument the contract names (each registrar checks its own).
     """
     server = MCPServer(SERVER_NAME, instructions=INSTRUCTIONS)
     views = ExpenseViews(bus)
+    context = ToolContext(bus=bus, views=views, recorder=recorder)
     for register in TOOL_REGISTRARS:
-        register(server, bus, views)
+        register(server, context)
     register_resources(server, bus, views)
     return server

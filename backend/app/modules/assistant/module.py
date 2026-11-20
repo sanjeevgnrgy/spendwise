@@ -1,14 +1,15 @@
 """How the composition root plugs this module in: its handlers, routes, tables and adapters.
 
 bootstrap.py uses everything here: it registers the handlers on the bus, creates an McpExpenseTools (this app's MCP
-server, in-process) and an A2AReceiptReader (the receipt agent, over A2A), and passes them to create_router with the
-language model and the receipts module's ReceiptFiles, and hands TABLES to the migrations. ExpenseTools and
-ReceiptReader are the ports those adapters implement, for anyone who builds another (a check's fake). Nothing else in
-the module is meant to be imported from outside.
+server, in-process), and passes it to create_router with the language model, the receipts module's ReceiptFiles and
+the app's remote agents (create_router builds the receipt reader around them), and hands TABLES to the migrations.
+ExpenseTools is the port that adapter implements, for anyone who builds another (a check's fake). Nothing else in the
+module is meant to be imported from outside.
 """
 
 from fastapi import APIRouter
 
+from app.core.agents import RemoteAgents
 from app.core.cqrs import MessageBus
 from app.core.llm import LanguageModel
 from app.modules import receipts
@@ -19,8 +20,7 @@ from app.modules.assistant.approvals.commands.request_approval import RequestApp
 from app.modules.assistant.approvals.commands.restore_approval import RestoreApproval, restore_approval
 from app.modules.assistant.approvals.commands.take_approval import TakeApproval, take_approval
 from app.modules.assistant.approvals.persistence.tables import TABLES
-from app.modules.assistant.receipt_agent.a2a_client import A2AReceiptReader
-from app.modules.assistant.receipt_agent.port import ReceiptReader
+from app.modules.assistant.receipt_agent.agent_reader import AgentReceiptReader
 from app.modules.assistant.tools.mcp_adapter import McpExpenseTools
 from app.modules.assistant.tools.port import ExpenseTools
 
@@ -37,26 +37,17 @@ def create_router(
     tools: ExpenseTools,
     llm: LanguageModel,
     receipt_files: receipts.ReceiptFiles,
-    receipt_reader: ReceiptReader,
+    agents: RemoteAgents,
 ) -> APIRouter:
     """The assistant's routes (/parse, /chat, /agent), around the use cases built from what's passed in.
 
     The model is used both ways: the agent's tool calling (Assistant) and /parse's structured output
     (ExpenseParser); each is given only the side it needs. A receipt attached in the web panel is taken from
-    `receipt_files` (for its owner only) and read by `receipt_reader`.
+    `receipt_files` (for its owner only) and read by the receipt agent, one of `agents`.
     """
-    assistant = Assistant(
-        bus=bus, tools=tools, llm=llm, receipt_files=receipt_files, receipt_reader=receipt_reader
-    )
+    reader = AgentReceiptReader(agents)
+    assistant = Assistant(bus=bus, tools=tools, llm=llm, receipt_files=receipt_files, receipt_reader=reader)
     return routes.create_router(assistant, ExpenseParser(bus=bus, llm=llm))
 
 
-__all__ = [
-    "TABLES",
-    "A2AReceiptReader",
-    "ExpenseTools",
-    "McpExpenseTools",
-    "ReceiptReader",
-    "create_router",
-    "register_handlers",
-]
+__all__ = ["TABLES", "ExpenseTools", "McpExpenseTools", "create_router", "register_handlers"]

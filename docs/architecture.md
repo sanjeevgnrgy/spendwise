@@ -126,8 +126,8 @@ backend/
                            approvals/    delete cards: commands/ (request, take, restore: one slice each),
                                          models.py, store.py, persistence/tables.py (pending_approval)
                            tools/        port.py (the ExpenseTools port), mcp_adapter.py (McpExpenseTools)
-                           receipt_agent/ port.py (the ReceiptReader port), a2a_client.py (A2AReceiptReader: the
-                                         assistant as a client agent of agents/receipt, D199)
+                           receipt_agent/ port.py (the ReceiptReader port), agent_reader.py (AgentReceiptReader:
+                                         the receipt agent through core/agents.RemoteAgents, D199, D201)
                            a2ui/         cards, forms
                            module.py     what the composition root plugs in
       mcp/               MCP adapter: contracts.py (tool and argument names, bearer scheme, typed results; all
@@ -181,8 +181,10 @@ backend/
     (`assistant/receipt_agent/port.py`: `ReceiptReader`) are protocols with one adapter each (`GeminiModel` in
     `infrastructure/llm/`; `LocalFileStore` in `infrastructure/files.py`; `OidcIdentityProvider`, standard OpenID
     Connect, in `infrastructure/identity/`, D185; `FernetSealer` in `infrastructure/sealing.py`; `McpExpenseTools` in
-    `assistant/tools/mcp_adapter.py`, in-process by default; `A2AReceiptReader` in
-    `assistant/receipt_agent/a2a_client.py`, the receipt agent over A2A, D199).
+    `assistant/tools/mcp_adapter.py`, in-process by default). **Remote agents** sit behind `core/agents.py`
+    (`RemoteAgents`), whose one adapter, `A2AAgents` in `infrastructure/a2a/`, is the only code that uses the A2A SDK
+    (D201); the modules' own adapters use the port: the assistant's `AgentReceiptReader` (ReceiptReader) and the
+    expenses module's `CurrencyAgentRates` (ExchangeRates, D204).
     Each user depends only on what it calls: `/parse` and the receipt agent's reader on `StructuredOutputModel`, the
     agent on `ToolCallingModel`.
     `bootstrap.build()` creates the adapters and injects them; nothing else imports a provider (D166, D172).
@@ -225,11 +227,11 @@ at the database level. Instead, `CreateExpense`'s handler asks `categories.GetCa
 | Module | Contract (`from app.modules import <name>`) | Used by |
 |---|---|---|
 | `categories` | `CategoryRead`, `CreateCategory`, `ListCategories`, `GetCategory`, `FindCategoryByName`, `CategoryId`, `MAX_NAME_LENGTH`, `UNKNOWN_CATEGORY`, `CategoryText` (its texts' keys, e.g. `NO_CATEGORIES_YET`) | expenses, mcp, assistant, seed |
-| `expenses` | `ExpenseRead`, `ExpenseList`, `CreateExpense`, `UpdateExpense` + `ExpenseChanges`, `DeleteExpense` (with `expected_version`), `GetExpense`, `ListExpenses`, `GetMonthlySummary`, `GetMonthlyTrend` (+ their result types), `ExpenseId`, `MAX_LIST_LIMIT`, `MAX_NOTE_LENGTH`, `PaymentMethod`, `payment_method_label(method, language)`, `ExpenseText` | mcp, assistant (`PaymentMethod`, labels, the note's limit), seed |
+| `expenses` | `ExpenseRecorder` (saves an expense, fetching the rate to INR first for another currency, D204; the way REST and MCP save), `ExchangeRate`, `ExchangeRates`, `UnsupportedCurrencyError`, `RatesUnavailableError`, `ExpenseRead` (with the INR amount, rate and date), `ExpenseList`, `CreateExpense`, `UpdateExpense` + `ExpenseChanges`, `DeleteExpense` (with `expected_version`), `GetExpense`, `ListExpenses`, `GetMonthlySummary`, `GetMonthlyTrend` (+ their result types), `ExpenseId`, `MAX_LIST_LIMIT`, `MAX_NOTE_LENGTH`, `PaymentMethod`, `payment_method_label(method, language)`, `ExpenseText` | mcp, assistant (`PaymentMethod`, labels, the note's limit), seed |
 | `conversations` | `AppendTurn`, `GetLastTurn`, `GetHistory`, `GetThread`, `ThreadRead`, `ThreadId`, `THREAD_ID_MAX_LENGTH`, `ConversationText` (e.g. `THREAD_NOT_FOUND`) | assistant |
 | `mcp` | `ToolName`, `ResourceUri`, `SERVER_NAME`, `acting_for` and `act_for_process` (who a request acts for, D191), the argument names (`EXPENSE_ID_ARGUMENT`, `CONFIRM_ARGUMENT`, `EXPECTED_VERSION_ARGUMENT`, `CLEAR_NOTE_ARGUMENT`), the typed results (`ExpenseView`, `ExpenseSaved`, `MonthSpending`, ...). The server itself (`create_server`, `create_http_app`) comes from `mcp/module.py`, for the composition root only | assistant |
 | `receipts` | `ReceiptFiles` (an owner's receipt file: `content(owner_id, receipt_id)` → `ReceiptContent`, bytes and media type), `ReceiptContent`, `ReceiptRead`, `ReceiptId`, `ReceiptMediaType`, `MAX_RECEIPT_BYTES`, `ReceiptText`. Its `module.py` gives the composition root `create_files(bus, files)` and `create_router(bus, files)` | the assistant (sends a receipt attached in the chat to the receipt agent), the export script |
-| `assistant` | nothing for other modules; its `module.py` gives the composition root `create_router`, the `ExpenseTools` and `ReceiptReader` port types and their adapters | — |
+| `assistant` | nothing for other modules; its `module.py` gives the composition root `create_router` (which builds the receipt reader around the remote agents), the `ExpenseTools` port type and `McpExpenseTools` | — |
 | `accounts` | `UserId`, `CurrentUser`, `SignedInUser`, `SignInFailure`, `SignInParam`, `SIGN_IN_PAGE`, `CALLBACK_PATH`, `SESSION_LIFETIME`, `LOGIN_ATTEMPT_TTL`. Its `module.py` gives the composition root `create_session_gate(bus, identity, clock)` (the check main.py puts on `app.state.authenticate`), `create_router(bus, identity, sealer, config)` and `SignInConfig` | the composition root, the export script; Phase 23's per-user data will use `UserId` |
 
 Each module's `module.py` is what `bootstrap.py` plugs in: `register_handlers(bus)`, its router (or a function that
@@ -365,7 +367,7 @@ taken when it comes back, and the session written only after the provider has an
 
 Everything a test would want to replace can be passed in, without patching modules:
 
-- `bootstrap.build(clock=..., llm=..., tools=..., engine=..., files=..., identity=..., sealer=..., receipt_reader=...)`
+- `bootstrap.build(clock=..., llm=..., tools=..., engine=..., files=..., identity=..., sealer=..., agents=...)`
   builds the app's
   services around fakes, and `main.create_app(services)` serves them over HTTP (FastAPI's `TestClient` works directly
   on it; with `base_url="https://localhost"` it keeps the Secure session cookie). A fake identity provider signs a
@@ -410,23 +412,37 @@ Known limits, to address when the load calls for it (D174):
 
 ## The agents: separate services (`agents/`)
 
-**A2A agents run outside the monolith, each as its own process** (D12, D195). Today there is one: the receipt agent
-(`agents/receipt`, Phase 24), an A2A server on `127.0.0.1:9001` with one skill, `extract_receipt`.
+**A2A agents run outside the monolith, each as its own process** (D12, D195), started with `run-agent.ps1 <name>`:
+
+| Agent | Port | Skill | Model | Used by |
+|---|---|---|---|---|
+| `agents/receipt` (Phase 24) | 9001 | `extract_receipt` | Gemini, one call | the assistant, for a receipt attached in the chat |
+| `agents/currency` (Phase 25) | 9003 | `convert_currency` | none: a `RateProvider` (mock rates for now, D203) | the expenses module, to store every expense in INR too (D204) |
+
+**What they share is the agent kit** (`agents/agent_kit/`, D202): `AgentGate` (the key check, the request limit,
+no-store), `ForgetfulTaskStore`, `start_task`/`reject`/`fail`, the settings rules (one `.env`, `127.0.0.1` only, keys of
+32+ characters) and `build_agent_app`/`serve`. An agent is then only its contract, its work, its card and its
+settings.
+
+**The backend reaches them through one port**, `core/agents.RemoteAgents` (D201): `send(agent, skill, parts,
+artifact)` returns the finished task (its id, outcome, the artifact's data, the agent's message). `A2AAgents`
+(`infrastructure/a2a/`) fetches each agent's card, refuses one that doesn't offer the skill at the configured
+address, and sends the agent's key.
 
 - **A remote agent, not a module.** It has no database, no bus and no person: a client agent (the assistant's
   `A2AReceiptReader`, D199) sends a task (a receipt and the choices it may pick from), the agent works on it and
   answers with an artifact. Whatever the person's data
   needs (who owns the receipt, which categories exist, today's date) stays in the monolith and travels as data.
-- **Layout:** `contract.py` (what travels on the wire), `reader.py` (the model call), `executor.py` (the
-  AgentExecutor: task states and the artifact), `task_store.py`, `card.py`, `http.py` (the key check), `settings.py`,
-  and `server.py`, its composition root (`build_app(settings, llm)` takes any `StructuredOutputModel`, so a check
-  runs it with a fake).
-- **What it may import from the backend** (D196): `app.core` (the LLM port, the schema helpers, money's currency
-  pattern) and, in `server.py` only, the Gemini adapter and `setup_logging` from `app.infrastructure`. Never a module,
-  `web/`, `bootstrap`, `main` or the backend's settings: those are the monolith's, and an agent that needed them
-  would really be a module. Nothing in `backend/` imports `agents/`.
-- **Its own settings** (`AgentSettings`, the same `.env`), its own start script (`run-receipt-agent.ps1`, which puts
-  `backend` and `agents` on `PYTHONPATH`), its own logger (`receipt.*`).
+- **Layout of an agent:** `contract.py` (what travels on the wire), its work (`reader.py`, the model call;
+  `rates.py`, the rate provider), `executor.py` (the AgentExecutor: task states and the artifact), `card.py`,
+  `settings.py`, and `server.py`, its composition root (`build_app(...)` takes its collaborators, a model or a rate
+  provider and a clock, so a check runs it with fakes).
+- **What they may import from the backend** (D196): `app.core` (the LLM port, the schema helpers, money and its
+  conversion rule, the clock) and, in a `server.py` only, the Gemini adapter and `setup_logging` from
+  `app.infrastructure`. Never a module, `web/`, `bootstrap`, `main` or the backend's settings: those are the
+  monolith's, and an agent that needed them would really be a module. Nothing in `backend/` imports `agents/`.
+- **Its own settings** (`AgentSettings` on the kit's configuration, the same `.env`), its own logger (`receipt.*`,
+  `currency.*`); `run-agent.ps1` puts `backend` and `agents` on `PYTHONPATH`.
 
 ## The web app: Next.js and feature slices
 
@@ -588,7 +604,7 @@ Get-ChildItem backend\app\modules -Recurse -Filter *.py | Select-String -Pattern
 Get-ChildItem backend -Recurse -Filter *.py | Select-String -Pattern 'import module as' | Split-Path -Leaf | Sort-Object -Unique
 
 # 4. Only a composition root picks the LLM provider. Expect bootstrap.py, the adapter (infrastructure/llm/gemini.py)
-#    and the receipt agent's server.py.
+#    and the receipt agent's server.py (the currency agent uses no model).
 Get-ChildItem backend, agents -Recurse -Filter *.py | Select-String -Pattern 'llm\.gemini|from google'
 
 # 5. Inside the assistant, imports run api/ -> application/ -> agent/, approvals/, tools/, receipt_agent/, a2ui/,
@@ -618,15 +634,22 @@ Get-ChildItem backend\app, web\src -Recurse -Include *.py,*.ts,*.tsx | Select-St
 Get-ChildItem backend\app\modules\expenses, backend\app\modules\conversations, backend\app\modules\receipts,
   backend\app\modules\assistant -Recurse -Filter *.py | Select-String -Pattern 'session\.get\(' | Split-Path -Leaf
 
-# 10. The agents use only the backend's core/, and the Gemini adapter and logging in their server.py (D196); the
-#     backend never imports an agent. Expect no output from either.
+# 10. The agents (and the kit) use only the backend's core/, and the Gemini adapter and logging in a server.py (D196);
+#     the backend never imports an agent. Expect no output from any of the three.
 Get-ChildItem agents -Recurse -Filter *.py |
   Select-String -Pattern '^\s*(from|import)\s+app\.(modules|web|bootstrap|main|infrastructure\.config)\b'
 Get-ChildItem agents -Recurse -Filter *.py | Where-Object Name -NE server.py |
   Select-String -Pattern '^\s*(from|import)\s+app\.infrastructure\b'
-Get-ChildItem backend -Recurse -Filter *.py | Select-String -Pattern '^\s*(from|import)\s+receipt\b'
+Get-ChildItem backend -Recurse -Filter *.py |
+  Select-String -Pattern '^\s*(from|import)\s+(receipt|currency|agent_kit)\b'
 
 # 11. The agents import and compile on their own. Expect no output.
-$env:PYTHONPATH = "backend;agents"; .\.venv\Scripts\python.exe -c "import receipt.server"; Remove-Item Env:PYTHONPATH
+$env:PYTHONPATH = "backend;agents"; .\.venv\Scripts\python.exe -c "import receipt.server, currency.server"
+Remove-Item Env:PYTHONPATH
 .\.venv\Scripts\python.exe -m compileall -q agents
+
+# 12. Only infrastructure/a2a uses the A2A SDK in the backend (D201): modules use core/agents.RemoteAgents. Expect
+#     agents.py alone.
+Get-ChildItem backend\app -Recurse -Filter *.py | Select-String -Pattern '^\s*(from|import)\s+a2a\b' |
+  Split-Path -Leaf | Sort-Object -Unique
 ```

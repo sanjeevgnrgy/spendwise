@@ -200,15 +200,15 @@ bind to `/expense/<field>` in the data model, two-way, in the browser only. **Sa
 form's values in `forwardedProps`; the server writes them as the next message, labelled as data, and the model calls
 `add_expense`. The fields: amount, currency (INR unless known), category, merchant, date, payment method, note.
 
-**A receipt attached in the chat** (Phase 21, D183) is the third way a form appears. The browser uploads the file
-(`POST /receipts`), then sends the run with an AG-UI `image` or `document` part pointing at it
-(`{"type": "file", "value": "<id>", "provider": "spendwise-receipts"}`). The server doesn't run the agent:
-`application/receipt_turn.py` takes the file from the receipts module (`ReceiptFiles`, for its owner only) and has
-the **receipt agent** read it (Phase 24, D199): the assistant is the A2A client agent, `receipt_agent/a2a_client.py`
-fetches the agent's card, checks it, sends the file and the choices, and checks the answer as outside data. The
-reading shows as a chip of its own ("Asking the receipt agent…", then "Receipt read · A2A task 3f2a9c1e", D200).
-Then the reply and the built-in form, pre-filled from it (`metadata.source: "receipt"`), with the line items and tax
-summarised in the note. Save then goes to the agent like any form's.
+**A receipt attached in the chat** (Phase 21, D183) is the third way a form appears. The browser uploads the file (`POST
+/receipts`), then sends the run with an AG-UI `image` or `document` part pointing at it (`{"type": "file", "value":
+"<id>", "provider": "spendwise-receipts"}`). The server doesn't run the agent: `application/receipt_turn.py` takes the
+file from the receipts module (`ReceiptFiles`, for its owner only) and has the **receipt agent** read it (Phase 24,
+D199): the assistant is the A2A client agent: `receipt_agent/agent_reader.py`, through the remote-agents port (D201),
+fetches the agent's card, checks it, sends the file and the choices, and checks the answer as outside data. The reading
+shows as a chip of its own ("Asking the receipt agent…", then "Receipt read · A2A task 3f2a9c1e", D200). Then the reply
+and the built-in form, pre-filled from it (`metadata.source: "receipt"`), with the line items and tax summarised in the
+note. Save then goes to the agent like any form's.
 
 ```mermaid
 sequenceDiagram

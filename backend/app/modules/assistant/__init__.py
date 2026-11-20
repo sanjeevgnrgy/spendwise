@@ -12,8 +12,8 @@ Inside, one folder per role:
 - approvals/: the delete cards waiting for Approve or Cancel, as vertical slices (commands/: one file per
   command, holding the message and its handler), with their shapes (models.py) and table (persistence/);
 - tools/: the expense-tools port (port.py) and its MCP adapter (mcp_adapter.py);
-- receipt_agent/: the receipt-reading port (port.py) and its A2A adapter (a2a_client.py): the assistant as the
-  receipt agent's client (Phase 24);
+- receipt_agent/: the receipt-reading port (port.py) and its adapter (agent_reader.py): the assistant as the
+  receipt agent's client (Phase 24), through the remote-agents port (core/agents.py);
 - a2ui/: cards and forms (presentation); module.py: what the composition root plugs in.
 
 The guide to how these fit together is docs/assistant_architecture.md.

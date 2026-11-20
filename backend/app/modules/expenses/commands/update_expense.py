@@ -1,9 +1,10 @@
 """UpdateExpense: change some fields of one expense. The command, the ExpenseChanges it carries, and its handler.
 
-A slice of the expenses module's write side. module.py registers the handler with the bus; PATCH /expenses/{id}
-(api.py, whose body is ExpenseChanges) and MCP's update_expense send the command and never call the handler
-directly. The handler applies the business rules (domain/rules.py) to what changed, then edits the row it loads
-through persistence/repository.py. The bus commits; the handler never does.
+A slice of the expenses module's write side. module.py registers the handler with the bus; the recorder
+(application/record_expense.py, behind PATCH /expenses/{id}, whose body is ExpenseChanges, and MCP's update_expense)
+sends the command, with the rate when the result is in another currency, and never calls the handler directly. The
+handler applies the business rules (domain/rules.py, domain/base_amount.py) to what changed, then edits the row it
+loads through persistence/repository.py. The bus commits; the handler never does.
 """
 
 from datetime import date
@@ -15,10 +16,16 @@ from app.core.cqrs import Command, Context
 from app.core.ids import UserId
 from app.core.money import CurrencyCode, rupees_to_paise
 from app.modules.categories import CategoryId
+from app.modules.expenses.conversion.port import ExchangeRate
+from app.modules.expenses.domain.base_amount import base_amount_fields
 from app.modules.expenses.domain.rules import require_category_exists, require_positive_amount
 from app.modules.expenses.persistence import repository
 from app.modules.expenses.values import Amount, ExpenseId, Merchant, Note, PaymentMethod
 
+
+# The stored fields that decide the base amount: changing any of them converts the expense again (D204). The
+# handler sees the table's names, so the amount is amount_minor.
+CONVERTED_BY = frozenset({"amount_minor", "currency", "spent_on"})
 
 # What to change in an expense: UpdateExpense carries it, and PATCH /expenses/{id} takes it as the body.
 # Only a part of a command, not a Message itself, so it sets frozen and extra="forbid" on its own. Every
@@ -50,22 +57,24 @@ class ExpenseChanges(BaseModel):
         return self
 
 
-# Change some fields of one of the owner's expenses (PATCH /expenses/{id}, MCP's update_expense). The handler
-# raises NotFoundError for a missing expense, or one that isn't the owner's (D190), and BusinessRuleError for an
-# amount <= 0 or an unknown category, and raises the version by one. There's no expected_version: an update applies
-# to whatever is stored (last write wins); only deletes check the version.
+# Change some fields of one of the owner's expenses (PATCH /expenses/{id}, MCP's update_expense, through the
+# recorder). The handler raises NotFoundError for a missing expense, or one that isn't the owner's (D190), and
+# BusinessRuleError for an amount <= 0, an unknown category, or a change to the amount, currency or date of an
+# expense in another currency without its `rate` (to INR, for the currency it ends up in); it raises the version by
+# one. There's no expected_version: an update applies to whatever is stored (last write wins); only deletes check it.
 class UpdateExpense(Command[None]):
     owner_id: UserId
     expense_id: ExpenseId
     changes: ExpenseChanges
+    rate: ExchangeRate | None = None
 
 
 def update_expense(ctx: Context, command: UpdateExpense) -> None:
     """Change the fields the caller sent and raise the expense's version by one.
 
-    Raises NotFoundError if the owner has no such expense, and BusinessRuleError for an amount that isn't above
-    zero or a category that doesn't exist. Sending "note": null clears the note. The version isn't
-    checked here: an update always applies to what's stored now.
+    Raises NotFoundError if the owner has no such expense, and BusinessRuleError for an amount that isn't above zero, a
+    category that doesn't exist, or a new amount, currency or date in another currency without its rate. Sending "note":
+    null clears the note. The version isn't checked here: an update always applies to what's stored now.
     """
     expense = repository.get(ctx.session, command.owner_id, command.expense_id)
     # Only the fields the caller actually sent; anything left out stays as it was.
@@ -79,6 +88,11 @@ def update_expense(ctx: Context, command: UpdateExpense) -> None:
         require_category_exists(ctx, changes["category_id"])
     for field, value in changes.items():
         setattr(expense, field, value)
+    # A new amount, currency or date means a new base amount (D204): worked out from what the expense is now.
+    if CONVERTED_BY.intersection(changes):
+        conversion = base_amount_fields(expense.amount_minor, expense.currency, expense.spent_on, command.rate)
+        for field, value in conversion.items():
+            setattr(expense, field, value)
     # Every update raises the version (even one with no changes, like an empty PATCH body), so a delete
     # that names the old one (DeleteExpense.expected_version) is refused instead of removing something the
     # user hasn't seen.

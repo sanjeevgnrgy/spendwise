@@ -1,7 +1,7 @@
 # Sources: what the official docs and libraries say
 
-The facts that Phases 14 to 24 and the refactors are built on: where each came from, what it says, and what SpendWise does with it.
-Earlier phases' doc facts are in [gemini.md](gemini.md) and the phase notes.
+The facts that Phases 14 to 25 and the refactors are built on: where each came from, what it says, and what SpendWise
+does with it. Earlier phases' doc facts are in [gemini.md](gemini.md) and the phase notes.
 
 All checked on **2026-11-13**. Each fact is marked with where it came from:
 
@@ -838,6 +838,22 @@ Checked on 2026-11-20.
 state and artifacts) as the last item of `send_message`.
 
 **Used in:** `agents/receipt/`, D195–D198.
+
+---
+
+## 33. A2A: the version header, and numbers in data parts (Phase 25)
+
+Checked on 2026-11-20.
+
+**Package** (`.venv/Lib/site-packages/a2a/`, 1.3.1):
+- `utils/constants.py`: `VERSION_HEADER = 'A2A-Version'`. **Observed:** a JSON-RPC request without it is answered
+  `-32009` "A2A version '0.3' is not supported by this handler. Expected version '1.0'."; the SDK's own client sends
+  it, so only hand-written requests (curl, a check) need `A2A-Version: 1.0`.
+- `helpers/proto_helpers.py` (`new_data_part`, `get_data_parts`): data parts are `google.protobuf.Value`, so whole
+  numbers come back as floats; the currency agent's amounts and rates travel as decimal strings (D203).
+- **Observed:** the agent's JSON answers are compact (`"from_currency":"USD"`, no space after the colon).
+
+**Used in:** `agents/currency/contract.py`, `backend/app/modules/expenses/conversion/currency_agent.py`, D203, D204.
 
 ---
 

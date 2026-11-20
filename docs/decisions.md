@@ -194,6 +194,8 @@ add a new entry and mark the old one **Superseded by D<n>**.
 - The database adds up the totals (`GROUP BY`); category names come from the categories module's public interface.
 - A category id with no matching category shows as "Unknown" instead of failing (possible because there's no foreign key).
 - Categories are listed biggest spend first. Categories with no spending that month are left out.
+- **Superseded by D204:** every expense is also stored in INR, and the summary and trend add up the INR amounts of every
+  currency; the `currency` parameter is gone.
 
 ### D33. `DELETE` is permanent and returns 204
 - No "are you sure?" at the API level. Confirmation is the assistant's job (project safety rule: confirm before deletes).
@@ -2348,6 +2350,8 @@ is natural. It's still a soft, model-judged guard.
   thing to start (`run-receipt-agent.ps1`). Part 2 makes the assistant need it.
 - **Revisit:** streaming (WORKING updates) if readings get slow enough to show progress; a URL part instead of bytes
   if the agent moves away from the files (it would need its own way to fetch them, with the owner checked).
+- **Updated by D202:** the key check, task store and web app moved into the shared agent kit; `run-receipt-agent.ps1`
+  became `run-agent.ps1 receipt`.
 
 ### D196. The agent reuses the backend's LLM port and Gemini adapter, never its modules
 - **What:** `agents/receipt` imports `app.core` (the `StructuredOutputModel` port, `Attachment`, `LlmError`,
@@ -2376,6 +2380,8 @@ is natural. It's still a soft, model-judged guard.
 - **Chosen with the owner:** localhost plus a key, rather than localhost alone.
 - **Revisit:** TLS or mTLS, and a rotatable key, before the agent and the backend run on different machines
   (security.md, "Not done yet").
+- **Updated by D202:** `AgentGate` is the agent kit's (`agent_kit/http.py`), with each agent's own key and request
+  limit.
 
 ### D198. The agent's task store keeps no file and few tasks
 - **What:** `ForgetfulTaskStore` wraps the SDK's `InMemoryTaskStore`: each task is saved with its history's file
@@ -2385,6 +2391,7 @@ is natural. It's still a soft, model-judged guard.
   ever read would stay in memory, 5 MB at a time. The agent has no reason to keep any: the client gets the answer in
   the `SendMessage` response.
 - **Trade-off:** `GetTask` for an older task answers "not found"; no client of ours asks.
+- **Updated by D202:** `ForgetfulTaskStore` is the agent kit's (`agent_kit/task_store.py`), used by every agent.
 
 ### D199. The assistant is the receipt agent's client: a port, an A2A adapter, and the answer checked again
 - **What:**
@@ -2431,6 +2438,8 @@ is natural. It's still a soft, model-judged guard.
   from the chat through the agent to Gemini is to be tried by the owner.
 - **Revisit:** caching the card (it's fetched for every reading: one small local request); streaming the task's
   states into the chip if readings get slow.
+- **Updated by D201:** the A2A SDK code moved to `infrastructure/a2a/` behind `core/agents.RemoteAgents`; the
+  assistant's adapter is now `agent_reader.AgentReceiptReader`, with the same checks.
 
 ### D200. A remote agent's task in the chip: `metadata.detail` on TOOL_CALL_RESULT
 - **What:** the reading is shown as a tool call named `read_receipt` (`receipt_agent/port.READ_RECEIPT`) with its own
@@ -2443,3 +2452,86 @@ is natural. It's still a soft, model-judged guard.
   the result, not with TOOL_CALL_START's labels. A generic `detail` keeps the browser free of tool names, as the
   labels do. Eight characters are enough to find the task in the agent's log.
 - **D180:** the id is the agent's, so it's shown only if it matches `[A-Za-z0-9_-]{1,64}`, inside our own sentence.
+
+---
+
+## More A2A agents (Phase 25)
+
+> A currency agent (and, in Part 2, an insights agent) beside the receipt agent; every expense stored in INR too; and
+> (Part 3) the assistant choosing which agent to ask. Built in three parts by the owner's choice. Phase note:
+> [phases/phase-25-more-agents.md](phases/phase-25-more-agents.md).
+
+### D201. One port for remote agents, one A2A adapter in infrastructure
+- **What:** `core/agents.py` is the remote-agents port: `RemoteAgents.send(agent, skill, parts, artifact)` sends a
+  file, data or text part to an agent by name and returns the finished `AgentTask` (its id and context id, a
+  `TaskOutcome`, the data of the artifacts with that name, the status message's text), or raises
+  `AgentUnavailableError`. `infrastructure/a2a/A2AAgents` is its one adapter, the only backend code that imports the
+  A2A SDK (scan 12): per message it fetches the card, refuses one that doesn't offer the skill over JSON-RPC at the
+  configured address, sends one non-streaming `SendMessage` with the agent's key and `historyLength: 0`, in its own
+  event loop with a 150 s limit. The composition root builds it from `AgentEndpoint`s (`RECEIPT_AGENT_URL`/`KEY`,
+  `CURRENCY_AGENT_URL`/`KEY`); `bootstrap.build(agents=...)` replaces Phase 24's `receipt_reader` seam.
+- **Why:** with a second client (the expenses module, D204) the SDK code of D199 would have been copied into another
+  module; the rules already put protocol adapters in `infrastructure/` behind a `core/` port (the model, sign-in), so
+  modules depend only on what they ask. Each module keeps its own adapter onto the port, with its own checks of the
+  answer (`AgentReceiptReader`, `CurrencyAgentRates`). Part 3's orchestrator will use the same port.
+- **Verified:** the receipt flow gives the same events, stored turn and model input as recorded in Phase 24 (the same
+  32 checks), through the port and the real agent app in-process.
+
+### D202. A shared agent kit
+- **What:** `agents/agent_kit/`: `AgentGate` (the key check, a per-agent request limit from `request_limit(largest
+  file)`, no-store), `ForgetfulTaskStore`, `start_task`/`reject`/`fail`, the settings rules (`AGENT_SETTINGS_CONFIG`,
+  `HOST`, `long_enough`, `agent_url`) and `build_agent_app(card, executor, key, limit)`/`serve`. The receipt agent was
+  moved onto it unchanged in behaviour; `run-agent.ps1 <name>` starts any agent.
+- **Why:** a second agent would otherwise copy the gate, the store and the wiring; an agent is now only its contract,
+  its work, its card and its settings.
+
+### D203. The currency agent: one skill, no model, rates behind a provider interface
+- **What:** `agents/currency` on `127.0.0.1:9003` (`CURRENCY_AGENT_KEY`, `CURRENCY_AGENT_PORT`). One skill,
+  `convert_currency`: one data part `ConversionRequest {amount, from_currency, to_currency, on?}` or one line of text
+  ("4 USD to INR on 2026-11-19"); the `conversion` artifact holds the amount, both currencies, the rate and its date as
+  decimal strings, the converted amount (two decimals) and the rate's `source`. A currency without a rate, or a request
+  that isn't one, is REJECTED. No date means today (the injected clock); a future date is read as today. Rates come
+  from a `RateProvider`; today `MockRateProvider`: fixed, made-up INR values for ten currencies, any pair through
+  INR, cross rates kept to 10 places. The arithmetic is `core.money.convert_minor`, the backend's own rule.
+- **Why an agent with no model:** the prompt asks for it, and A2A doesn't need a model: the agent is an independent
+  service with a card, a skill and tasks, which Part 3's orchestrator can discover. A real rate API later is one
+  class with `rate(from, to, on)`, chosen in `currency/server.create_app`.
+- **Chosen with the owner:** a mock provider behind an interface.
+- **Revisit:** a real provider before relying on INR amounts of foreign expenses (security.md, "Not done yet").
+
+### D204. Every expense is stored in INR too: converted on the server, on every save
+- **What:**
+  - **Table** (migration 0008): `expense.base_amount_minor`, `exchange_rate` (exact, as text) and `rate_date`,
+    nullable. Existing INR rows are filled in; other currencies stay null (left out of totals until edited).
+  - **Where it's converted:** `ExpenseRecorder` (`expenses/application/record_expense.py`), the way POST/PATCH
+    `/expenses` and MCP's `add_expense`/`update_expense` save. For a currency other than INR it asks `ExchangeRates`
+    (`expenses/conversion/`; the adapter `CurrencyAgentRates` asks the currency agent through D201's port) for the rate
+    of **1 unit** on the expense's date, then sends `CreateExpense`/`UpdateExpense` with it. An update asks again only
+    if the amount, currency or date changes. INR needs no rate and no call.
+  - **The handlers** apply `domain/base_amount.py`: INR is its own base (rate 1, its own date); otherwise the command
+    must carry a rate for that same currency (else a 422 "couldn't be converted, try again": it changed meanwhile), and
+    the INR paise are `core.money.convert_minor(amount_minor, rate)`, rounded half up, the one place a conversion
+    rounds.
+  - **Totals:** the summary and the trend add up `base_amount_minor` across currencies, always in INR (D32 superseded:
+    its `currency` parameter, and MCP `get_summary`'s, are gone).
+  - **What callers see:** `ExpenseRead` gains `base_amount_minor`, `base_amount`, `exchange_rate`, `rate_date`; MCP's
+    `ExpenseView` gains `amount_in_inr` (the model reads it); the web app shows "≈ ₹338.00" under a foreign amount, with
+    the rate and day in its title, and sorts the amount column by the INR amount.
+  - **Refusals:** a currency the agent has no rate for is a 422 ("SpendWise can't convert XYZ to INR yet"); the agent
+    unavailable or answering something unusable (another currency, a non-decimal rate, a later day) is a 502
+    ("Currency conversion isn't available right now"); nothing is saved. English and Hindi.
+- **Why on the server, every save (chosen with the owner):** one rule for every door (REST, MCP, the assistant), not
+  left to a model's choice; refusing when no rate can be had keeps every saved expense in the totals.
+- **Why 1 unit:** the currency agent never learns an expense's amount, merchant or person; the backend multiplies.
+- **How it was verified:** with the real currency agent in-process (fake clock) through the HTTP API and MCP, 35
+  checks: both amounts stored ($4.00 → ₹338.00 at 84.5 on the day); the agent got only 1 unit, the currencies and the
+  day; INR made no call; rounding half up (¥1.10 × 0.55 → ₹0.61); summary and trend in INR across currencies; updates
+  re-convert only for amount, currency or date, and back to INR becomes rate 1; a future date at today's rate; XYZ a
+  422 (English, Hindi); no key, a wrong key, the agent down, a card at another address and an answer for another
+  currency each a 502 with nothing saved, while INR still saves; MCP add and update convert, an unknown currency is a
+  tool error, `get_summary` has no currency; the agent answers text requests and refuses others. Recorded before and
+  after: every INR response and summary identical apart from the new fields; the MCP tools change only as intended.
+  Migration 0008 up, down and up on a copy of the database, `alembic check` clean, and its backfill checked on a
+  scratch database. Over real sockets, the backend's adapter got USD and EUR rates from the running agent, XYZ refused
+  and a wrong key "not available".
+- **Revisit:** converting old foreign expenses in bulk once a real provider exists; the rate's source stored too.

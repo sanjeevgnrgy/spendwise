@@ -1,7 +1,7 @@
-"""The receipt agent's task store: the SDK's in-memory store, keeping a few recent tasks and never a file's bytes.
+"""Every agent's task store: the SDK's in-memory store, keeping a few recent tasks and never a file's bytes.
 
-Infrastructure of the receipt agent, given to the request handler by the composition root (server.py). The SDK's
-InMemoryTaskStore keeps every task until the process stops, with its history, and the history holds the request:
+Part of the agent kit, given to each agent's request handler by server.build_agent_app. The SDK's InMemoryTaskStore
+keeps every task until the process stops, with its history, and the history holds the request: for the receipt agent,
 a receipt's bytes, up to 5 MB each. This store (D198) replaces each file part's bytes with a short note before a
 task is kept, and keeps only the MAX_KEPT_TASKS most recent tasks, so the agent holds no receipt once it has
 answered and its memory stays bounded. A client still gets each task's states and artifact as they happen.

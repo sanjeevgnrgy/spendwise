@@ -23,6 +23,7 @@ def to_view(expense: expenses.ExpenseRead, names: dict[int, str]) -> ExpenseView
         id=expense.id,
         amount=expense.amount,
         currency=expense.currency,
+        amount_in_inr=expense.base_amount,
         category=names.get(expense.category_id, categories.UNKNOWN_CATEGORY),
         merchant=expense.merchant,
         note=expense.note,

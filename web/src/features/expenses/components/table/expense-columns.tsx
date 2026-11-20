@@ -16,7 +16,8 @@ import {
 } from "@tanstack/react-table"
 import { Pencil, Trash2 } from "lucide-react"
 
-import { formatDate, formatMoney } from "@/shared/lib/format"
+import { ExpenseMoney } from "@/shared/components/money"
+import { formatDate } from "@/shared/lib/format"
 import { Badge } from "@/shared/ui/badge"
 import { Button } from "@/shared/ui/button"
 import { Checkbox } from "@/shared/ui/checkbox"
@@ -132,12 +133,21 @@ function dataColumns({ categoryName, t }: Pick<ExpenseColumnOptions, "categoryNa
       header: sortableHeader(t("fields.category")),
       sortFn: sortFn_alphanumeric,
     }),
-    // Sort by the paise value (a whole number), but display the rupee string.
-    columnHelper.accessor("amount_minor", {
+    // Sort by the INR amount in paise (D204), so $4 and ₹100 compare by what they're worth; an expense not converted
+    // yet sorts by its own amount. Shown in its own currency, with the INR amount under it.
+    columnHelper.accessor((expense) => expense.base_amount_minor ?? expense.amount_minor, {
       id: "amount",
       header: sortableHeader(t("fields.amount"), "end"),
       cell: ({ row }) => (
-        <div className="text-right tabular-nums">{formatMoney(row.original.amount, row.original.currency)}</div>
+        <div className="text-right tabular-nums">
+          <ExpenseMoney
+            amount={row.original.amount}
+            currency={row.original.currency}
+            baseAmount={row.original.base_amount}
+            rate={row.original.exchange_rate}
+            rateDate={row.original.rate_date}
+          />
+        </div>
       ),
       sortFn: sortFn_basic,
     }),

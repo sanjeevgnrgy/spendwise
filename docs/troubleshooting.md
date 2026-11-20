@@ -174,15 +174,28 @@ is in the backend terminal (D180).
 
 ### Attaching a receipt says "The receipt reader isn't available right now."
 - **Cause:** the backend couldn't use the receipt agent (Phase 24). Its log has a WARNING line from
-  `receipt_agent.a2a_client` saying why: `RECEIPT_AGENT_KEY isn't set`; a connection error (the agent isn't running,
-  or `RECEIPT_AGENT_URL` points elsewhere); a 401 (the two sides have different keys); or "the card ... doesn't offer
-  extract_receipt ... at that address" (`RECEIPT_AGENT_URL` and the agent's `RECEIPT_AGENT_PORT` disagree).
-- **Fix:** set `RECEIPT_AGENT_KEY` in `.env`, start `.\run-receipt-agent.ps1`, and restart the backend after changing
+  `infrastructure.a2a.agents` saying why ("agent receipt ... unavailable"): `RECEIPT_AGENT_KEY isn't set`; a connection
+  error (the agent isn't running, or `RECEIPT_AGENT_URL` points elsewhere); a 401 (the two sides have different keys);
+  or "the card ... doesn't offer extract_receipt ... at that address" (`RECEIPT_AGENT_URL` and the agent's
+  `RECEIPT_AGENT_PORT` disagree).
+- **Fix:** set `RECEIPT_AGENT_KEY` in `.env`, start `.\run-agent.ps1 receipt`, and restart the backend after changing
   `.env`.
 
 ### The receipt agent won't start: "receipt_agent_key ... Field required" or "at least 32 characters"
 - **Fix:** add `RECEIPT_AGENT_KEY` to `.env` (make one with
   `python -c "import secrets; print(secrets.token_urlsafe(32))"`). The agent refuses to run without a key, on purpose.
+
+### Saving an expense in USD (or another currency) says "Currency conversion isn't available right now"
+- **Cause:** the backend couldn't get a rate from the currency agent (Phase 25). Its log names why: "agent currency
+  ... unavailable" (not running, a 401 for different keys, a card at another address) or "currency agent's answer
+  unusable".
+- **Fix:** set `CURRENCY_AGENT_KEY` in `.env`, start `.\run-agent.ps1 currency`, and restart the backend. Expenses in
+  INR never need it.
+
+### "SpendWise can't convert XYZ to INR yet"
+- **Cause:** the currency agent has no rate for that currency (the mock knows INR, USD, EUR, GBP, AED, SGD, AUD, CAD,
+  CHF and JPY: `currency/rates.py`).
+- **Fix:** enter the amount in INR, or add the currency's rate to the provider.
 
 ### Attaching a receipt says "The file for receipt … is missing. Upload it again."
 - **Cause:** the row exists, but its file isn't in `UPLOADS_DIR`: the folder was emptied or moved, or the database

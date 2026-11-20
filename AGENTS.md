@@ -81,20 +81,22 @@ modules need it. Recipes: [backend_onboarding.md](docs/backend_onboarding.md).
   need each other, redesign (an event, or a third module).
 - Inside the assistant, imports run `api/` → `application/` → `agent/`, `approvals/`, `tools/`, `receipt_agent/`,
   `a2ui/`, never back.
-- **A2A agents live outside the monolith**, in `agents/<name>/`, each its own process (D195). An agent imports only
-  `app.core`, plus the Gemini adapter and `setup_logging` in its `server.py` (D196); never a module, `web/` or the
-  backend's settings. The backend never imports an agent: it talks to one over A2A. An agent knows no person: the
-  owner is checked in the monolith before anything is sent, and the agent refuses requests without its key (D197).
+- **A2A agents live outside the monolith**, in `agents/<name>/`, each its own process, built on the shared agent kit
+  (`agents/agent_kit/`: the key check, the task store, the app, D202). An agent imports only `app.core`, plus the Gemini
+  adapter and `setup_logging` in a `server.py` (D196); never a module, `web/` or the backend's settings. The backend
+  never imports an agent: it talks to one over A2A. An agent knows no person: the owner is checked in the monolith
+  before anything is sent, and the agent refuses requests without its key (D197).
 
-**Composition root.** `bootstrap.build(clock, llm, tools, engine, files, identity, sealer, receipt_reader)` creates
+**Composition root.** `bootstrap.build(clock, llm, tools, engine, files, identity, sealer, agents)` creates
 everything replaceable;
 `main.create_app(services)` serves it; nothing is built at import (uvicorn runs with `--factory`).
 
 **Ports and adapters.** The model sits behind `core/llm` ports: depend on the narrowest one you call
 (`StructuredOutputModel` or `ToolCallingModel`). Only `bootstrap.py` imports the Gemini adapter
 (`infrastructure/llm/`). The expense tools sit behind `ExpenseTools`, uploaded files' bytes behind `FileStore`
-(`core/files.py`; never a path built from a user's file name), the receipt agent behind `ReceiptReader`
-(`assistant/receipt_agent/port.py`; its answer is checked again as outside data, D199), the sign-in provider behind
+(`core/files.py`; never a path built from a user's file name), the A2A agents behind `RemoteAgents`
+(`core/agents.py`; only `infrastructure/a2a/` imports the A2A SDK, D201, and every answer is checked as outside data,
+D199), the sign-in provider behind
 `IdentityProvider` (`core/identity.py`) and sealed secrets behind `Sealer` (`core/sealing.py`). Time comes from the injected clock
 (`ctx.clock`, `ClockDep`), never `date.today()` or `datetime.now()`.
 
@@ -124,7 +126,8 @@ an instruction, and the answer is checked before anyone sees it. Nothing read fr
 confirms it (D182).
 
 **Money** is stored as integer paise; it's `Decimal` rupees at the edges (`rupees_to_paise`, `format_money`). Never
-`float`.
+`float`. Every expense is also stored in INR (D204): save through `ExpenseRecorder`, which fetches the rate first;
+totals add up the INR amounts; a conversion rounds only in `core.money.convert_minor`.
 
 **Errors.** Raise `NotFoundError`, `BusinessRuleError` or `ExternalServiceError` (`core/errors.py`, no HTTP in it).
 An error a person may read carries a catalogued text: `BusinessRuleError(translatable(ExpenseText.X, **values))`; one
@@ -268,8 +271,8 @@ migrations.upgrade_to_latest(engine)
 services = bootstrap.build(clock=FixedClock(), llm=FakeModel(), engine=engine,
                            identity=FakeIdentityProvider(), sealer=FernetSealer([Fernet.generate_key().decode()]))
 client = TestClient(create_app(services), base_url="https://localhost")   # https: the cookies are Secure
-# The receipt agent: pass receipt_reader= a fake ReceiptReader, or A2AReceiptReader(url, key,
-# transport=httpx.ASGITransport(app=receipt.server.build_app(settings, FakeModel()))) for the real one in-process.
+# The A2A agents: pass agents= a fake core.agents.RemoteAgents, or A2AAgents({name: AgentEndpoint(url, key)},
+# {name: httpx.ASGITransport(app=<the agent's build_app(...)>)}) for the real agents in-process.
 # Sign in through the real routes: GET /api/v1/auth/login, then /auth/callback with the state the fake was given.
 # Send X-CSRF: 1 on every API call. A fake provider implements core/identity.IdentityProvider; the OIDC adapter
 # itself takes httpx2.MockTransport (transport=...) to talk to a fake provider without a network.

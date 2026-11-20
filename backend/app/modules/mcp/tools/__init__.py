@@ -1,4 +1,4 @@
-"""The MCP tools, one file per tool, each with the register_<tool>(server, bus, views) function that adds it.
+"""The MCP tools, one file per tool, each with the register_<tool>(server, context) function that adds it.
 
 Part of the mcp adapter. server.py lists the registrars in TOOL_REGISTRARS, in the order clients list the
 tools; support.py holds what they share (argument types, annotations, the error rules, the contract check).

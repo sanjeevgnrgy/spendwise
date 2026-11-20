@@ -509,48 +509,6 @@
       }
     },
     "/api/v1/expenses/{expense_id}": {
-      "get": {
-        "tags": [
-          "expenses"
-        ],
-        "summary": "Get Expense",
-        "operationId": "get_expense_api_v1_expenses__expense_id__get",
-        "parameters": [
-          {
-            "name": "expense_id",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "integer",
-              "maximum": 9223372036854775807,
-              "minimum": 1,
-              "title": "Expense Id"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "Successful Response",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ExpenseRead"
-                }
-              }
-            }
-          },
-          "422": {
-            "description": "Validation Error",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            }
-          }
-        }
-      },
       "patch": {
         "tags": [
           "expenses"
@@ -580,6 +538,48 @@
             }
           }
         },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ExpenseRead"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "get": {
+        "tags": [
+          "expenses"
+        ],
+        "summary": "Get Expense",
+        "operationId": "get_expense_api_v1_expenses__expense_id__get",
+        "parameters": [
+          {
+            "name": "expense_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "maximum": 9223372036854775807,
+              "minimum": 1,
+              "title": "Expense Id"
+            }
+          }
+        ],
         "responses": {
           "200": {
             "description": "Successful Response",
@@ -659,20 +659,6 @@
               ],
               "title": "Month"
             }
-          },
-          {
-            "name": "currency",
-            "in": "query",
-            "required": false,
-            "schema": {
-              "type": "string",
-              "pattern": "^[A-Z]{3}$",
-              "examples": [
-                "INR"
-              ],
-              "default": "INR",
-              "title": "Currency"
-            }
           }
         ],
         "responses": {
@@ -717,20 +703,6 @@
               "minimum": 1,
               "default": 6,
               "title": "Months"
-            }
-          },
-          {
-            "name": "currency",
-            "in": "query",
-            "required": false,
-            "schema": {
-              "type": "string",
-              "pattern": "^[A-Z]{3}$",
-              "examples": [
-                "INR"
-              ],
-              "default": "INR",
-              "title": "Currency"
             }
           }
         ],
@@ -2015,9 +1987,55 @@
             "type": "integer",
             "title": "Version"
           },
+          "base_amount_minor": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Base Amount Minor"
+          },
+          "exchange_rate": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Exchange Rate"
+          },
+          "rate_date": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Rate Date"
+          },
           "amount": {
             "type": "string",
             "title": "Amount",
+            "readOnly": true
+          },
+          "base_amount": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Base Amount",
             "readOnly": true
           }
         },
@@ -2033,7 +2051,11 @@
           "payment_method",
           "created_at",
           "version",
-          "amount"
+          "base_amount_minor",
+          "exchange_rate",
+          "rate_date",
+          "amount",
+          "base_amount"
         ],
         "title": "ExpenseRead",
         "description": "An expense as callers see it: everything stored, plus the amount in rupees for display."

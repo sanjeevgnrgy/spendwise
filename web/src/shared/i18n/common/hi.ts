@@ -36,6 +36,10 @@ const hi: Translation<typeof en> = {
     sidebarTitle: "साइडबार",
     sidebarDescription: "मोबाइल साइडबार दिखाता है।",
   },
+  money: {
+    inBase: "≈ {{amount}}",
+    inBaseLabel: "{{currency}} में {{amount}}, {{date}} की दर {{rate}} पर",
+  },
   language: {
     change: "भाषा बदलें",
     loadFailed: "{{language}} में नहीं बदला जा सका। अपना कनेक्शन जाँचकर फिर से कोशिश करें।",

@@ -7,7 +7,8 @@ import { useCategoryName } from "@/features/categories"
 import type { Expense } from "@/features/expenses"
 import { EmptyState } from "@/shared/components/empty-state"
 import { ROUTES } from "@/shared/config/routes"
-import { formatDate, formatMoney } from "@/shared/lib/format"
+import { ExpenseMoney } from "@/shared/components/money"
+import { formatDate } from "@/shared/lib/format"
 import { Button } from "@/shared/ui/button"
 import { Card, CardAction, CardContent, CardDescription, CardHeader, CardTitle } from "@/shared/ui/card"
 
@@ -47,7 +48,13 @@ export function RecentExpenses({ expenses }: { expenses: Expense[] }) {
                   </p>
                 </div>
                 <span className="shrink-0 font-medium tabular-nums">
-                  {formatMoney(expense.amount, expense.currency)}
+                  <ExpenseMoney
+                    amount={expense.amount}
+                    currency={expense.currency}
+                    baseAmount={expense.base_amount}
+                    rate={expense.exchange_rate}
+                    rateDate={expense.rate_date}
+                  />
                 </span>
               </li>
             ))}

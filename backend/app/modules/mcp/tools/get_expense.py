@@ -11,18 +11,18 @@ So those stay exactly as they are, and notes about the tool are `#` comments, no
 
 from mcp.server.mcpserver import MCPServer
 
-from app.core.cqrs import MessageBus
 from app.modules.mcp.caller import current_caller
 from app.modules.mcp.contracts import EXPENSE_ID_ARGUMENT, ExpenseFound, ToolName
 from app.modules.mcp.tools.support import READS_ONLY, ExpenseIdArg, require_arguments, tool_errors
-from app.modules.mcp.views import ExpenseViews
+from app.modules.mcp.tools.context import ToolContext
 
 
-def register_get_expense(server: MCPServer, bus: MessageBus, views: ExpenseViews) -> None:
+def register_get_expense(server: MCPServer, context: ToolContext) -> None:
     """Add the get_expense tool: one expense by id, or a "not found" tool error.
 
     Raises RuntimeError at start-up if the tool lacks the argument the contract names (expense_id).
     """
+    bus, views = context.bus, context.views
 
     # The assistant calls it to show an expense (and its version) before a delete is approved.
     @server.tool(

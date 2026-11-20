@@ -218,11 +218,19 @@ one yet); names are unique ignoring letter case.
   "spent_on": "2026-11-12",
   "payment_method": "upi",
   "created_at": "2026-11-13T09:14:02.511Z",
-  "version": 1
+  "version": 1,
+  "base_amount_minor": 45050,
+  "base_amount": "450.50",
+  "exchange_rate": "1",
+  "rate_date": "2026-11-12"
 }
 ```
 
 - `payment_method`: one of `cash`, `upi`, `card`, `netbanking`, `wallet`, `other`.
+- **Every expense is also kept in INR** (Phase 25, D204): `base_amount` (and `base_amount_minor`), the `exchange_rate`
+  it was converted at (a decimal string; `"1"` for INR) and the rate's day `rate_date`. A $4.00 coffee on 19 Nov:
+  `"amount": "4.00", "currency": "USD", "base_amount": "338.00", "exchange_rate": "84.5", "rate_date": "2026-11-19"`.
+  All three are `null` only for an expense in another currency saved before Phase 25 (it's converted when edited).
 - `version` goes up by one on every change (optimistic concurrency: see the MCP `delete_expense` tool).
 
 ### `POST /api/v1/expenses`
@@ -250,7 +258,7 @@ Records an expense for the signed-in person. **201 Created** with the expense, a
 | `spent_on` | required date |
 | `payment_method` | required; one of the six |
 | `note` | optional; up to 500 characters |
-| `currency` | optional; three capital letters, default `INR` |
+| `currency` | optional; three capital letters, default `INR`. Any other currency is converted to INR by the currency agent before saving (D204): **422** `business-rule` if it has no rate for it ("SpendWise can't convert XYZ to INR yet"), **502** if it can't be reached; nothing is saved |
 
 ### `GET /api/v1/expenses`
 
@@ -283,7 +291,8 @@ Changes only the fields you send; anything left out stays. Answers with the upda
 {"amount": "300", "note": null}
 ```
 
-- Same rules as creating. `note` is the only field that can be `null` (it clears the note); `null` for any other field
+- Same rules as creating. A new `amount`, `currency` or `spent_on` converts the expense to INR again (other fields don't
+  call the currency agent). `note` is the only field that can be `null` (it clears the note); `null` for any other field
   is a 422 ("leave a field out to keep it as it is").
 
 ### `DELETE /api/v1/expenses/{expense_id}`
@@ -292,9 +301,10 @@ Deletes for good. **204 No Content**, or 404. (The web app asks "are you sure?" 
 
 ## Summaries
 
-### `GET /api/v1/summary?month=2026-11&currency=INR`
+### `GET /api/v1/summary?month=2026-11`
 
-One month's spending in one currency (totals can't mix currencies), biggest category first.
+One month's spending in INR, biggest category first. Every expense counts, at its INR amount, whatever its currency
+(D204; the `currency` parameter of D32 is gone).
 
 ```json
 {
@@ -308,10 +318,10 @@ One month's spending in one currency (totals can't mix currencies), biggest cate
 
 A category that no longer exists shows as `"Unknown"`.
 
-### `GET /api/v1/summary/trend?months=6&currency=INR`
+### `GET /api/v1/summary/trend?months=6`
 
 Totals for the last `months` months (1–24, default 6), ending with the current month, oldest first. Months with no
-spending are included with 0, so a chart has no gaps.
+spending are included with 0, so a chart has no gaps. In INR, like the summary.
 
 ```json
 {"currency": "INR", "months": [{"month": "2026-06", "expense_count": 0, "total_minor": 0, "total": "0.00"}]}

@@ -15,7 +15,6 @@ from typing import Annotated
 from mcp.server.mcpserver import MCPServer
 from pydantic import Field
 
-from app.core.cqrs import MessageBus
 from app.core.errors import BusinessRuleError
 from app.modules import expenses
 from app.modules.mcp.caller import current_caller
@@ -27,15 +26,16 @@ from app.modules.mcp.contracts import (
     ToolName,
 )
 from app.modules.mcp.tools.support import CHANGES_DATA, ExpenseIdArg, require_arguments, tool_errors
-from app.modules.mcp.views import ExpenseViews
+from app.modules.mcp.tools.context import ToolContext
 
 
-def register_delete_expense(server: MCPServer, bus: MessageBus, views: ExpenseViews) -> None:
+def register_delete_expense(server: MCPServer, context: ToolContext) -> None:
     """Add the delete_expense tool: delete one expense (DeleteExpense) and answer with what was deleted.
 
     Raises RuntimeError at start-up if the tool lacks an argument the contract names (expense_id,
     confirmed, expected_version).
     """
+    bus, views = context.bus, context.views
 
     # Deletes for good, only with confirmed=true. With expected_version, the expenses module deletes in
     # one statement (DELETE ... WHERE id = ? AND version = ?), so an edit made since the user saw the

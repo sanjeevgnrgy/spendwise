@@ -1,9 +1,10 @@
 """CreateExpense: record a new expense for one person. The command, the NewExpense it carries, and its handler.
 
 A slice of the expenses module's write side. module.py registers the handler with the bus; callers send the
-command (bus.execute(CreateExpense(...))) and never call the handler directly: POST /expenses (api.py, whose body
-is NewExpense), MCP's add_expense and seed.py. The handler applies the business rules (domain/rules.py), then
-stages the row through persistence/repository.py. The bus commits; the handler never does.
+command and never call the handler directly: the recorder (application/record_expense.py, behind POST /expenses and
+MCP's add_expense), which fetches the rate for an amount in another currency first, and seed.py (INR only). The
+handler applies the business rules (domain/rules.py, domain/base_amount.py), then stages the row through
+persistence/repository.py. The bus commits; the handler never does.
 """
 
 from datetime import date
@@ -14,6 +15,8 @@ from app.core.cqrs import Command, Context
 from app.core.ids import UserId
 from app.core.money import DEFAULT_CURRENCY, CurrencyCode, rupees_to_paise
 from app.modules.categories import CategoryId
+from app.modules.expenses.conversion.port import ExchangeRate
+from app.modules.expenses.domain.base_amount import base_amount_fields
 from app.modules.expenses.domain.rules import require_category_exists, require_positive_amount
 from app.modules.expenses.persistence import repository
 from app.modules.expenses.persistence.tables import Expense
@@ -37,27 +40,31 @@ class NewExpense(BaseModel):
     payment_method: PaymentMethod
 
 
-# Sent by POST /expenses, MCP's add_expense and seed.py. Beyond the shape NewExpense checks, the handler refuses an
-# amount <= 0 or a category that doesn't exist, with a BusinessRuleError (create_expense, below).
+# Sent by the recorder (POST /expenses, MCP's add_expense) and seed.py. Beyond the shape NewExpense checks, the
+# handler refuses an amount <= 0, a category that doesn't exist, or an amount in another currency without its `rate`
+# (to INR, for that currency), with a BusinessRuleError (create_expense, below).
 class CreateExpense(Command[int]):
     """Record an expense for `owner_id`. Returns its id."""
 
     owner_id: UserId
     expense: NewExpense
+    rate: ExchangeRate | None = None
 
 
 def create_expense(ctx: Context, command: CreateExpense) -> int:
     """Record a new expense for the command's owner and return its id.
 
-    Raises BusinessRuleError if the amount isn't above zero or the category doesn't exist (categories are shared by
-    everyone). The amount arrives in rupees and is stored as whole paise; created_at comes from the app's clock (UTC).
+    Raises BusinessRuleError if the amount isn't above zero, the category doesn't exist (categories are shared by
+    everyone), or an amount in another currency came without its rate. The amount arrives in rupees (or the currency's
+    units) and is stored as whole minor units, beside its INR amount (D204); created_at comes from the app's clock
+    (UTC).
     """
     new = command.expense
     require_positive_amount(new.amount)
     require_category_exists(ctx, new.category_id)
+    amount_minor = rupees_to_paise(new.amount)
     # Every other field has the same name in NewExpense and the table, so they're copied across as is.
     fields = new.model_dump(exclude={"amount"})
-    expense = Expense(
-        owner_id=command.owner_id, amount_minor=rupees_to_paise(new.amount), created_at=ctx.clock.now(), **fields
-    )
+    fields |= base_amount_fields(amount_minor, new.currency, new.spent_on, command.rate)
+    expense = Expense(owner_id=command.owner_id, amount_minor=amount_minor, created_at=ctx.clock.now(), **fields)
     return repository.add(ctx.session, expense)

@@ -33,7 +33,8 @@ class ReceiptMediaType(StrEnum):
     PDF = "application/pdf"
 
 
-# The largest file read: 5 MB, as for uploads. A larger request body is refused before it's parsed (http.py).
+# The largest file read: 5 MB, as for uploads. A larger request body is refused before it's parsed (the agent kit's
+# gate, agent_kit/http.py).
 BYTES_PER_MB = 1024 * 1024
 MAX_RECEIPT_MB = 5
 MAX_RECEIPT_BYTES = MAX_RECEIPT_MB * BYTES_PER_MB

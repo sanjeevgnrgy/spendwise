@@ -2,8 +2,8 @@
 
 Port. The receipt turn (application/receipt_turn.py) only knows ReceiptReader, ReadingRequest, ReceiptReading,
 ReceiptExtraction and ReceiptAgentUnavailableError. The composition root (bootstrap.py) decides what's behind it,
-through module.py: a2a_client.A2AReceiptReader, which sends the receipt to the receipt agent (agents/receipt) over
-A2A. A check passes a fake, or the A2A client pointed at the agent in-process.
+through module.py: agent_reader.AgentReceiptReader, which sends the receipt to the receipt agent (agents/receipt)
+through the remote-agents port (core/agents.py). A check passes a fake reader, or fake remote agents.
 
 ReceiptExtraction is the assistant's own view of the agent's answer, and the adapter validates the answer against it:
 to the assistant, a remote agent's output is outside data, never trusted as it comes (D199).

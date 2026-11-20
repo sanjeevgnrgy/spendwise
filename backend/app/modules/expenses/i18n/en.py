@@ -18,6 +18,9 @@ class ExpenseText(StrEnum):
     CATEGORY_MISSING = "errors.categoryMissing"
     NOT_FOUND = "errors.notFound"
     CHANGED_SINCE_SHOWN = "errors.changedSinceShown"
+    UNSUPPORTED_CURRENCY = "errors.unsupportedCurrency"
+    RATES_UNAVAILABLE = "errors.ratesUnavailable"
+    RATE_MISSING = "errors.rateMissing"
 
 
 EN: dict[ExpenseText, TextValue] = {
@@ -28,6 +31,15 @@ EN: dict[ExpenseText, TextValue] = {
     ExpenseText.CHANGED_SINCE_SHOWN: (
         "Expense {expense_id} has changed since it was shown (version {current}, not {expected}); nothing was deleted."
     ),
+    # Saving an amount in another currency (D204): the currency agent has no rate for {currency} (a code, e.g. "XYZ").
+    ExpenseText.UNSUPPORTED_CURRENCY: "SpendWise can't convert {currency} to INR yet. Enter the amount in INR instead.",
+    # The currency agent can't be asked (or answered something unusable); why goes to the server log (D180).
+    ExpenseText.RATES_UNAVAILABLE: (
+        "Currency conversion isn't available right now, so an amount in {currency} can't be saved. "
+        "Try again in a moment, or enter it in INR."
+    ),
+    # An amount in {currency} arrived without its rate, or with one for another currency (it changed meanwhile).
+    ExpenseText.RATE_MISSING: "The amount in {currency} couldn't be converted to INR. Try saving it again.",
 }
 
 # How each payment method is written for people. The keys are the methods themselves (a StrEnum).

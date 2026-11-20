@@ -1,5 +1,11 @@
 # Phase 24: The receipt agent (A2A)
 
+> **Later changes (Phase 25, part 1):** the agent's key check, task store and app moved into the shared agent kit
+> (`agents/agent_kit/`, D202), and `run-receipt-agent.ps1` became `run-agent.ps1 receipt`. The assistant's
+> `a2a_client.A2AReceiptReader` became `agent_reader.AgentReceiptReader`, which asks through the remote-agents port
+> (`core/agents.py`); the A2A SDK code moved to `infrastructure/a2a/` (D201). The behaviour is unchanged (the same 32
+> checks pass). See [phase-25-more-agents.md](phase-25-more-agents.md).
+
 **Goal:** reading a receipt moves out of the monolith into a **remote agent**: its own service, reached over the
 Agent2Agent protocol (A2A), that takes a receipt and answers with what it says. The assistant becomes its **client
 agent**. Decisions: D195–D198.

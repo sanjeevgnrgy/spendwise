@@ -33,6 +33,12 @@ class ExpenseRead(BaseModel):
     payment_method: PaymentMethod
     created_at: datetime
     version: int
+    # The same amount in INR, in paise (D204): equal to amount_minor for an expense in INR; null only for an expense in
+    # another currency saved before it could be converted.
+    base_amount_minor: int | None
+    # What 1 unit of `currency` was worth in INR ("84.5"; "1" for INR), and the day that rate is for.
+    exchange_rate: Decimal | None
+    rate_date: date | None
 
     # A computed field: sent in the JSON (and listed in the schema) as "amount", never stored. No
     # docstring on it: Pydantic would publish that as the field's description.
@@ -41,6 +47,12 @@ class ExpenseRead(BaseModel):
     def amount(self) -> Decimal:
         # Worked out from amount_minor every time, so the two can never disagree.
         return paise_to_rupees(self.amount_minor)
+
+    # The INR amount in rupees, worked out the same way (null with base_amount_minor).
+    @computed_field
+    @property
+    def base_amount(self) -> Decimal | None:
+        return None if self.base_amount_minor is None else paise_to_rupees(self.base_amount_minor)
 
 
 # ListExpenses's answer: one page of expenses, plus how many match in all, so a caller can page through

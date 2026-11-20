@@ -2,7 +2,8 @@
 
 Part of the mcp adapter. register_update_expense adds the tool to a server; server.py calls it, in
 TOOL_REGISTRARS order. The tool only translates: it turns the fields given into the expenses module's
-UpdateExpense, sent through the bus, so MCP callers get exactly the REST API's rules (and the version is raised),
+UpdateExpense, sent through the expenses module's recorder (which converts a new amount, currency or date in
+another currency to INR first, D204), so MCP callers get exactly the REST API's rules (and the version is raised),
 then answers with the expense after the change (ExpenseUpdated).
 
 What clients see comes from the tool function: the SDK builds the input schema (titled
@@ -15,7 +16,6 @@ from typing import Annotated
 from mcp.server.mcpserver import MCPServer
 from pydantic import Field
 
-from app.core.cqrs import MessageBus
 from app.core.errors import BusinessRuleError
 from app.modules import expenses
 from app.modules.mcp.caller import current_caller
@@ -28,15 +28,16 @@ from app.modules.mcp.tools.support import (
     require_arguments,
     tool_errors,
 )
-from app.modules.mcp.views import ExpenseViews
+from app.modules.mcp.tools.context import ToolContext
 
 
-def register_update_expense(server: MCPServer, bus: MessageBus, views: ExpenseViews) -> None:
+def register_update_expense(server: MCPServer, context: ToolContext) -> None:
     """Add the update_expense tool: change only the fields given (UpdateExpense) and answer with the result.
 
     Raises RuntimeError at start-up if the tool lacks an argument the contract names (expense_id,
     clear_note).
     """
+    views, recorder = context.views, context.recorder
 
     # Changes some fields. An argument left as "" (or False) means "keep it"; the handler raises the
     # expense's version by one, so a delete approved for the old version is refused afterwards.
@@ -77,10 +78,8 @@ def register_update_expense(server: MCPServer, bus: MessageBus, views: ExpenseVi
             if not changes:
                 # Saying "updated" when nothing changed would mislead the caller (and the user).
                 raise BusinessRuleError("Nothing to change: pass at least one field to update.")
-            update = expenses.UpdateExpense(
-                owner_id=owner, expense_id=expense_id, changes=expenses.ExpenseChanges(**changes)
-            )
-            bus.execute(update)
+            # Through the recorder: a new amount, currency or date is converted to INR again (D204).
+            recorder.update(owner, expense_id, expenses.ExpenseChanges(**changes))
             return ExpenseUpdated(updated=views.find(owner, expense_id))
 
     require_arguments(update_expense, EXPENSE_ID_ARGUMENT, CLEAR_NOTE_ARGUMENT)

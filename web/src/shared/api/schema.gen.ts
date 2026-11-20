@@ -722,8 +722,16 @@ export interface components {
             created_at: string;
             /** Version */
             version: number;
+            /** Base Amount Minor */
+            base_amount_minor: number | null;
+            /** Exchange Rate */
+            exchange_rate: string | null;
+            /** Rate Date */
+            rate_date: string | null;
             /** Amount */
             readonly amount: string;
+            /** Base Amount */
+            readonly base_amount: string | null;
         };
         /**
          * FileSource
@@ -1681,7 +1689,6 @@ export interface operations {
         parameters: {
             query: {
                 month: string;
-                currency?: string;
             };
             header?: never;
             path?: never;
@@ -1713,7 +1720,6 @@ export interface operations {
         parameters: {
             query?: {
                 months?: number;
-                currency?: string;
             };
             header?: never;
             path?: never;

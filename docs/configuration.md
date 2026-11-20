@@ -24,6 +24,8 @@ All backend settings are one Pydantic `Settings` class in `backend/app/infrastru
 | `MODEL_REQUESTS_PER_MINUTE`, `MODEL_REQUESTS_PER_DAY` | `10`, `300` | How many requests to the routes that call the model (`/agent`, `/chat`, `/parse`; a receipt is read through `/agent`) each person may make per minute and per day (UTC); one more is a 429 (D194). Counted in memory, per server process |
 | `RECEIPT_AGENT_URL` | `http://127.0.0.1:9001` | Where the backend reaches the receipt agent (Phase 24). Its Agent Card must name this same address, or the backend refuses to send it anything (D199) |
 | `RECEIPT_AGENT_KEY` | not set | The receipt agent's key (below): the backend sends it, the agent checks it. Without it, an attached receipt can't be read (the chat says the reader isn't available); everything else works |
+| `CURRENCY_AGENT_URL` | `http://127.0.0.1:9003` | Where the backend reaches the currency agent (Phase 25); its card must name this same address |
+| `CURRENCY_AGENT_KEY` | not set | The currency agent's key (below). Without it, an expense in another currency can't be saved (a 502 that says so); INR expenses never need it |
 | `UPLOADS_DIR` | `<project>/backend/uploads` | The folder uploaded receipts are kept in, by random names (created on the first upload; git-ignored). It goes with the database: a copy of one needs a copy of the other |
 
 ### Sign-in
@@ -120,27 +122,30 @@ Values the backend and the web app must agree on are **generated from the backen
 Run both after changing an API, a label or a limit, and commit the results with the change. A forgotten
 regeneration shows up as a TypeScript error, or a value that doesn't match.
 
-## Receipt agent settings (`.env`)
+## The agents' settings (`.env`)
 
-The receipt agent (`agents/receipt`, Phase 24) is its own service with its own `AgentSettings`
-(`agents/receipt/settings.py`), read the same way as the backend's, from the same `.env`. It shares the Gemini
-settings' names, so one key and one model serve both, and `RECEIPT_AGENT_KEY`, which the backend sends and the agent
-checks.
+Each A2A agent (`agents/`) is its own service with its own `AgentSettings`, built on the agent kit's configuration
+(`agents/agent_kit/settings.py`) and read from the same `.env`. The receipt agent shares the Gemini settings' names
+with the backend, so one key and one model serve both; each agent's key is the same line the backend sends.
 
 | Setting | Default | Used for |
 |---|---|---|
 | `GEMINI_API_KEY`, `GEMINI_MODEL` | not set | The same as the backend's: the agent reads each receipt with one Gemini call |
 | `RECEIPT_AGENT_KEY` | **required** | The key a client must send as `Authorization: Bearer <key>` (D197). At least 32 characters; the agent won't start without it, so it never runs open. It's yours to make: `python -c "import secrets; print(secrets.token_urlsafe(32))"` |
 | `RECEIPT_AGENT_PORT` | `9001` | The port it listens on. The host is fixed: `127.0.0.1` only, so nothing outside this machine can reach it |
+| `CURRENCY_AGENT_KEY` | **required** (currency agent) | As above, for the currency agent; at least 32 characters |
+| `CURRENCY_AGENT_PORT` | `9003` | The currency agent's port (keep `CURRENCY_AGENT_URL` in step). It needs no Gemini settings |
 
-Fixed in code: the host (`settings.HOST`), the largest file (5 MB, `contract.MAX_RECEIPT_BYTES`) and request
-(`http.MAX_REQUEST_BYTES`), how many tasks it remembers (`task_store.MAX_KEPT_TASKS`, 20).
+Fixed in code: the host (`agent_kit/settings.HOST`), the receipt agent's largest file (5 MB,
+`contract.MAX_RECEIPT_BYTES`) and request (`agent_kit/http.request_limit`), how many tasks an agent remembers
+(`agent_kit/task_store.MAX_KEPT_TASKS`, 20), and the currency agent's mock rates (`currency/rates.MOCK_INR_PER_UNIT`:
+made-up values, D203).
 
 ## Run-time options
 
 | | |
 |---|---|
-| `.\run-receipt-agent.ps1` | starts the receipt agent on `http://127.0.0.1:9001` (needs `RECEIPT_AGENT_KEY`; run `.\run.ps1` once first, for `.venv`) |
+| `.\run-agent.ps1 receipt`, `.\run-agent.ps1 currency` | starts the receipt agent (`:9001`) or the currency agent (`:9003`); each needs its key; run `.\run.ps1` once first, for `.venv` |
 | `.\run.ps1 --port 8001` | extra arguments go to uvicorn (then set `API_PROXY_TARGET=http://127.0.0.1:8001` in `web/.env`) |
 | `npx next dev --port 5175` | the web dev server on another port (then set `PUBLIC_URL` on both sides, since sign-in sends people back to it) |
 | `npm run build`, then `npm run start` | the production build, served on :5173 (`API_PROXY_TARGET` and `PUBLIC_URL` are taken when building) |

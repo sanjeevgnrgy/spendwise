@@ -1,7 +1,7 @@
 """Settings and fixed values the whole backend reads (infrastructure).
 
 Values that differ between machines (the Gemini key and model, the database URL, the MCP token and URL, the uploads
-folder, the receipt agent's address and key, the sign-in provider and its keys) come from the environment or .env,
+folder, the A2A agents' addresses and keys, the sign-in provider and its keys) come from the environment or .env,
 into the one `settings` object, read once at startup. Values that are part of the design (the API prefix and version, the MCP path) are constants instead:
 they change in code, together with the contract, never per machine. Read by db.py (the default engine), the
 composition root (which hands the Gemini key and model to the Gemini adapter, the MCP URL and token to the tools, the
@@ -61,6 +61,10 @@ class Settings(BaseSettings):
     # says so); everything else works.
     receipt_agent_url: str = "http://127.0.0.1:9001"
     receipt_agent_key: SecretStr | None = None
+    # The currency agent (Phase 25, agents/currency): rates for expenses in other currencies (D204). Without its key,
+    # an expense in another currency can't be saved (it says why); INR expenses need it never.
+    currency_agent_url: str = "http://127.0.0.1:9003"
+    currency_agent_key: SecretStr | None = None
 
     # Sign-in (Phase 22): the OpenID Connect provider people sign in with (D185). Any provider that implements the
     # standard works; these are its issuer URL and this app's registration there (a confidential "web" client).

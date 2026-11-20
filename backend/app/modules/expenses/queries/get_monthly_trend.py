@@ -13,7 +13,7 @@ from sqlmodel import col, select
 
 from app.core.cqrs import Context, Query
 from app.core.ids import UserId
-from app.core.money import DEFAULT_CURRENCY, CurrencyCode
+from app.core.money import BASE_CURRENCY
 from app.core.months import YearMonth
 from app.modules.expenses.models import Totalled
 from app.modules.expenses.persistence.tables import Expense
@@ -43,7 +43,6 @@ class GetMonthlyTrend(Query[MonthlyTrend]):
     owner_id: UserId
     months: int = Field(ge=1, le=MAX_TREND_MONTHS)
     until: date
-    currency: CurrencyCode = DEFAULT_CURRENCY
 
 
 def get_monthly_trend(ctx: Context, query: GetMonthlyTrend) -> MonthlyTrend:
@@ -60,8 +59,8 @@ def get_monthly_trend(ctx: Context, query: GetMonthlyTrend) -> MonthlyTrend:
     year_of = extract("year", col(Expense.spent_on))
     month_of = extract("month", col(Expense.spent_on))
     statement = (
-        select(year_of, month_of, func.count(col(Expense.id)), func.sum(Expense.amount_minor))
-        .where(*in_month_range(query.owner_id, first.first_day(), last.shift(1).first_day(), query.currency))
+        select(year_of, month_of, func.count(col(Expense.id)), func.sum(Expense.base_amount_minor))
+        .where(*in_month_range(query.owner_id, first.first_day(), last.shift(1).first_day()))
         .group_by(year_of, month_of)
     )
     # int(): a database may hand back the year and month as decimals (Postgres's EXTRACT does).
@@ -72,4 +71,4 @@ def get_monthly_trend(ctx: Context, query: GetMonthlyTrend) -> MonthlyTrend:
         month = first.shift(offset)
         count, total = found.get(month, (0, 0))
         trend.append(MonthTotal(month=str(month), expense_count=count, total_minor=total))
-    return MonthlyTrend(currency=query.currency, months=trend)
+    return MonthlyTrend(currency=BASE_CURRENCY, months=trend)

@@ -64,6 +64,9 @@ class ExpenseView(BaseModel):
     id: int
     amount: Decimal
     currency: str
+    # The same amount in INR (D204): what totals count. Equal to `amount` for INR; null only for an expense in another
+    # currency saved before it could be converted. The name says the currency, for the model reading it.
+    amount_in_inr: Decimal | None
     category: str
     merchant: str
     note: str | None

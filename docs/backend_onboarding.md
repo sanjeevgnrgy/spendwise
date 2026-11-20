@@ -349,6 +349,7 @@ client.headers["X-CSRF"] = "1"                                            # then
 The OIDC adapter itself takes `transport=httpx2.MockTransport(handler)`: a fake provider's discovery, keys, token
 and UserInfo endpoints in-process, so every token check runs with no network. Use cases take their ports directly
 (`Assistant(bus, tools, llm, receipt_files, receipt_reader)`, `ExpenseParser(bus, llm)`, `ReceiptFiles(bus, files)`,
+`ExpenseRecorder(bus, rates)`,
 `Agent(llm, tools)`; the receipt agent's `build_app(settings, llm)`), and `GeminiModel(api_key, model,
 client_factory=...)` takes a fake SDK client. A fake model only needs the method its user calls: `ask_for_json` for
 `/parse` and the receipt agent (which passes `attachments=`), `stream_with_tools` for the agent.

@@ -25,6 +25,22 @@ export function formatAmount(value: number | string): string {
   return format.format(Number(value))
 }
 
+// Rate formatters, one per locale, made on first use.
+const rateFormats = new Map<string, Intl.NumberFormat>()
+// A rate keeps up to this many decimals (a cross rate such as 0.0118343195), and no trailing zeros.
+const MAX_RATE_DECIMALS = 10
+
+/** "84.5" -> "84.5", "0.0118343195" -> "0.0118343195": an exchange rate, with only the decimals it has. */
+export function formatRate(value: string): string {
+  const current = locale()
+  let format = rateFormats.get(current)
+  if (!format) {
+    format = new Intl.NumberFormat(current, { maximumFractionDigits: MAX_RATE_DECIMALS })
+    rateFormats.set(current, format)
+  }
+  return format.format(Number(value))
+}
+
 // Currency formatters, one per locale and currency, made on first use.
 const moneyFormats = new Map<string, Intl.NumberFormat>()
 

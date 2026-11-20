@@ -2,8 +2,9 @@
 
 Part of the mcp adapter. register_add_expense adds the tool to a server; server.py calls it, in
 TOOL_REGISTRARS order. The tool only translates: it turns its arguments into the expenses module's
-CreateExpense, sent through the bus, so MCP callers get exactly the REST API's rules (amount > 0, the category
-must exist), then answers with the saved expense (ExpenseSaved).
+NewExpense, saved through the expenses module's recorder (which converts an amount in another currency to INR
+first, D204), so MCP callers get exactly the REST API's rules (amount > 0, the category must exist, a currency that
+can be converted), then answers with the saved expense (ExpenseSaved).
 
 What clients see comes from the tool function: the SDK builds the input schema (titled
 "add_expenseArguments") from its name, parameters and annotations, and the description from `description=`.
@@ -15,21 +16,21 @@ from typing import Annotated
 from mcp.server.mcpserver import MCPServer
 from pydantic import Field
 
-from app.core.cqrs import MessageBus
 from app.core.money import CURRENCY_PATTERN, DEFAULT_CURRENCY
 from app.modules import expenses
 from app.modules.mcp.caller import current_caller
 from app.modules.mcp.contracts import ExpenseSaved, ResourceUri, ToolName
 from app.modules.mcp.tools.support import ADDS_DATA, PAYMENT_METHODS, given, tool_errors
-from app.modules.mcp.views import ExpenseViews
+from app.modules.mcp.tools.context import ToolContext
 
 
-def register_add_expense(server: MCPServer, bus: MessageBus, views: ExpenseViews) -> None:
+def register_add_expense(server: MCPServer, context: ToolContext) -> None:
     """Add the add_expense tool: record a new expense (CreateExpense) and answer with it.
 
     The category arrives as a name and is turned into an id first, so an unknown name is a tool error that
     lists the real ones. The expenses module checks the rest; its errors reach the client as tool errors.
     """
+    views, recorder = context.views, context.recorder
 
     # Records an expense. The command validates the amount (rupees, at most 2 decimals, stored as paise)
     # and the date; the handler refuses an amount <= 0 or a category that doesn't exist.
@@ -48,7 +49,11 @@ def register_add_expense(server: MCPServer, bus: MessageBus, views: ExpenseViews
         payment_method: Annotated[str, Field(description=f"One of: {PAYMENT_METHODS}.")],
         note: Annotated[str, Field(description="Optional short note about what was bought.")] = "",
         currency: Annotated[
-            str, Field(description="ISO currency code. INR unless stated otherwise.", pattern=CURRENCY_PATTERN)
+            str,
+            Field(
+                description="ISO currency code. INR unless stated otherwise; another currency is also stored in INR.",
+                pattern=CURRENCY_PATTERN,
+            ),
         ] = DEFAULT_CURRENCY,
     ) -> ExpenseSaved:
         with tool_errors():
@@ -64,5 +69,5 @@ def register_add_expense(server: MCPServer, bus: MessageBus, views: ExpenseViews
                 spent_on=spent_on,
                 payment_method=payment_method,
             )
-            expense_id = bus.execute(expenses.CreateExpense(owner_id=owner, expense=new))
+            expense_id = recorder.create(owner, new)
             return ExpenseSaved(saved=views.find(owner, expense_id))

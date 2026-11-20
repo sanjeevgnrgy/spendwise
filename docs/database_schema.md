@@ -24,6 +24,9 @@ erDiagram
         VARCHAR_20 payment_method
         DATETIME created_at "UTC, with time zone"
         INTEGER version "starts at 1"
+        INTEGER base_amount_minor "INR paise, nullable"
+        VARCHAR_32 exchange_rate "nullable"
+        DATE rate_date "nullable"
     }
     conversation_message {
         INTEGER id PK
@@ -147,6 +150,12 @@ The dotted line is a link kept **in code**, not by the database: there are no fo
 | `payment_method` | VARCHAR(20), not null | `cash`, `upi`, `card`, `netbanking`, `wallet` or `other` |
 | `created_at` | DATETIME with time zone, not null | UTC, set from the app's clock |
 | `version` | INTEGER, not null, default 1 | raised by one on every update: **optimistic concurrency** |
+| `base_amount_minor` | INTEGER, nullable | the same amount in INR, whole paise (D204): what totals add up. Equal to `amount_minor` for INR |
+| `exchange_rate` | VARCHAR(32), nullable | the rate it was converted at, exactly, as text (`"84.5"`; `"1"` for INR) |
+| `rate_date` | DATE, nullable | the day the rate is for (the expense's date, or the nearest earlier day the rates have) |
+
+The three are null only for an expense in another currency saved before migration 0008: it's left out of totals
+until a new amount, currency or date converts it.
 
 ### Why `version`
 
@@ -304,6 +313,7 @@ The tables are created and changed only by **Alembic migrations** in `backend/mi
 | `0005_receipt_files` | adds `receipt_file` (Phase 21); downgrade drops it and leaves the files in `UPLOADS_DIR` |
 | `0006_accounts` | adds `app_user`, `user_identity`, `user_session` and `login_attempt` (Phase 22); downgrade drops them, which signs everyone out and forgets them |
 | `0007_owners` | **deletes the expenses, conversations, delete cards and receipt rows made before sign-in** (they belonged to nobody), then adds `owner_id` to those four tables with their new indexes, `access_token`, and `user_session.user_agent` (Phase 23). The receipt files stay in `UPLOADS_DIR`. Downgrade removes the additions; the deleted rows don't come back |
+| `0008_base_amounts` | adds `expense.base_amount_minor`, `exchange_rate` and `rate_date` (Phase 25), filled in for expenses already in INR (their own amount, rate `1`, their own date); expenses in other currencies stay null (a migration can't call the currency agent). Downgrade drops the three columns |
 
 - `.\run.ps1` runs `alembic upgrade head` before starting; `seed.py` and `mcp_stdio.py` do too. The app itself only
   checks, and refuses to start on an out-of-date database with the command to fix it.

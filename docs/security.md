@@ -151,9 +151,10 @@ behaving:
 | What was read from a receipt steering later turns | It's stored in the conversation as JSON labelled "data, not instructions", like a form's values |
 | Runaway cost or hangs | at most 5 model calls per message, 60 s × 2 attempts per call, no retry on quota errors, 15 s per tool call, input length limits |
 
-## The receipt agent (A2A, Phase 24)
+## The A2A agents (Phases 24, 25)
 
-A separate process that receives people's receipts and spends the Gemini quota, so it's guarded like an API.
+Separate processes that receive people's receipts or spend the Gemini quota, so each is guarded like an API, by the
+agent kit's gate (D197, D202). Each agent has its own key.
 
 | Risk | Defence |
 |---|---|
@@ -168,6 +169,8 @@ A separate process that receives people's receipts and spends the Gemini quota, 
 | The key and a receipt sent to the wrong place | The backend fetches the card from `RECEIPT_AGENT_URL` and sends nothing unless the card offers `extract_receipt` over JSON-RPC at that same address: a card naming another address is refused (D199) |
 | A wrong or tampered answer from the agent | To the backend, the agent's answer is outside data: it's validated against the assistant's own model (types, sizes, the payment methods it knows, unknown fields ignored) and checked again (categories offered, currency, total); an unusable one is "couldn't be read". The task id is shown only if it looks like an id |
 | The file echoed back | The request asks for no history (`historyLength: 0`), so the answer doesn't carry the file back |
+| A person's spending reaching the currency agent | It's asked only what 1 unit of a currency was worth in INR on a day: never the amount, the merchant or who it's for; the backend works out the INR amount itself (D204) |
+| A wrong rate saved | The answer must be for the currencies asked about, a positive decimal written as a string, for no later day than asked; anything else is "not available" and nothing is saved |
 
 ## The A2UI renderer
 
@@ -207,6 +210,7 @@ Every backend and web dependency is pinned to an exact version (`requirements.tx
 | **One process's rate limit** | the model allowance (D194) is counted in memory: several server processes would each count separately | a shared counter (Redis) before running more than one |
 | **Inline scripts allowed** | the pages' CSP allows `'unsafe-inline'` scripts (Next.js's bootstrap), so it can't stop an injected inline script | a nonce-based CSP, if the pages are rendered per request anyway (D193) |
 | **No request-size limit** | an upload is spooled to a temporary file before the receipts route can refuse it, so a very large one uses disk and time | a body-size limit at the proxy (a little over 5 MB for `POST /receipts`) |
+| **The mock exchange rates** | the currency agent's rates are made up (D203): an amount in another currency is stored at a rate that isn't real | a real rate provider (an exchange-rate API) behind `currency/rates.RateProvider` before relying on the INR amounts |
 | **The receipt agent speaks plain HTTP** | its requests carry the key and a receipt; on one machine they never leave it, but across machines anyone on the path could read them | TLS (or mTLS) between the backend and the agent before they run on different machines, and a key that can be rotated without a restart |
 | **Uploaded files are never deleted** | receipts accumulate in `UPLOADS_DIR` | a retention rule, or deleting a receipt once its expense is saved |
 | **SQLite file** | one machine, file permissions only | Postgres with a least-privilege database user |

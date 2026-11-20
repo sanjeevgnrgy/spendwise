@@ -17,6 +17,8 @@ from app.modules.expenses.values import MAX_MERCHANT_LENGTH, MAX_NOTE_LENGTH
 # ("netbanking") is 10 characters.
 CURRENCY_LENGTH = 3
 PAYMENT_METHOD_LENGTH = 20
+# A rate written out exactly: up to 12 digits each side of the point, with room to spare.
+RATE_LENGTH = 32
 # Every read is one person's expenses, most often by date ("this month"), so one index serves both: the owner, then
 # the day. Migration 0007 adds it (it replaces the index on spent_on alone).
 OWNER_DAY_INDEX = "ix_expense_owner_id_spent_on"
@@ -51,6 +53,13 @@ class Expense(SQLModel, table=True):
     created_at: datetime = Field(sa_type=DateTime(timezone=True))
     # Raised by one on every change (optimistic concurrency): see DeleteExpense.expected_version.
     version: int = Field(default=1)
+    # The same amount in the base currency, INR (D204, migration 0008): whole paise, the rate it was converted at
+    # (exact, as text: "84.5"; "1" for INR) and the rate's date. Totals add these up across currencies. Null only for
+    # an expense in another currency saved before 0008 (it's converted the next time its amount, currency or date
+    # changes); domain/base_amount.py fills them in.
+    base_amount_minor: int | None = None
+    exchange_rate: str | None = Field(default=None, max_length=RATE_LENGTH)
+    rate_date: date | None = None
 
 
 # Every table this module owns, for the composition root (bootstrap.metadata(), used by the migrations).

@@ -19,7 +19,8 @@ from typing import Annotated, Any, Literal
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 from pydantic.alias_generators import to_camel
 
-from app.modules import categories
+from app.core.months import YearMonth
+from app.modules import categories, reports
 
 A2UI_VERSION = "1.0"
 # Rendering starts at the component with this id (the spec's rule).
@@ -201,10 +202,40 @@ class EventAction(_A2uiModel):
     user_message: str | None = Field(None, max_length=MAX_USER_MESSAGE_LENGTH)
 
 
-# A button's action. The spec wraps the event in an object of its own.
+# The functions SpendWise's insights catalog declares for the renderer to run itself (D209). Each one is declared
+# rendererOnly and requiresUserActivation: only a person's click runs it, never the agent, and it's never sent to the
+# server as an action. The web app runs only these names (its own allow-list).
+class ClientFunction(StrEnum):
+    # Save one of a month's report downloads (reports.ReportFormat): the renderer fetches it from the reports routes.
+    DOWNLOAD_REPORT = "downloadReport"
+
+
+# downloadReport's arguments: which month, and which file. Only values: the renderer builds the address itself.
+class DownloadReportArgs(_A2uiModel):
+    month: str = Field(pattern=YearMonth.PATTERN)
+    format: reports.ReportFormat
+
+
+# A call of one of the catalog's functions (the spec's FunctionCall): its name ("@call"), its arguments, and the
+# catalog that declares it (a surface's default catalog is the basic one, so the call names ours).
+class FunctionCall(_A2uiModel):
+    call: Literal[ClientFunction.DOWNLOAD_REPORT] = Field(alias="@call")
+    args: DownloadReportArgs
+    catalog_id: Literal[Catalog.INSIGHTS] = Catalog.INSIGHTS
+
+
+# A button's action: the spec's oneOf, an event sent back to the agent or a function the renderer runs. Exactly one.
 class Action(_A2uiModel):
     # When clicked, the renderer sends this event back to the agent as an `action` message.
-    event: EventAction
+    event: EventAction | None = None
+    # When clicked, the renderer runs this function itself (nothing goes to the agent).
+    function_call: FunctionCall | None = None
+
+    @model_validator(mode="after")
+    def _one_kind(self) -> "Action":
+        if (self.event is None) == (self.function_call is None):
+            raise ValueError("an action is either an event or a function call")
+        return self
 
 
 # A button: its label is a child component, and its action names one of ActionName's.

@@ -28,7 +28,7 @@ All backend settings are one Pydantic `Settings` class in `backend/app/infrastru
 | `INSIGHTS_AGENT_KEY` | not set | The insights agent's key (below). Without it (or the agent), the model simply isn't offered it (D206) |
 | `CURRENCY_AGENT_URL` | `http://127.0.0.1:9003` | Where the backend reaches the currency agent (Phase 25); its card must name this same address |
 | `CURRENCY_AGENT_KEY` | not set | The currency agent's key (below). Without it, an expense in another currency can't be saved (a 502 that says so); INR expenses never need it |
-| `SKILLS_DIR` | `<project>/skills` | The Agent Skills folder (D208): one folder per skill with its `SKILL.md`, read once, at the first turn (restart to pick up an edited skill) |
+| `SKILLS_DIR` | `<project>/skills` | The Agent Skills folder (D208): one folder per skill with its `SKILL.md`, read once, at the first turn (restart to pick up an edited skill). A skill's `scripts/*.py` are run by the server with the backend's own Python (D209) |
 | `UPLOADS_DIR` | `<project>/backend/uploads` | The folder uploaded receipts are kept in, by random names (created on the first upload; git-ignored). It goes with the database: a copy of one needs a copy of the other |
 
 ### Sign-in

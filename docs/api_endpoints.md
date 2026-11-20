@@ -327,6 +327,42 @@ spending are included with 0, so a chart has no gaps. In INR, like the summary.
 {"currency": "INR", "months": [{"month": "2026-06", "expense_count": 0, "total_minor": 0, "total": "0.00"}]}
 ```
 
+## Reports
+
+A person's monthly report (D209). The figures are worked out by the monthly-report skill's script, which the server
+runs on the person's own expenses (in INR, like the summary); the answer is checked before it's sent.
+
+### `GET /api/v1/reports/monthly/{month}`
+
+`month` is `YYYY-MM` (422 otherwise). The month's total against the month before (`change_percent` is null when the
+month before had nothing), the daily average (over the days so far, for the running month), the totals by category
+and by payment method with their share, biggest first, and the five biggest expenses. Amounts are rupees, as strings.
+
+```json
+{
+  "month": "2026-11", "currency": "INR", "total": "4300.50", "previous_total": "1000.00", "change_percent": "330.1",
+  "expense_count": 4, "days_counted": 20, "daily_average": "215.03",
+  "by_category": [{"category": "Food", "total": "3650.50", "count": 3, "share_percent": "84.9"}],
+  "by_payment_method": [{"payment_method": "upi", "total": "3850.00", "count": 3, "share_percent": "89.5"}],
+  "biggest": [{"spent_on": "2026-11-12", "merchant": "Swiggy", "category": "Food", "amount": "1950.00"}]
+}
+```
+
+**502** `external-service` if the report can't be made right now (the script failed or answered something unusable);
+**422** `business-rule` for a month with more than 10,000 expenses.
+
+### `GET /api/v1/reports/monthly/{month}/{format}`
+
+The report as a file to save, in the request's language (`Accept-Language`), sent as an attachment
+(`Content-Disposition: attachment; filename="spendwise-2026-11.csv"`):
+
+| `format` | File |
+|---|---|
+| `csv` | `text/csv`: every expense of the month, oldest first: date, merchant, category, payment method, amount, currency, amount in INR, note. UTF-8 with a byte order mark; text from the person's data that starts with `=`, `+`, `-` or `@` gets a leading `'`, so a spreadsheet never runs it |
+| `md` | `text/markdown`: the report: the total, compared with the month before, by category, by payment method, the biggest expenses, the daily average |
+
+Errors as for the figures; another `format` is a 422.
+
 ## Receipts
 
 ### `POST /api/v1/receipts`
@@ -481,6 +517,7 @@ change only that person's expenses. Every tool returns a typed result: its JSON 
 | `get_summary` | read-only | `month` (YYYY-MM), `currency?` | the month summary plus `previous_month` |
 | `update_expense` | changes data | `expense_id`, any of `amount`, `category`, `merchant`, `spent_on`, `payment_method`, `currency`, `note`, `clear_note` | `{updated: ExpenseView}` |
 | `delete_expense` | destructive | `expense_id`, `confirmed` (must be exactly `true`), `expected_version?` | `{deleted: ExpenseView}` |
+| `get_monthly_report` | read-only | `month` (YYYY-MM) | the month's report, as `GET /reports/monthly/{month}` (D209) |
 
 - `ExpenseView`: `id`, `amount` (rupees), `currency`, `category` (name), `merchant`, `note`, `spent_on`,
   `payment_method`, `version`.

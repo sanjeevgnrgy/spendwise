@@ -135,6 +135,27 @@ export async function unwrap<T>(pending: Promise<Outcome<T>>): Promise<T> {
   return data
 }
 
+/** A file the API sent as an attachment: its bytes, and the name the server gave it (null if it gave none). */
+export interface DownloadedFile {
+  blob: Blob
+  name: string | null
+}
+
+// The file name in a Content-Disposition header: attachment; filename="spendwise-2026-11.csv".
+const ATTACHMENT_NAME = /filename="([^"\\/]+)"/
+
+/**
+ * Awaits a call made with `parseAs: "blob"` that answers with a file, and returns its bytes and the name the server
+ * gave it. Throws like unwrap().
+ */
+export async function unwrapFile(pending: Promise<Outcome<Blob>>): Promise<DownloadedFile> {
+  const blob = await unwrap(pending)
+  // Read again from the same answer: settle() already checked it, so this only reads its header.
+  const { response } = await pending
+  const match = ATTACHMENT_NAME.exec(response.headers.get("Content-Disposition") ?? "")
+  return { blob, name: match ? match[1] : null }
+}
+
 /** Awaits a call that answers with nothing (204 No Content), like a delete. Throws like unwrap(). */
 export async function unwrapEmpty(pending: Promise<Outcome<unknown>>): Promise<void> {
   await settle(pending)

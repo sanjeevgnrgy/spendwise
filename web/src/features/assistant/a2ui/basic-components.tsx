@@ -11,10 +11,10 @@ import { Card, CardContent } from "@/shared/ui/card"
 import { Separator } from "@/shared/ui/separator"
 
 import { Unsupported } from "./a2ui-unsupported"
-import { buildAction, readAction } from "./actions"
 import { ALIGN, AXIS, BUTTON_VARIANT, JUSTIFY, TEXT_VARIANT } from "./basic-catalog"
 import { resolve } from "./protocol"
 import type { A2uiRendererProps, WrapChild } from "./renderer-types"
+import { useButtonClick } from "./use-button-click"
 
 /**
  * Text: plain text through React, which escapes it (never innerHTML). A2UI allows simple Markdown in Text;
@@ -84,24 +84,18 @@ export function A2uiDivider({ node }: A2uiRendererProps) {
 }
 
 /**
- * Button: draws its child as the label and, on a click, sends its action (built by buildAction) to the
- * agent. It's disabled when its action can't be sent, when nobody listens for actions, or while the
- * surface is locked (a submitted form, or a run in progress).
+ * Button: draws its child as the label; a click sends its event to the agent or runs its client function (see
+ * useButtonClick). It's disabled when the click can't do anything (useButtonClick gives null).
  */
 export function A2uiButton({ node, ctx, renderChild }: A2uiRendererProps) {
-  const event = readAction(node.action)
-  const clickable = event !== null && ctx.onAction !== undefined && !ctx.locked
-  // The time is taken at the click; buildAction itself stays pure.
-  const click = () => {
-    if (event) ctx.onAction?.(buildAction(event, ctx.surface, node.id, new Date()))
-  }
+  const click = useButtonClick(node, ctx)
   return (
     <Button
       variant={pick(BUTTON_VARIANT, node.variant) ?? BUTTON_VARIANT.default}
       size="sm"
       className="self-start"
-      disabled={!clickable}
-      onClick={click}
+      disabled={click === null}
+      onClick={click ?? undefined}
     >
       {renderChild(node.child)}
     </Button>

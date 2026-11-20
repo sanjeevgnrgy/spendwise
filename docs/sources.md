@@ -891,6 +891,31 @@ Checked on 2026-11-20.
 **Used in:** `skills/`, `backend/app/core/skills.py`, `backend/app/infrastructure/skills.py`,
 `backend/app/modules/assistant/skills/`, D208.
 
+## 35. A2UI function calls, and CSV injection (Phase 26, part 2)
+
+Read 2026-11-20.
+
+- https://raw.githubusercontent.com/google/A2UI/main/specification/v1_0/json/common_types.json: a Button's `Action` is
+  a oneOf: `{"event": {"name", "context"?, "userMessage"?}}` ("Triggers an agent-side event") or
+  `{"functionCall": FunctionCall}` ("Executes a renderer or agent-side function"). A FunctionCall has `"@call"` ("The
+  name of the function to call", required), `args`, and an optional `catalogId` ("The catalog ID for this function,
+  overriding any surface-level default catalogId").
+- https://raw.githubusercontent.com/a2ui-project/a2ui/main/specification/v1_0/json/catalog_definition.json: a catalog
+  declares its functions in a top-level `functions` map; each has a `returnType`, `allowedCallers` (`rendererOnly`,
+  the default, `agentOnly` or `rendererOrAgent`) and `requiresUserActivation` (default false), and when
+  `requiresUserActivation` is true, `allowedCallers` must be `rendererOnly`.
+- https://raw.githubusercontent.com/a2ui-project/a2ui/main/specification/v1_0/docs/a2ui_custom_functions.md: "When
+  defining your own catalog, you can include custom functions that are specific to your application".
+- https://raw.githubusercontent.com/a2ui-project/a2ui/main/specification/v1_0/docs/a2ui_protocol.md: a function call's
+  catalog is resolved from its own `catalogId`, then the surface's, with "no fallback".
+- https://community.owasp.org/attacks/CSV_Injection (redirected from owasp.org/www-community/attacks/CSV_Injection):
+  cells starting with `=`, `+`, `-`, `@`, tab (0x09), carriage return (0x0D), line feed (0x0A) and their full-width
+  forms; mitigations include "Prepend each cell field with a single quote"; "The above techniques are not reliable in
+  Microsoft Excel after saving and re-opening the CSV file".
+
+**Used in:** `backend/app/modules/assistant/a2ui/models.py` (`FunctionCall`, `ClientFunction`),
+`web/src/features/assistant/a2ui/functions/`, `backend/app/modules/reports/documents/spreadsheet.py`, D209.
+
 ---
 
 ## How to re-check a package fact

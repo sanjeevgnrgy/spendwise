@@ -18,7 +18,8 @@ both amounts.
 
 Who uses it: the MCP server (the recorder for its add and update tools, the commands and queries behind the others),
 the assistant (PaymentMethod and payment_method_label for its forms, MAX_NOTE_LENGTH for a receipt's note) and
-seed.py (CreateExpense, in INR, and ListExpenses).
+seed.py (CreateExpense, in INR, and ListExpenses), and the reports module (ListExpenses for a month's report,
+MAX_MERCHANT_LENGTH to check the report's figures, payment_method_label for its downloads).
 """
 
 from app.modules.expenses.application.record_expense import ExpenseRecorder
@@ -37,10 +38,11 @@ from app.modules.expenses.queries.get_expense import GetExpense
 from app.modules.expenses.queries.get_monthly_summary import CategoryTotal, GetMonthlySummary, MonthlySummary
 from app.modules.expenses.queries.get_monthly_trend import GetMonthlyTrend, MonthlyTrend, MonthTotal
 from app.modules.expenses.queries.list_expenses import ExpenseFilters, ListExpenses
-from app.modules.expenses.values import MAX_LIST_LIMIT, MAX_NOTE_LENGTH, ExpenseId, PaymentMethod
+from app.modules.expenses.values import MAX_LIST_LIMIT, MAX_MERCHANT_LENGTH, MAX_NOTE_LENGTH, ExpenseId, PaymentMethod
 
 __all__ = [
     "MAX_LIST_LIMIT",
+    "MAX_MERCHANT_LENGTH",
     "MAX_NOTE_LENGTH",
     "CategoryTotal",
     "CreateExpense",

@@ -35,6 +35,7 @@ from app.infrastructure.skills import FolderSkillLibrary
 from app.modules import accounts, expenses, reports
 from app.modules.accounts import module as accounts_module
 from app.modules.assistant import module as assistant_module
+from app.modules.budgets import module as budgets_module
 from app.modules.categories import module as categories_module
 from app.modules.conversations import module as conversations_module
 from app.modules.expenses import module as expenses_module
@@ -46,7 +47,13 @@ from app.web.auth import SessionCookies
 # Every module with handlers or tables. (The mcp module has neither: it's an adapter over the bus. Nor has the reports
 # module: it reads through other modules' queries.)
 MODULES = (
-    accounts_module, categories_module, expenses_module, conversations_module, receipts_module, assistant_module
+    accounts_module,
+    categories_module,
+    expenses_module,
+    budgets_module,
+    conversations_module,
+    receipts_module,
+    assistant_module,
 )
 
 
@@ -225,6 +232,7 @@ def api_routers(services: Services) -> list[APIRouter]:
     return [
         categories_module.router,
         expenses_module.create_router(services.recorder),
+        budgets_module.router,
         conversations_module.router,
         receipts_module.create_router(services.bus, services.files),
         reports_module.create_router(services.reports),

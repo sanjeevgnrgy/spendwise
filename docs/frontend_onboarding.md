@@ -31,9 +31,9 @@ src/
       sign-in/          the public sign-in page
     _shell/             client-root.tsx (starts i18next, then the root error boundary and providers), providers.tsx
                         (TanStack Query, theme, tooltips, the assistant, toasts), query-client.ts (the cache, retry
-                        rules, THE "expenses changed" refresh rule), namespaces.ts (the texts loaded at boot)
+                        rules, THE "what reloads after a change" rule), namespaces.ts (the texts loaded at boot)
     _frame/             app-layout.tsx (top bar, page area, chat panel's place), app-sidebar.tsx, pages.tsx (the menu)
-    _views/             client-pages.ts (the pages the route files draw), placeholder-pages.tsx
+    _views/             client-pages.ts (the pages the route files draw), placeholder-pages.tsx (Page not found)
     _i18n/              the frame's own texts: menu, page names, top bar, error titles
     _seo/               seo.ts: site address, metadata for public and signed-in pages
     _styles/            index.css

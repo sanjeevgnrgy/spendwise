@@ -9,6 +9,8 @@
  */
 export const DATA_SCOPES = {
   expenses: "expenses",
+  // The person's monthly budgets (the Budgets page).
+  budgets: "budgets",
   // The signed-in person's own account (the Settings page): where they're signed in, and their access tokens.
   sessions: "sessions",
   accessTokens: "accessTokens",

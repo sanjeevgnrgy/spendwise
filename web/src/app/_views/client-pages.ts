@@ -7,6 +7,7 @@
 
 export { SettingsPage } from "@/features/account"
 export { SignInPage } from "@/features/auth"
+export { BudgetsPage } from "@/features/budgets"
 export { DashboardPage } from "@/features/dashboard"
 export { ExpensesPage } from "@/features/expenses"
-export { ComingSoonPage, NotFoundPage } from "./placeholder-pages"
+export { NotFoundPage } from "./placeholder-pages"

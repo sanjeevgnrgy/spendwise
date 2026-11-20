@@ -730,6 +730,187 @@
         }
       }
     },
+    "/api/v1/budgets": {
+      "get": {
+        "tags": [
+          "budgets"
+        ],
+        "summary": "Get Budget Status",
+        "operationId": "get_budget_status_api_v1_budgets_get",
+        "parameters": [
+          {
+            "name": "month",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "pattern": "^(19|20)\\d{2}-(0[1-9]|1[0-2])$"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "examples": [
+                "2026-11"
+              ],
+              "title": "Month"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BudgetStatus"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/budgets/overall": {
+      "put": {
+        "tags": [
+          "budgets"
+        ],
+        "summary": "Set Overall Budget",
+        "operationId": "set_overall_budget_api_v1_budgets_overall_put",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/BudgetChange"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "tags": [
+          "budgets"
+        ],
+        "summary": "Remove Overall Budget",
+        "operationId": "remove_overall_budget_api_v1_budgets_overall_delete",
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          }
+        }
+      }
+    },
+    "/api/v1/budgets/categories/{category_id}": {
+      "put": {
+        "tags": [
+          "budgets"
+        ],
+        "summary": "Set Category Budget",
+        "operationId": "set_category_budget_api_v1_budgets_categories__category_id__put",
+        "parameters": [
+          {
+            "name": "category_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "maximum": 9223372036854775807,
+              "minimum": 1,
+              "title": "Category Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/BudgetChange"
+              }
+            }
+          }
+        },
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "tags": [
+          "budgets"
+        ],
+        "summary": "Remove Category Budget",
+        "operationId": "remove_category_budget_api_v1_budgets_categories__category_id__delete",
+        "parameters": [
+          {
+            "name": "category_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "maximum": 9223372036854775807,
+              "minimum": 1,
+              "title": "Category Id"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/v1/threads/{thread_id}": {
       "get": {
         "tags": [
@@ -1601,6 +1782,202 @@
           "file"
         ],
         "title": "Body_upload_receipt_api_v1_receipts_post"
+      },
+      "BudgetChange": {
+        "properties": {
+          "limit": {
+            "anyOf": [
+              {
+                "type": "number",
+                "exclusiveMinimum": 0.0
+              },
+              {
+                "type": "string"
+              }
+            ],
+            "title": "Limit",
+            "examples": [
+              "8000.00"
+            ]
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "limit"
+        ],
+        "title": "BudgetChange",
+        "description": "A monthly limit, in rupees."
+      },
+      "BudgetLine": {
+        "properties": {
+          "spent": {
+            "type": "string",
+            "title": "Spent"
+          },
+          "limit": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Limit"
+          },
+          "remaining": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Remaining"
+          },
+          "used_percent": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Used Percent"
+          },
+          "state": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/BudgetState"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "type": "object",
+        "required": [
+          "spent"
+        ],
+        "title": "BudgetLine"
+      },
+      "BudgetState": {
+        "type": "string",
+        "enum": [
+          "on_track",
+          "near_limit",
+          "over_limit"
+        ],
+        "title": "BudgetState"
+      },
+      "BudgetStatus": {
+        "properties": {
+          "month": {
+            "type": "string",
+            "pattern": "^(19|20)\\d{2}-(0[1-9]|1[0-2])$",
+            "title": "Month",
+            "examples": [
+              "2026-11"
+            ]
+          },
+          "currency": {
+            "type": "string",
+            "title": "Currency"
+          },
+          "month_elapsed_percent": {
+            "type": "string",
+            "title": "Month Elapsed Percent"
+          },
+          "overall": {
+            "$ref": "#/components/schemas/BudgetLine"
+          },
+          "categories": {
+            "items": {
+              "$ref": "#/components/schemas/CategoryBudgetLine"
+            },
+            "type": "array",
+            "title": "Categories"
+          }
+        },
+        "type": "object",
+        "required": [
+          "month",
+          "currency",
+          "month_elapsed_percent",
+          "overall",
+          "categories"
+        ],
+        "title": "BudgetStatus"
+      },
+      "CategoryBudgetLine": {
+        "properties": {
+          "spent": {
+            "type": "string",
+            "title": "Spent"
+          },
+          "limit": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Limit"
+          },
+          "remaining": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Remaining"
+          },
+          "used_percent": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Used Percent"
+          },
+          "state": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/BudgetState"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "category_id": {
+            "type": "integer",
+            "title": "Category Id"
+          },
+          "category_name": {
+            "type": "string",
+            "title": "Category Name"
+          }
+        },
+        "type": "object",
+        "required": [
+          "spent",
+          "category_id",
+          "category_name"
+        ],
+        "title": "CategoryBudgetLine"
       },
       "CategoryRead": {
         "properties": {

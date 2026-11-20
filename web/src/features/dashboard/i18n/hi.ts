@@ -49,6 +49,19 @@ const hi: Translation<typeof en> = {
   charts: {
     spent: "खर्च",
   },
+  budget: {
+    title: "बजट",
+    description: "इस महीने का खर्च आपकी सीमाओं के मुकाबले",
+    open: "बजट खोलें",
+    spentOf: "{{limit}} में से {{spent}}",
+    meter: "कुल: सीमा का {{percent}}% इस्तेमाल हुआ",
+    noLimit: "अभी कोई कुल सीमा नहीं है।",
+    setLimits: "सीमाएँ तय करें",
+    attention_one: "{{count}} श्रेणी अपनी सीमा के पास या उससे ज़्यादा है",
+    attention_other: "{{count}} श्रेणियाँ अपनी सीमा के पास या उससे ज़्यादा हैं",
+    allOnTrack: "सीमा वाली हर श्रेणी ठीक चल रही है",
+    loadFailed: "आपके बजट लोड नहीं हो सके।",
+  },
   addExpense: "खर्च जोड़ें",
 }
 

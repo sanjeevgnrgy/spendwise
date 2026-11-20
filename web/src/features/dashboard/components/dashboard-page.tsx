@@ -1,7 +1,7 @@
 // A component of the dashboard feature: the Dashboard page, the feature's main export (its route file,
 // app/(client)/(app)/page.tsx, draws it, through the lazy DashboardPage in index.ts). It loads the month's summary, the
-// trend, the newest expenses and the category names together, and lays out the stat cards, the two charts and the
-// recent list.
+// trend, the newest expenses and the category names together, and lays out the stat cards, the budget card (which
+// loads on its own), the two charts and the recent list.
 
 import { useCategories } from "@/features/categories"
 import { useExpenses } from "@/features/expenses"
@@ -14,6 +14,7 @@ import { queryGroupStatus } from "@/shared/lib/query-status"
 
 import { useTexts } from "../i18n"
 import { useMonthlySummary, useMonthlyTrend } from "../queries"
+import { BudgetCard } from "./budget-card"
 import { CategoryChart } from "./category-chart"
 import { DashboardSkeleton } from "./dashboard-skeleton"
 import { RecentExpenses } from "./recent-expenses"
@@ -71,6 +72,7 @@ export function DashboardPage() {
       {header}
       {failed && <RefreshNotice message={messageOf(failed.error)} onRetry={retry} retrying={retrying} />}
       <StatCards summary={summary.data} />
+      <BudgetCard />
       <div className="grid gap-4 lg:grid-cols-2">
         <CategoryChart summary={summary.data} />
         <TrendChart trend={trend.data} />

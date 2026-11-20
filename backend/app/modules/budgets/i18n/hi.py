@@ -1,0 +1,10 @@
+"""The budgets module's texts in Hindi: a translation of en.py. Machine-quality: to be reviewed by a native speaker."""
+
+from app.core.i18n import TextValue
+from app.modules.budgets.i18n.en import BudgetText
+
+HI: dict[BudgetText, TextValue] = {
+    BudgetText.CATEGORY_MISSING: "श्रेणी {category_id} मौजूद नहीं है",
+    BudgetText.NO_OVERALL_BUDGET: "आपका कोई कुल मासिक बजट नहीं है।",
+    BudgetText.NO_CATEGORY_BUDGET: "श्रेणी {category_id} के लिए आपका कोई बजट नहीं है।",
+}

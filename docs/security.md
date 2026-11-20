@@ -68,7 +68,7 @@ every object is checked against its owner, on the server, where it's read (D190)
 
 | Risk | Defence |
 |---|---|
-| Another person's id in a URL (`/expenses/12`, `/receipts/3`, `/threads/abc`) | the owner is in the same SQL statement as the id; another person's object is a 404 **identical** to a missing one, so a guess doesn't even reveal that it exists |
+| Another person's id in a URL (`/expenses/12`, `/receipts/3`, `/threads/abc`, `/budgets/categories/1`) | the owner is in the same SQL statement as the id; another person's object is a 404 **identical** to a missing one, so a guess doesn't even reveal that it exists |
 | Naming an owner in a request (`owner_id` in a body or query string) | REST inputs are separate models from the messages and refuse unknown fields: a 422. The owner comes only from the session, a token or the signed-in run |
 | Finding, counting or adding up others' rows (search, filters, summaries) | every list, count and total filters on the owner first |
 | Reusing someone's conversation id | a thread is (owner, id): the same id is a new, empty conversation of one's own; `/chat` answers 404 |

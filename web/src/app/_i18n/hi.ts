@@ -15,9 +15,6 @@ const hi: Translation<typeof en> = {
     settings: "सेटिंग्स",
     signIn: "साइन इन",
   },
-  comingSoon: {
-    budgets: "हर श्रेणी की मासिक सीमाएँ यहाँ होंगी।",
-  },
   notFound: {
     title: "पेज नहीं मिला",
     description: "इस पते पर कोई पेज नहीं है।",

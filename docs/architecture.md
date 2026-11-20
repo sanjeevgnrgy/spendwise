@@ -107,6 +107,9 @@ backend/
                            api.py, module.py, __init__.py (the contract: re-exports the public names)
       expenses/          the same, plus domain/rules.py (rules the commands share), persistence/repository.py
                          (the write side's table access) and queries/month_range.py (the summary's and trend's filter)
+      budgets/           monthly limits, overall and per category (D210): commands/ (set_budget, remove_budget),
+                         queries/get_budget_status.py (spending from the expenses module's summary against the
+                         limits), domain/rules.py (the state, the share used, the month gone by), persistence/
       conversations/     stored chat threads (provider-neutral messages); GET /threads/{id}; the same shape,
                          without models.py, plus queries/thread_rows.py (what GetHistory and GetThread share)
       receipts/          uploaded receipt files, for their owner; the same shape, plus domain/file_types.py (what
@@ -145,7 +148,7 @@ backend/
                          plus support.py: argument types, error mapping, checks), resources.py, views.py (an
                          expense as tools show it), http.py (bearer token), module.py
   migrations/            Alembic: env.py and versions/0001_baseline, 0002_neutral_conversations, 0003_expense_version,
-                         0004_conversation_turn_index, 0005_receipt_files, 0006_accounts
+                         0004_conversation_turn_index, 0005_receipt_files, 0006_accounts, ... 0010_budgets
   scripts/               export_contracts.py (the contract for the web app)
   seed.py                sample data, through the bus
   mcp_stdio.py           the MCP server over stdio (Inspector, Claude Desktop)
@@ -219,9 +222,10 @@ A module's public contract is still its package: other modules write `from app.m
 `expenses.GetMonthlySummary`, never a slice file. The trade-off: `__init__.py` re-exports the messages from their slice
 files, so importing a module's package also loads its handlers and tables (not its routes, and not the database engine).
 The earlier layout, where the package loaded only a `contracts.py`, gave the lighter import; co-location was judged
-worth more. It can't cause an import cycle, because module dependencies run one way: expenses → categories; reports →
-expenses, categories; mcp → expenses, categories, reports; assistant → the rest; accounts and receipts depend on none.
-The mcp package still exports only its `contracts.py` and loads no server code (D166, D175).
+worth more. It can't cause an import cycle, because module dependencies run one way: expenses → categories; budgets →
+expenses, categories; reports → expenses, categories; mcp → expenses, categories, reports; assistant → the rest;
+accounts and receipts depend on none. The mcp package still exports only its `contracts.py` and loads no server code
+(D166, D175).
 
 ### Why each module owns its tables
 
@@ -664,12 +668,13 @@ $assistant | Where-Object FullName -NotMatch '\\assistant\\(api|application)\\' 
 
 # 6. Each module package imports on its own, in a fresh interpreter. Expect no output. An error here usually means
 #    an import cycle between modules (importing a package also loads its slices, D175).
-foreach ($m in "accounts", "categories", "conversations", "expenses", "mcp", "receipts", "reports", "assistant") {
+foreach ($m in "accounts", "categories", "conversations", "expenses", "budgets", "mcp", "receipts", "reports",
+             "assistant") {
   .\.venv\Scripts\python.exe -c "import sys; sys.path.insert(0, 'backend'); import app.modules.$m"
 }
 
-# 7. Only a module's HTTP adapters import web/. Expect api.py (accounts, categories, conversations, expenses,
-#    receipts, reports), account_api.py (accounts), http.py (mcp) and routes.py (the assistant's api/).
+# 7. Only a module's HTTP adapters import web/. Expect api.py (accounts, budgets, categories, conversations,
+#    expenses, receipts, reports), account_api.py (accounts), http.py (mcp) and routes.py (the assistant's api/).
 Get-ChildItem backend\app\modules -Recurse -Filter *.py | Select-String -Pattern 'app\.web\b' | Split-Path -Leaf |
   Sort-Object -Unique
 
@@ -678,8 +683,9 @@ Get-ChildItem backend\app, web\src -Recurse -Include *.py,*.ts,*.tsx | Select-St
 
 # 9. A person's data is never looked up by its id alone (D190): the owner goes in the same statement. Expect only
 #    take_approval.py, which compares the owner on the next line.
-Get-ChildItem backend\app\modules\expenses, backend\app\modules\conversations, backend\app\modules\receipts,
-  backend\app\modules\assistant -Recurse -Filter *.py | Select-String -Pattern 'session\.get\(' | Split-Path -Leaf
+Get-ChildItem backend\app\modules\expenses, backend\app\modules\budgets, backend\app\modules\conversations,
+  backend\app\modules\receipts, backend\app\modules\assistant -Recurse -Filter *.py |
+  Select-String -Pattern 'session\.get\(' | Split-Path -Leaf
 
 # 10. The agents (and the kit) use only the backend's core/, and the Gemini adapter and logging in a server.py (D196);
 #     in the backend only agents_host.py imports them (D207). Expect no output from the first two, and agents_host.py

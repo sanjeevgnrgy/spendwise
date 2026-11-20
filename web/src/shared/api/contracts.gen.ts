@@ -56,6 +56,16 @@ export const REPORT_FORMATS = [
 
 export const MONTH_PATTERN = "^(19|20)\\d{2}-(0[1-9]|1[0-2])$" as const
 
+export const BUDGETS = {
+  "states": {
+    "on_track": "on_track",
+    "near_limit": "near_limit",
+    "over_limit": "over_limit"
+  },
+  "nearLimitPercent": 80,
+  "fullPercent": 100
+} as const
+
 export const A2UI = {
   "version": "1.0",
   "rootId": "root",

@@ -211,6 +211,59 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/budgets": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Budget Status */
+        get: operations["get_budget_status_api_v1_budgets_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/budgets/overall": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /** Set Overall Budget */
+        put: operations["set_overall_budget_api_v1_budgets_overall_put"];
+        post?: never;
+        /** Remove Overall Budget */
+        delete: operations["remove_overall_budget_api_v1_budgets_overall_delete"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/budgets/categories/{category_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /** Set Category Budget */
+        put: operations["set_category_budget_api_v1_budgets_categories__category_id__put"];
+        post?: never;
+        /** Remove Category Budget */
+        delete: operations["remove_category_budget_api_v1_budgets_categories__category_id__delete"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/threads/{thread_id}": {
         parameters: {
             query?: never;
@@ -565,6 +618,65 @@ export interface components {
         Body_upload_receipt_api_v1_receipts_post: {
             /** File */
             file: string;
+        };
+        /**
+         * BudgetChange
+         * @description A monthly limit, in rupees.
+         */
+        BudgetChange: {
+            /**
+             * Limit
+             * @example 8000.00
+             */
+            limit: number | string;
+        };
+        /** BudgetLine */
+        BudgetLine: {
+            /** Spent */
+            spent: string;
+            /** Limit */
+            limit?: string | null;
+            /** Remaining */
+            remaining?: string | null;
+            /** Used Percent */
+            used_percent?: string | null;
+            state?: components["schemas"]["BudgetState"] | null;
+        };
+        /**
+         * BudgetState
+         * @enum {string}
+         */
+        BudgetState: "on_track" | "near_limit" | "over_limit";
+        /** BudgetStatus */
+        BudgetStatus: {
+            /**
+             * Month
+             * @example 2026-11
+             */
+            month: string;
+            /** Currency */
+            currency: string;
+            /** Month Elapsed Percent */
+            month_elapsed_percent: string;
+            overall: components["schemas"]["BudgetLine"];
+            /** Categories */
+            categories: components["schemas"]["CategoryBudgetLine"][];
+        };
+        /** CategoryBudgetLine */
+        CategoryBudgetLine: {
+            /** Spent */
+            spent: string;
+            /** Limit */
+            limit?: string | null;
+            /** Remaining */
+            remaining?: string | null;
+            /** Used Percent */
+            used_percent?: string | null;
+            state?: components["schemas"]["BudgetState"] | null;
+            /** Category Id */
+            category_id: number;
+            /** Category Name */
+            category_name: string;
         };
         /**
          * CategoryRead
@@ -1849,6 +1961,148 @@ export interface operations {
             };
         };
     };
+    get_budget_status_api_v1_budgets_get: {
+        parameters: {
+            query?: {
+                month?: string | null;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BudgetStatus"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    set_overall_budget_api_v1_budgets_overall_put: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["BudgetChange"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    remove_overall_budget_api_v1_budgets_overall_delete: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    set_category_budget_api_v1_budgets_categories__category_id__put: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                category_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["BudgetChange"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    remove_category_budget_api_v1_budgets_categories__category_id__delete: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                category_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     get_thread_api_v1_threads__thread_id__get: {
         parameters: {
             query?: never;
@@ -2268,6 +2522,7 @@ type ReadonlyArray<T> = [
 export const activityMessageRoleValues: ReadonlyArray<FlattenedDeepRequired<components>["schemas"]["ActivityMessage"]["role"]> = ["activity"];
 export const assistantMessageRoleValues: ReadonlyArray<FlattenedDeepRequired<components>["schemas"]["AssistantMessage"]["role"]> = ["assistant"];
 export const audioPartTypeValues: ReadonlyArray<FlattenedDeepRequired<components>["schemas"]["AudioPart"]["type"]> = ["audio"];
+export const budgetStateValues: ReadonlyArray<FlattenedDeepRequired<components>["schemas"]["BudgetState"]> = ["on_track", "near_limit", "over_limit"];
 export const dataSourceTypeValues: ReadonlyArray<FlattenedDeepRequired<components>["schemas"]["DataSource"]["type"]> = ["data"];
 export const developerMessageRoleValues: ReadonlyArray<FlattenedDeepRequired<components>["schemas"]["DeveloperMessage"]["role"]> = ["developer"];
 export const documentPartTypeValues: ReadonlyArray<FlattenedDeepRequired<components>["schemas"]["DocumentPart"]["type"]> = ["document"];

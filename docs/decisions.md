@@ -2773,3 +2773,46 @@ is natural. It's still a soft, model-judged guard.
   `load_skill("monthly-report")` on its own, then `get_monthly_report("2026-11")`.
 - **Revisit:** a rate limit on the download routes if reports get heavy (each runs a short process); a PDF, if wanted,
   would be another format on the same route.
+
+---
+
+## Budgets (Phase 27)
+
+> Monthly limits, overall and per category: the module, its API and the Budgets page (Part 1), then the assistant
+> (Part 2). On both branches. Phase note: [phases/phase-27-budgets.md](phases/phase-27-budgets.md).
+
+### D210. Budgets: standing monthly limits in a module of their own; spending always read from the expenses module
+- **What:**
+  - **The budgets module** (`modules/budgets`, depends on expenses and categories): a `budget` table (migration 0010)
+    with the owner, the category (null for the overall budget) and the limit in paise. A unique index on
+    `(owner_id, category_id)` and a partial unique index on `owner_id` where `category_id` is null keep one budget per
+    scope (SQL treats NULLs as distinct, so the first index alone would allow many overall budgets).
+  - **Commands:** `SetBudget(owner_id, category_id?, limit)` creates or changes the scope's budget (a category that
+    doesn't exist is a 422); `RemoveBudget` deletes it (404 if there was none). Both name the owner in every statement.
+  - **The query:** `GetBudgetStatus(owner_id, month)` asks the expenses module's `GetMonthlySummary` and the
+    categories module's `ListCategories` through the bus and reads only its own limits; it answers the overall line
+    and a line for every category (budgeted first, most used first, then by spending), each with the spending and,
+    with a limit, what's left, the share used (one decimal) and the state, plus how much of the month has gone by.
+  - **States:** on track below 80% (`NEAR_LIMIT_PERCENT`), near the limit from 80% to 100%, over the limit beyond
+    it, decided on exact paise. The values and thresholds are in the web contract (`BUDGETS`).
+  - **Routes:** `GET /budgets?month=` (default: the current month by the clock), `PUT`/`DELETE /budgets/overall`,
+    `PUT`/`DELETE /budgets/categories/{category_id}`; the PUT body is `{"limit": "8000"}` (above 0, two decimals).
+  - **The web app:** a budgets feature (the Budgets page, its dialog, the bar with a mark for today) replaces the
+    placeholder; the Dashboard gains a Budget card that loads on its own; a `budgets` data scope, and a change to
+    expenses also reloads the budgets. The last "coming soon" placeholder and its texts are gone.
+- **Why limits only:** spending already has one source of truth. Storing "spent so far" would need updating on every
+  expense change (from REST, MCP and the assistant) and could drift; reading the summary can't.
+- **Why standing monthly limits:** they match how people state a budget; a limit per month would be a later addition
+  (a month column), not a change to the API.
+- **Why a module of its own:** budgets have their own rules and table; inside expenses they would make that module
+  depend on categories' names for display and grow a second concern.
+- **How it was verified:** 31 checks through the HTTP API with a fixed clock: no budgets (every category, nothing
+  budgeted, 66.7% of November gone); setting overall and category limits (204); the overall, near, over (negative
+  remaining) and unbudgeted lines; the order; changing a limit keeps one row; exactly at the limit is near, not over;
+  another month uses the same limits with its own spending; a past month is 100% gone and a future one 0%; a zero,
+  negative, three-decimal, owner-carrying or missing limit (422); an unknown category (422 with a text); a bad month
+  (422); another person sees none of the first's budgets, can't remove them, and their own don't touch the first's;
+  removing (204, then 404 with a text, in Hindi too); the database refusing a second overall budget; signed out (401);
+  `no-store`. Every earlier suite passes (the model's input is unchanged: Part 1 adds no tools). Migration 0010 up,
+  down, up and `alembic check` on a copy of the database.
+- **Revisit:** limits that differ by month, if wanted; rollover of unspent amounts; budgets shared by a household.

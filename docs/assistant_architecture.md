@@ -215,7 +215,7 @@ sequenceDiagram
     participant B as Browser
     participant A as /agent
     participant R as receipts module
-    participant RA as receipt agent (A2A, :9001)
+    participant RA as receipt agent (A2A, hosted in-process)
     participant G as Gemini
     B->>R: POST /receipts (the file)
     R-->>B: 201 {id, media_type}

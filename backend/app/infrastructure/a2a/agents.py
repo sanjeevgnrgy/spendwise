@@ -4,14 +4,13 @@ The only code in the backend that uses the A2A SDK. For each message it fetches 
 configured address, checks it (the skill asked for, offered over JSON-RPC at that same address: otherwise the key
 and the data would go wherever a card said), sends one non-streaming SendMessage with the agent's key and no history
 asked back, and turns the finished task into the port's AgentTask (D201). The composition root builds it from the
-settings (one AgentEndpoint per agent) and passes it in; a check passes httpx transports that reach the agents' apps
-in-process.
+agents it hosts: one AgentEndpoint and one in-process transport per agent (D207: the agents run inside the backend,
+reached through httpx's ASGI transport, with no port of their own); a check can pass transports of its own.
 
-The SDK is async, but its callers run in plain worker threads (FastAPI runs sync routes and streams there), so each
-message gets its own short event loop, as the MCP adapter does.
+The SDK is async, but its callers run in plain worker threads (FastAPI runs sync routes and streams there), so every
+call runs on one long-lived background loop (loop.py), where the in-process agents' state belongs.
 """
 
-import asyncio
 import logging
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
@@ -35,6 +34,7 @@ from app.core.agents import (
     TextPart,
 )
 from app.core.agents import Part as PortPart
+from app.infrastructure.a2a.loop import BackgroundLoop
 
 logger = logging.getLogger(__name__)
 
@@ -76,13 +76,14 @@ class A2AAgents:
         """Remember where each agent is; nothing is fetched until the first message."""
         self._endpoints = dict(endpoints)
         self._transports = dict(transports or {})
+        self._loop = BackgroundLoop()
 
     def skills(self, agent: str) -> list[SkillCard]:
         """The skills `agent`'s card offers, if the card names JSON-RPC at the agent's configured address. Raises
         AgentUnavailableError if it can't be read (unknown agent, unreachable, a timeout, another address)."""
         endpoint = self._endpoint(agent)
         try:
-            card = asyncio.run(asyncio.wait_for(self._card(agent, endpoint), CARD_TIMEOUT_SECONDS))
+            card = self._loop.run(self._card(agent, endpoint), CARD_TIMEOUT_SECONDS)
         except Exception as exc:  # unreachable, a timeout, a malformed card...
             logger.warning("agent %s's card at %s unreadable: %r", agent, endpoint.url, exc)
             raise AgentUnavailableError(f"{agent}'s card unreadable") from exc
@@ -106,7 +107,7 @@ class A2AAgents:
             raise AgentUnavailableError(NO_KEY.format(agent=agent))
         sending = self._send(agent, endpoint, skill, [_to_a2a(part) for part in parts], resume)
         try:
-            task = asyncio.run(asyncio.wait_for(sending, TIMEOUT_SECONDS))
+            task = self._loop.run(sending, TIMEOUT_SECONDS)
         except Exception as exc:  # unreachable, 401, a bad card, a timeout, a protocol error...
             logger.warning("agent %s at %s unavailable: %r", agent, endpoint.url, exc)
             raise AgentUnavailableError(f"{agent} unavailable") from exc

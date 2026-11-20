@@ -21,6 +21,7 @@ from app import bootstrap
 from app.bootstrap import Services
 from app.infrastructure import migrations
 from app.infrastructure.config import API_PREFIX, API_VERSION, MCP_PATH, settings
+from app.agents_host import AGENT_LOGGERS
 from app.infrastructure.logging import setup_logging
 from app.modules.mcp import module as mcp_module
 from app.web.auth import require_csrf, require_user
@@ -41,7 +42,8 @@ Lifespan = Callable[[FastAPI], AbstractAsyncContextManager[None]]
 
 def create_app(services: Services | None = None) -> FastAPI:
     """The whole web app, around `services` (by default, bootstrap.build(): the real adapters and database)."""
-    setup_logging()
+    # The agents run in this process (D207): their loggers are shown with the backend's.
+    setup_logging(loggers=AGENT_LOGGERS)
     built = bootstrap.build() if services is None else services
     # MCP over HTTP: every request needs a personal access token, and acts only for its owner (D191).
     mcp_http_app = mcp_module.create_http_app(built.mcp_server, built.access_tokens.resolve)

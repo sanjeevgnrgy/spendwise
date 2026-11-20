@@ -172,25 +172,17 @@ is in the backend terminal (D180).
 - **Fix:** a phone's "medium" or "large" size instead of the original, or a single-page PDF. The limit is
   `MAX_RECEIPT_MB` in `receipts/values.py`.
 
-### Attaching a receipt says "The receipt reader isn't available right now."
-- **Cause:** the backend couldn't use the receipt agent (Phase 24). Its log has a WARNING line from
-  `infrastructure.a2a.agents` saying why ("agent receipt ... unavailable"): `RECEIPT_AGENT_KEY isn't set`; a connection
-  error (the agent isn't running, or `RECEIPT_AGENT_URL` points elsewhere); a 401 (the two sides have different keys);
-  or "the card ... doesn't offer extract_receipt ... at that address" (`RECEIPT_AGENT_URL` and the agent's
-  `RECEIPT_AGENT_PORT` disagree).
-- **Fix:** set `RECEIPT_AGENT_KEY` in `.env`, start `.\run-agent.ps1 receipt`, and restart the backend after changing
-  `.env`.
+### Attaching a receipt says "The receipt reader isn't available right now." (or conversion isn't available)
+- **Cause:** the backend couldn't use one of the agents it hosts (D207). Its log has a WARNING from
+  `infrastructure.a2a.agents` saying why. On `main` the agents run inside the backend, so this means the agent itself
+  failed (look for an error in its own log lines: `receipt.*`, `insights.*`, `currency.*`), not a missing process or
+  key.
+- **Fix:** read the log's error and restart the backend. (On the `multi-server` branch: set the agent's key in `.env`,
+  start `.\run-agent.ps1 <name>`, and restart the backend.)
 
-### The receipt agent won't start: "receipt_agent_key ... Field required" or "at least 32 characters"
-- **Fix:** add `RECEIPT_AGENT_KEY` to `.env` (make one with
-  `python -c "import secrets; print(secrets.token_urlsafe(32))"`). The agent refuses to run without a key, on purpose.
-
-### Saving an expense in USD (or another currency) says "Currency conversion isn't available right now"
-- **Cause:** the backend couldn't get a rate from the currency agent (Phase 25). Its log names why: "agent currency
-  ... unavailable" (not running, a 401 for different keys, a card at another address) or "currency agent's answer
-  unusable".
-- **Fix:** set `CURRENCY_AGENT_KEY` in `.env`, start `.\run-agent.ps1 currency`, and restart the backend. Expenses in
-  INR never need it.
+### `.\run-agent.ps1 <name>` says "..._agent_key ... Field required" or "at least 32 characters"
+- **Fix:** running an agent on its own needs its key in `.env` (e.g. `RECEIPT_AGENT_KEY`, made with
+  `python -c "import secrets; print(secrets.token_urlsafe(32))"`). The backend doesn't need it: it hosts its own.
 
 ### "SpendWise can't convert XYZ to INR yet"
 - **Cause:** the currency agent has no rate for that currency (the mock knows INR, USD, EUR, GBP, AED, SGD, AUD, CAD,

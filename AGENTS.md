@@ -84,8 +84,9 @@ modules need it. Recipes: [backend_onboarding.md](docs/backend_onboarding.md).
 - **A2A agents live outside the monolith**, in `agents/<name>/`, each its own process, built on the shared agent kit
   (`agents/agent_kit/`: the key check, the task store, the app, D202). An agent imports only `app.core`, plus the Gemini
   adapter and `setup_logging` in a `server.py` (D196); never a module, `web/` or the backend's settings. The backend
-  never imports an agent: it talks to one over A2A. An agent knows no person: the owner is checked in the monolith
-  before anything is sent, and the agent refuses requests without its key (D197).
+  talks to an agent only over A2A; only the composition root's `agents_host.py` imports the agents, to host them in
+  the backend's process (D207; the `multi-server` branch runs them as services). An agent knows no person: the owner
+  is checked in the monolith before anything is sent, and the agent refuses requests without its key (D197).
 
 **Composition root.** `bootstrap.build(clock, llm, tools, engine, files, identity, sealer, agents)` creates
 everything replaceable;

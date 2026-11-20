@@ -1,7 +1,7 @@
 """Settings and fixed values the whole backend reads (infrastructure).
 
 Values that differ between machines (the Gemini key and model, the database URL, the MCP token and URL, the uploads
-folder, the A2A agents' addresses and keys, the sign-in provider and its keys) come from the environment or .env,
+folder, the sign-in provider and its keys) come from the environment or .env,
 into the one `settings` object, read once at startup. Values that are part of the design (the API prefix and version, the MCP path) are constants instead:
 they change in code, together with the contract, never per machine. Read by db.py (the default engine), the
 composition root (which hands the Gemini key and model to the Gemini adapter, the MCP URL and token to the tools, the
@@ -56,19 +56,6 @@ class Settings(BaseSettings):
     # The folder uploaded files (receipts) are kept in, by random names. Git-ignored: it's your data, like the
     # database.
     uploads_dir: Path = BACKEND_DIR / "uploads"
-    # The receipt agent (Phase 24, agents/receipt): where it listens, and the key it requires (the same
-    # RECEIPT_AGENT_KEY the agent reads from this .env). Without the key, an attached receipt can't be read (the chat
-    # says so); everything else works.
-    receipt_agent_url: str = "http://127.0.0.1:9001"
-    receipt_agent_key: SecretStr | None = None
-    # The insights agent (Phase 25, agents/insights): the assistant hands it spending questions (D206). Without its
-    # key, the model isn't offered it; everything else works.
-    insights_agent_url: str = "http://127.0.0.1:9002"
-    insights_agent_key: SecretStr | None = None
-    # The currency agent (Phase 25, agents/currency): rates for expenses in other currencies (D204). Without its key,
-    # an expense in another currency can't be saved (it says why); INR expenses need it never.
-    currency_agent_url: str = "http://127.0.0.1:9003"
-    currency_agent_key: SecretStr | None = None
 
     # Sign-in (Phase 22): the OpenID Connect provider people sign in with (D185). Any provider that implements the
     # standard works; these are its issuer URL and this app's registration there (a confidential "web" client).

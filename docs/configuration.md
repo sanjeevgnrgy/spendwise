@@ -22,12 +22,6 @@ All backend settings are one Pydantic `Settings` class in `backend/app/infrastru
 | `GEMINI_MODEL` | not set | Which Gemini model answers, e.g. `gemini-3.5-flash-lite`. Model ids and free-tier limits: [gemini.md](gemini.md) |
 | `DATABASE_URL` | `sqlite:///<project>/backend/spendwise.db` | Any SQLAlchemy URL. Point it at a copy to experiment safely |
 | `MODEL_REQUESTS_PER_MINUTE`, `MODEL_REQUESTS_PER_DAY` | `10`, `300` | How many requests to the routes that call the model (`/agent`, `/chat`, `/parse`; a receipt is read through `/agent`) each person may make per minute and per day (UTC); one more is a 429 (D194). Counted in memory, per server process |
-| `RECEIPT_AGENT_URL` | `http://127.0.0.1:9001` | Where the backend reaches the receipt agent (Phase 24). Its Agent Card must name this same address, or the backend refuses to send it anything (D199) |
-| `RECEIPT_AGENT_KEY` | not set | The receipt agent's key (below): the backend sends it, the agent checks it. Without it, an attached receipt can't be read (the chat says the reader isn't available); everything else works |
-| `INSIGHTS_AGENT_URL` | `http://127.0.0.1:9002` | Where the backend reaches the insights agent (Phase 25); its card must name this same address |
-| `INSIGHTS_AGENT_KEY` | not set | The insights agent's key (below). Without it (or the agent), the model simply isn't offered it (D206) |
-| `CURRENCY_AGENT_URL` | `http://127.0.0.1:9003` | Where the backend reaches the currency agent (Phase 25); its card must name this same address |
-| `CURRENCY_AGENT_KEY` | not set | The currency agent's key (below). Without it, an expense in another currency can't be saved (a 502 that says so); INR expenses never need it |
 | `UPLOADS_DIR` | `<project>/backend/uploads` | The folder uploaded receipts are kept in, by random names (created on the first upload; git-ignored). It goes with the database: a copy of one needs a copy of the other |
 
 ### Sign-in
@@ -126,9 +120,12 @@ regeneration shows up as a TypeScript error, or a value that doesn't match.
 
 ## The agents' settings (`.env`)
 
-Each A2A agent (`agents/`) is its own service with its own `AgentSettings`, built on the agent kit's configuration
-(`agents/agent_kit/settings.py`) and read from the same `.env`. The receipt agent shares the Gemini settings' names
-with the backend, so one key and one model serve both; each agent's key is the same line the backend sends.
+**On `main`, nothing:** the backend hosts the three A2A agents in its own process (D207), with its own model and
+clock, and gives each a random key at startup. The settings below matter only to run an agent **on its own**
+(`run-agent.ps1`), each with its own `AgentSettings` built on the agent kit's configuration
+(`agents/agent_kit/settings.py`), read from the same `.env`. (On the `multi-server` branch the backend reaches the
+agents as services, and also reads `RECEIPT_AGENT_URL`/`KEY`, `INSIGHTS_AGENT_URL`/`KEY` and `CURRENCY_AGENT_URL`/
+`KEY`.)
 
 | Setting | Default | Used for |
 |---|---|---|
@@ -149,7 +146,7 @@ made-up values, D203).
 
 | | |
 |---|---|
-| `.\run-agent.ps1 receipt`, `insights`, `currency` | starts the receipt (`:9001`), insights (`:9002`) or currency (`:9003`) agent; each needs its key; run `.\run.ps1` once first, for `.venv` |
+| `.\run-agent.ps1 receipt`, `insights`, `currency` | optional: runs one agent on its own, on `:9001`, `:9002` or `:9003` (the backend doesn't use it: it hosts its own); it needs its key |
 | `.\run.ps1 --port 8001` | extra arguments go to uvicorn (then set `API_PROXY_TARGET=http://127.0.0.1:8001` in `web/.env`) |
 | `npx next dev --port 5175` | the web dev server on another port (then set `PUBLIC_URL` on both sides, since sign-in sends people back to it) |
 | `npm run build`, then `npm run start` | the production build, served on :5173 (`API_PROXY_TARGET` and `PUBLIC_URL` are taken when building) |

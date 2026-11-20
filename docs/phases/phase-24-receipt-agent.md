@@ -1,5 +1,9 @@
 # Phase 24: The receipt agent (A2A)
 
+> **Later changes (one server, D207):** on `main` the backend hosts the receipt agent in its own process; running
+> it on its own (`run-agent.ps1 receipt`, with its key) is optional. See
+> [refactor-single-server.md](refactor-single-server.md).
+
 > **Later changes (Phase 25, part 1):** the agent's key check, task store and app moved into the shared agent kit
 > (`agents/agent_kit/`, D202), and `run-receipt-agent.ps1` became `run-agent.ps1 receipt`. The assistant's
 > `a2a_client.A2AReceiptReader` became `agent_reader.AgentReceiptReader`, which asks through the remote-agents port

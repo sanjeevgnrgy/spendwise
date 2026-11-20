@@ -23,8 +23,8 @@ from app.core.identity import IdentityProvider
 from app.core.llm import LanguageModel
 from app.core.rate_limit import RateLimiter
 from app.core.sealing import Sealer
+from app import agents_host
 from app.infrastructure import db
-from app.infrastructure.a2a import A2AAgents, AgentEndpoint
 from app.infrastructure.config import API_PREFIX, settings
 from app.infrastructure.files import LocalFileStore
 from app.infrastructure.identity import ClientCredentials, OidcIdentityProvider, UnconfiguredIdentityProvider
@@ -59,8 +59,8 @@ class Services:
     tools: assistant_module.ExpenseTools
     # Where uploaded files' bytes are kept (the receipts module's receipts).
     files: FileStore
-    # The A2A agents (agents/: receipt, currency), behind the RemoteAgents port (D201): the assistant reads receipts
-    # and the expenses recorder gets rates through them.
+    # The A2A agents (agents/: receipt, insights, currency), hosted in this process (D207), behind the RemoteAgents
+    # port (D201): the assistant reads receipts and delegates, and the expenses recorder gets rates, through them.
     agents: RemoteAgents
     # Saves expenses, converting an amount in another currency to INR first (D204): the REST routes and MCP share it.
     recorder: expenses.ExpenseRecorder
@@ -112,19 +112,19 @@ def build(
     - identity: the OpenID Connect provider in OIDC_ISSUER (nothing is fetched from it until someone signs in), or,
       if a sign-in setting is missing, one that refuses every sign-in (D185);
     - sealer: Fernet, with SESSION_ENCRYPTION_KEYS;
-    - agents: the A2A agents at RECEIPT_AGENT_URL, INSIGHTS_AGENT_URL and CURRENCY_AGENT_URL, with their keys (the
-      cards of the ones the model may delegate to are read when the routes are built; nothing else until needed). A
-      check passes a fake RemoteAgents, or an A2AAgents whose transports reach the agents' apps in-process.
+    - agents: the receipt, insights and currency agents, hosted in this process and reached in memory
+      (agents_host.py, D207), using `llm` and `clock`. A check passes a fake RemoteAgents, or its own A2AAgents.
     """
     clock = SystemClock() if clock is None else clock
     engine = db.engine if engine is None else engine
     bus = build_bus(clock, engine)
-    agents = _remote_agents() if agents is None else agents
-    recorder = expenses_module.create_recorder(bus, agents)
-    mcp_server = mcp_module.create_server(bus, recorder)
     if llm is None:
         # The one place that picks the LLM provider: Gemini, behind the LanguageModel port.
         llm = GeminiModel(settings.gemini_api_key, settings.gemini_model)
+    # The agents run inside this process, with the same model (D207); the multi-server branch reaches them as services.
+    agents = agents_host.hosted_agents(llm, clock) if agents is None else agents
+    recorder = expenses_module.create_recorder(bus, agents)
+    mcp_server = mcp_module.create_server(bus, recorder)
     if tools is None:
         # The assistant's tools: this app's own MCP server, in-process. Each run binds them to the signed-in person.
         tools = assistant_module.McpExpenseTools(mcp_server)
@@ -149,19 +149,6 @@ def build(
         sessions=accounts_module.create_session_gate(bus, identity, clock),
         cookies=_session_cookies(),
         sign_in=_sign_in_config(),
-    )
-
-
-def _remote_agents() -> RemoteAgents:
-    """The one place that picks the remote agents' adapter: A2A, to each agent's address and key from the settings.
-    The names are the ones the modules ask for (the assistant's "receipt" and, to delegate to, "insights" and
-    "currency"; the expenses module's "currency")."""
-    return A2AAgents(
-        {
-            "receipt": AgentEndpoint(settings.receipt_agent_url, settings.receipt_agent_key),
-            "insights": AgentEndpoint(settings.insights_agent_url, settings.insights_agent_key),
-            "currency": AgentEndpoint(settings.currency_agent_url, settings.currency_agent_key),
-        }
     )
 
 

@@ -1,5 +1,6 @@
-# Starts one of SpendWise's A2A agents (agents/), beside the backend: receipt (:9001), insights (:9002) or
-# currency (:9003).
+# Starts one of SpendWise's A2A agents (agents/) on its own: receipt (:9001), insights (:9002) or currency (:9003).
+# Optional: the backend hosts all three itself (D207) and doesn't use these; run one alone to try it with another A2A
+# client. (The multi-server branch is where the backend reaches the agents as services.)
 # Usage:  .\run-agent.ps1 receipt        .\run-agent.ps1 insights        .\run-agent.ps1 currency
 # Run .\run.ps1 once first: it creates .venv and installs the requirements. Each agent needs its key in .env
 # (RECEIPT_AGENT_KEY, INSIGHTS_AGENT_KEY, CURRENCY_AGENT_KEY: docs/configuration.md); the receipt and insights

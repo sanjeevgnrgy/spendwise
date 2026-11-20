@@ -2352,6 +2352,8 @@ is natural. It's still a soft, model-judged guard.
   if the agent moves away from the files (it would need its own way to fetch them, with the owner checked).
 - **Updated by D202:** the key check, task store and web app moved into the shared agent kit; `run-receipt-agent.ps1`
   became `run-agent.ps1 receipt`.
+- **Updated by D207:** on `main` the backend hosts the agents in its own process; each is still its own code and an A2A
+  agent, and the `multi-server` branch keeps them as separate services.
 
 ### D196. The agent reuses the backend's LLM port and Gemini adapter, never its modules
 - **What:** `agents/receipt` imports `app.core` (the `StructuredOutputModel` port, `Attachment`, `LlmError`,
@@ -2382,6 +2384,8 @@ is natural. It's still a soft, model-judged guard.
   (security.md, "Not done yet").
 - **Updated by D202:** `AgentGate` is the agent kit's (`agent_kit/http.py`), with each agent's own key and request
   limit.
+- **Updated by D207:** on `main` the agents are reached in memory, so there's no port to guard; each still checks a key,
+  a random one made at startup. The settings matter only to run an agent alone.
 
 ### D198. The agent's task store keeps no file and few tasks
 - **What:** `ForgetfulTaskStore` wraps the SDK's `InMemoryTaskStore`: each task is saved with its history's file
@@ -2480,6 +2484,8 @@ is natural. It's still a soft, model-judged guard.
   32 checks), through the port and the real agent app in-process.
 - **Updated by D206:** the port also reads an agent's skills (`skills(agent)`, its card, 5 s) and resumes a task
   (`send(..., resume=TaskRef)`); `SkillCard` and `TaskRef` join it.
+- **Updated by D207:** the adapter runs every call on one background event loop (`a2a/loop.py`) instead of a fresh loop
+  per call, and is given in-process transports by `agents_host.py`.
 
 ### D202. A shared agent kit
 - **What:** `agents/agent_kit/`: `AgentGate` (the key check, a per-agent request limit from `request_limit(largest
@@ -2633,3 +2639,47 @@ is natural. It's still a soft, model-judged guard.
     are covered by the scripted checks.
 - **Revisit:** offering the receipt agent once a chat can hand it a file; asking the model, not a rule, whether a
   message answers the agent's question, if people often change the subject.
+
+---
+
+## One server (after Phase 25)
+
+> The backend hosts the three A2A agents in its own process, on its own port; the version with separate services is
+> kept on the `multi-server` branch. Refactor note:
+> [phases/refactor-single-server.md](phases/refactor-single-server.md).
+
+### D207. On main, the backend hosts the A2A agents in-process; multi-server is a branch
+- **What:**
+  - **Branches (the owner's choice):** `main` is the single-server version; `multi-server` keeps the code as of
+    Phase 25 (`9265950`), where each agent is its own service on 9001-9003.
+  - **Hosting:** `app/agents_host.py`, part of the composition root, builds the receipt, insights and currency agents'
+    web apps with the backend's own model (`bootstrap.build(llm=...)`, so a check's fake reaches them too), clock, the
+    mock rates, and a random key per agent made at startup; `A2AAgents` reaches each through `httpx.ASGITransport`, in
+    memory. Everything else is unchanged: cards (read at startup), skills, tasks, input-required, the gate, the task
+    store, and every check of an agent's answer.
+  - **The A2A adapter** runs every call on one background event loop (`infrastructure/a2a/loop.py`, a daemon thread
+    started on first use) instead of a fresh loop per call: the hosted agents' handlers, task stores and locks are made
+    once and belong to one loop.
+  - **Settings:** the backend no longer reads `RECEIPT_AGENT_URL`/`KEY`, `INSIGHTS_AGENT_URL`/`KEY` or
+    `CURRENCY_AGENT_URL`/`KEY`. The agents' own settings remain, for running one alone with `run-agent.ps1`.
+  - **Rules:** in `backend/`, only `agents_host.py` imports the agents (scan 10); it puts `agents/` on the import path
+    itself, so `run.ps1`, `seed.py`, `mcp_stdio.py` and the export script need nothing new. The agents' loggers are
+    shown with the backend's.
+- **Why:** one process to deploy and run (`run.ps1` alone), with no ports, keys or start order to manage, while the
+  multi-agent design (separate code, A2A contracts, the orchestrator) stays intact: moving an agent back out is a
+  configuration of `agents_host.py`, as the branch shows.
+- **Chosen with the owner:** `main` single-server, the current code on a `multi-server` branch; Next.js stays its own
+  server (it already gives the browser one origin, D184). Recommended instead: a setting on one branch, to avoid the
+  two drifting; the owner chose branches.
+- **Trade-offs:** the agents share the backend's process: a crash or a slow call in one affects the backend, and they
+  can't be scaled or deployed separately (that's the branch). Later work must be applied to both branches.
+- **How it was verified:** the app as `bootstrap.build()` makes it, with no agent process running and nothing on
+  9001-9003, through the HTTP API with a fake model (10 checks): the hosted cards read at startup and both agents
+  offered; a receipt read with a form and a chip; a USD expense converted (₹338.00); an insights question asked and
+  resumed; the agents using the backend's model; 60 agent calls from 12 threads at once all completing. The earlier
+  suites (26, 32, 35, 26, 30) still pass, an ordinary turn is unchanged, the real server boots as `run.ps1` starts it
+  (only `backend` on the path) on a copy of the database, reads both cards and answers `/health`, and the export
+  script leaves the web contract unchanged. Honest note: the 60-call test also passed with the old fresh-loop-per-call
+  adapter; the single loop is a precaution (asyncio objects bind to the loop that first waits on them), not the fix
+  for a failure that was reproduced.
+- **Revisit:** a setting instead of two branches, if keeping both up to date becomes a chore.

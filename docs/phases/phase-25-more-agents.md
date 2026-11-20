@@ -1,5 +1,9 @@
 # Phase 25: More A2A agents
 
+> **Later changes (one server, D207):** on `main` the backend hosts the three agents in its own process, so
+> `run.ps1` alone runs everything; the "Try it" steps with `run-agent.ps1` and agent keys apply to the `multi-server`
+> branch. See [refactor-single-server.md](refactor-single-server.md).
+
 **Goal:** more specialist agents beside the receipt agent (a currency agent and an insights agent), every expense kept
 in INR as well as its own currency, and the assistant choosing which agent to ask, including agents that need to ask
 the person something before they can finish. Decisions: D201–D204 (Part 1), D205 (Part 2), D206 (Part 3).

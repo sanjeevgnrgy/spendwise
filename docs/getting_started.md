@@ -57,15 +57,9 @@ What it does, in order:
 Extra arguments go to uvicorn, e.g. `.\run.ps1 --port 8001`. If PowerShell refuses to run the script, allow local
 scripts once: `Set-ExecutionPolicy -Scope CurrentUser RemoteSigned`.
 
-**The A2A agents** are separate services, each started in its own terminal with `.\run-agent.ps1 <name>`, and each with
-a key in `.env` (any random 32+ characters, e.g. from `python -c "import secrets; print(secrets.token_urlsafe(32))"`):
-
-- `.\run-agent.ps1 receipt` (`RECEIPT_AGENT_KEY`, http://127.0.0.1:9001) reads receipts attached in the chat;
-- `.\run-agent.ps1 insights` (`INSIGHTS_AGENT_KEY`, http://127.0.0.1:9002) analyses a month of spending (the assistant
-  hands it questions like "where did my money go?");
-- `.\run-agent.ps1 currency` (`CURRENCY_AGENT_KEY`, http://127.0.0.1:9003) converts expenses in other currencies to INR.
-
-Everything else works without them.
+**The A2A agents** (receipt, insights, currency) run inside the backend (D207): `.\run.ps1` starts them too, with no
+extra terminals, ports or keys. (`.\run-agent.ps1 <name>` can still run one on its own, to try it with another A2A
+client; the `multi-server` branch runs each as its own service.)
 
 ### The same, by hand (any OS)
 

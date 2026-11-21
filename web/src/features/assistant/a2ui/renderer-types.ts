@@ -1,6 +1,6 @@
 // The shape every A2UI component renderer shares, in the assistant feature's A2UI renderer (a2ui/).
 // The surface view (a2ui-surface.tsx) looks a renderer up in a catalog (catalogs.ts) and draws it with
-// these props; the renderers in basic-components.tsx, a2ui-inputs.tsx and a2ui-insights.tsx accept them.
+// these props; the renderers in renderers/ (basic-components.tsx, a2ui-inputs.tsx, a2ui-insights.tsx) accept them.
 // Drawing children goes through the two callbacks, so no renderer imports the surface view (no import cycle).
 
 import type { ReactNode } from "react"

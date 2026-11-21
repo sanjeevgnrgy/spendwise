@@ -1244,6 +1244,49 @@ export interface components {
         } & {
             [key: string]: unknown;
         };
+        /** SavedExpense */
+        SavedExpense: {
+            /** Id */
+            id: number;
+            /** Amount Minor */
+            amount_minor: number;
+            /** Currency */
+            currency: string;
+            /** Category Id */
+            category_id: number;
+            /** Merchant */
+            merchant: string;
+            /** Note */
+            note: string | null;
+            /**
+             * Spent On
+             * Format: date
+             */
+            spent_on: string;
+            payment_method: components["schemas"]["PaymentMethod"];
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /** Version */
+            version: number;
+            /** Base Amount Minor */
+            base_amount_minor: number | null;
+            /** Exchange Rate */
+            exchange_rate: string | null;
+            /** Rate Date */
+            rate_date: string | null;
+            /**
+             * Notices
+             * @default []
+             */
+            notices?: string[];
+            /** Amount */
+            readonly amount: string;
+            /** Base Amount */
+            readonly base_amount: string | null;
+        };
         /** SessionRead */
         SessionRead: {
             /** Id */
@@ -1790,7 +1833,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["ExpenseRead"];
+                    "application/json": components["schemas"]["SavedExpense"];
                 };
             };
             /** @description Validation Error */
@@ -1885,7 +1928,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["ExpenseRead"];
+                    "application/json": components["schemas"]["SavedExpense"];
                 };
             };
             /** @description Validation Error */

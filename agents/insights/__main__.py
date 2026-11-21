@@ -11,7 +11,7 @@ from insights.settings import AgentSettings
 
 def main() -> None:
     """Serve the agent until stopped (Ctrl+C)."""
-    settings = AgentSettings()
+    settings = AgentSettings()  # pyright: ignore[reportCallIssue]  (the key comes from the environment)
     serve(create_app(settings), settings.insights_agent_port)
 
 

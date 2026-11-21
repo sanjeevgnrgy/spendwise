@@ -31,7 +31,7 @@ class AppUser(SQLModel, table=True):
     """A person who uses SpendWise. Private to the accounts module."""
 
     # Not "user": that's a reserved word in Postgres.
-    __tablename__ = "app_user"
+    __tablename__ = "app_user"  # pyright: ignore[reportAssignmentType]  (SQLModel declares it as declared_attr)
 
     # SpendWise's own id for the person: what everything else points at, whatever provider they sign in with.
     id: int | None = Field(default=None, primary_key=True)
@@ -49,7 +49,7 @@ class AppUser(SQLModel, table=True):
 class UserIdentity(SQLModel, table=True):
     """One way a person signs in: a provider (issuer) and their id there (subject). Private to the accounts module."""
 
-    __tablename__ = "user_identity"
+    __tablename__ = "user_identity"  # pyright: ignore[reportAssignmentType]  (SQLModel declares it as declared_attr)
     # One person per identity: the same provider account can never become two users.
     __table_args__ = (UniqueConstraint("issuer", "subject"),)
 
@@ -65,7 +65,7 @@ class UserIdentity(SQLModel, table=True):
 class UserSession(SQLModel, table=True):
     """A signed-in browser. Its cookie holds a random key; only the key's hash is stored. Private to accounts."""
 
-    __tablename__ = "user_session"
+    __tablename__ = "user_session"  # pyright: ignore[reportAssignmentType]  (SQLModel declares it as declared_attr)
 
     id: int | None = Field(default=None, primary_key=True)
     # SHA-256 of the cookie's key: a copy of the database can't be turned back into a working cookie.
@@ -95,7 +95,7 @@ class UserSession(SQLModel, table=True):
 class LoginAttempt(SQLModel, table=True):
     """A sign-in under way at the provider: what the callback must check. Used once. Private to accounts."""
 
-    __tablename__ = "login_attempt"
+    __tablename__ = "login_attempt"  # pyright: ignore[reportAssignmentType]  (SQLModel declares it as declared_attr)
 
     id: int | None = Field(default=None, primary_key=True)
     # SHA-256 of the short-lived login cookie's key: the attempt only completes in the browser that started it.
@@ -111,7 +111,7 @@ class LoginAttempt(SQLModel, table=True):
 class AccessToken(SQLModel, table=True):
     """A personal access token: an MCP client acts for its owner with it (D191). Private to accounts."""
 
-    __tablename__ = "access_token"
+    __tablename__ = "access_token"  # pyright: ignore[reportAssignmentType]  (SQLModel declares it as declared_attr)
 
     id: int | None = Field(default=None, primary_key=True)
     user_id: int = Field(foreign_key="app_user.id", index=True)

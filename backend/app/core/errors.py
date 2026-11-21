@@ -82,6 +82,7 @@ class ForbiddenError(AppError):
     slug = "forbidden"
     title = "Forbidden"
 
+
 class TooManyRequestsError(AppError):
     """The person has used up an allowance (the model-backed routes' rate limit, D194): try again later."""
 

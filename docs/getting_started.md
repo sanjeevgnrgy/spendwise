@@ -73,6 +73,14 @@ py -3 -m venv .venv                                   # macOS/Linux: python3 -m 
 (On macOS/Linux the venv's Python is `.venv/bin/python`.) `--app-dir backend` is needed because the code imports
 itself as `app.…`, and the `app` package lives inside `backend/`.
 
+**To change the code**, install the development tools too, then run every check with one command (what CI runs):
+
+```powershell
+.\.venv\Scripts\python.exe -m pip install -r requirements-dev.txt   # Ruff and Pyright, pinned
+cd web; npm ci; cd ..
+.\.venv\Scripts\python.exe backend\scripts\check.py                 # --python for the backend's checks only
+```
+
 ## 4. Add sample data (optional)
 
 In a second terminal:

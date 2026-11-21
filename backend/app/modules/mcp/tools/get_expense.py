@@ -13,8 +13,8 @@ from mcp.server.mcpserver import MCPServer
 
 from app.modules.mcp.caller import current_caller
 from app.modules.mcp.contracts import EXPENSE_ID_ARGUMENT, ExpenseFound, ToolName
-from app.modules.mcp.tools.support import READS_ONLY, ExpenseIdArg, require_arguments, tool_errors
 from app.modules.mcp.tools.context import ToolContext
+from app.modules.mcp.tools.support import READS_ONLY, ExpenseIdArg, require_arguments, tool_errors
 
 
 def register_get_expense(server: MCPServer, context: ToolContext) -> None:
@@ -22,7 +22,7 @@ def register_get_expense(server: MCPServer, context: ToolContext) -> None:
 
     Raises RuntimeError at start-up if the tool lacks the argument the contract names (expense_id).
     """
-    bus, views = context.bus, context.views
+    views = context.views
 
     # The assistant calls it to show an expense (and its version) before a delete is approved.
     @server.tool(

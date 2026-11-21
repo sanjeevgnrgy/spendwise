@@ -60,4 +60,6 @@ def parse_text(line: str) -> ConversionRequest | None:
     if match is None:
         return None
     amount, source, target, on = match.groups()
-    return ConversionRequest(amount=amount, from_currency=source.upper(), to_currency=target.upper(), on=on)
+    return ConversionRequest.model_validate(
+        {"amount": amount, "from_currency": source.upper(), "to_currency": target.upper(), "on": on}
+    )

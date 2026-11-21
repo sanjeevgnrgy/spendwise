@@ -41,7 +41,9 @@ LANGUAGES: dict[Language, LanguageInfo] = {
     Language.EN: LanguageInfo(english_name="English", locale="en_IN"),
     Language.HI: LanguageInfo(english_name="Hindi", locale="hi_IN"),
 }
-assert set(LANGUAGES) == set(Language), "every Language needs its LanguageInfo"
+# A wiring check, kept under `python -O` too (an assert would be stripped): every Language needs its LanguageInfo.
+if set(LANGUAGES) != set(Language):
+    raise RuntimeError("every Language needs its LanguageInfo in LANGUAGES")
 
 
 def _match(tag: str) -> Language | None:

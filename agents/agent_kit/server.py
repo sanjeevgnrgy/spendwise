@@ -28,9 +28,7 @@ RPC_PATH = "/"
 KIT_LOGGER = "agent_kit"
 
 
-def build_agent_app(
-    card: AgentCard, executor: AgentExecutor, key: SecretStr, max_request_bytes: int
-) -> Starlette:
+def build_agent_app(card: AgentCard, executor: AgentExecutor, key: SecretStr, max_request_bytes: int) -> Starlette:
     """An agent's web app: its card (open), the JSON-RPC route (behind the key and the size limit), and the kit's
     forgetful task store."""
     handler = DefaultRequestHandler(agent_executor=executor, task_store=ForgetfulTaskStore(), agent_card=card)

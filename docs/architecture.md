@@ -61,6 +61,7 @@ backend/
       identity.py        IdentityProvider: the sign-in port (D185), with VerifiedLogin, LogoutNotice, Principal
                          (who a request comes from), IdentityError and InvalidTokenError
       sealing.py         Sealer: the port for keeping a secret text unreadable where it's stored (seal, unseal)
+      sql.py             rows_affected: how many rows a DELETE or UPDATE touched
       months.py          YearMonth: "2026-11", its range and arithmetic
       money.py           rupees <-> paise, CURRENCY_PATTERN, format_money (CLDR, in a language's locale)
       i18n/              Language and Accept-Language negotiation, define_catalog / text / Plural / Translatable
@@ -70,9 +71,9 @@ backend/
                          and the shared pieces of a structured-output schema (schema.py)
     infrastructure/      what talks to the outside world; imports only core/; only the composition root and the
                          entry points import it
-      config.py          settings from .env; API_PREFIX, API_VERSION, MCP_PATH
+      config.py          get_settings() (from .env, read on first use); API_PREFIX, API_VERSION, MCP_PATH
       db.py              create_db_engine(url) (SQLite made transactional: DDL, savepoints; in-memory databases
-                         share one connection), session_factory(), the default engine
+                         share one connection), session_factory(), default_engine() (built on first use)
       migrations.py      run / check the Alembic migrations from code
       logging.py         console logging for our own loggers ("app.*")
       files.py           LocalFileStore: the FileStore port as a folder (UPLOADS_DIR), files named by random keys
@@ -109,7 +110,9 @@ backend/
                          (the write side's table access) and queries/month_range.py (the summary's and trend's filter)
       budgets/           monthly limits, overall and per category (D210): commands/ (set_budget, remove_budget),
                          queries/get_budget_status.py (spending from the expenses module's summary against the
-                         limits), domain/rules.py (the state, the share used, the month gone by), persistence/
+                         limits), domain/rules.py (the state, the share used, the month gone by) and alerts.py
+                         (which budgets a save pushed near or over), application/budget_watch.py (BudgetWatch: the
+                         expenses routes' SaveWatcher and the MCP save tools' alerts, D212), persistence/
       conversations/     stored chat threads (provider-neutral messages); GET /threads/{id}; the same shape,
                          without models.py, plus queries/thread_rows.py (what GetHistory and GetThread share)
       receipts/          uploaded receipt files, for their owner; the same shape, plus domain/file_types.py (what
@@ -141,7 +144,8 @@ backend/
                                          the server sends each), directory.py (cards read at startup, the
                                          delegate_to_agent tool), delegator.py (a call, and resuming a waiting task),
                                          models.py, commands/ and persistence/ (pending_delegation)
-                           a2ui/         cards, forms
+                           a2ui/         cards, forms; models/ (the A2UI shapes: base, basic, actions, insights,
+                                         messages)
                            module.py     what the composition root plugs in
       mcp/               MCP adapter: contracts.py (tool and argument names, bearer scheme, typed results; all
                          __init__ exports), server.py (TOOL_REGISTRARS, create_server), tools/ (one file per tool,
@@ -149,7 +153,8 @@ backend/
                          expense as tools show it), http.py (bearer token), module.py
   migrations/            Alembic: env.py and versions/0001_baseline, 0002_neutral_conversations, 0003_expense_version,
                          0004_conversation_turn_index, 0005_receipt_files, 0006_accounts, ... 0010_budgets
-  scripts/               export_contracts.py (the contract for the web app)
+  scripts/               export_contracts.py (the contract for the web app), check.py (every automated check) and
+                         check_rules.py (the architecture rules)
   seed.py                sample data, through the bus
   mcp_stdio.py           the MCP server over stdio (Inspector, Claude Desktop)
 ```
@@ -381,12 +386,11 @@ taken when it comes back, and the session written only after the provider has an
 
 Everything a test would want to replace can be passed in, without patching modules:
 
-- `bootstrap.build(clock=..., llm=..., tools=..., engine=..., files=..., identity=..., sealer=..., agents=...)`
-  builds the app's
-  services around fakes, and `main.create_app(services)` serves them over HTTP (FastAPI's `TestClient` works directly
-  on it; with `base_url="https://localhost"` it keeps the Secure session cookie). A fake identity provider signs a
-  test in through the real routes; the OIDC adapter itself takes `transport=httpx2.MockTransport(...)` to talk to a
-  fake provider, so the token checks run with no network.
+- `bootstrap.build(clock=..., llm=..., tools=..., engine=..., files=..., identity=..., sealer=..., agents=...,
+  skills=...)` builds the app's services around fakes, and `main.create_app(services)` serves them over HTTP (FastAPI's
+  `TestClient` works directly on it; with `base_url="https://localhost"` it keeps the Secure session cookie). A fake
+  identity provider signs a test in through the real routes; the OIDC adapter itself takes
+  `transport=httpx2.MockTransport(...)` to talk to a fake provider, so the token checks run with no network.
 - `migrations.upgrade_to_latest(engine)` migrates any engine, including an in-memory SQLite one (which shares a
   single connection, so every thread sees the same database).
 - Nothing is built as a side effect of importing: uvicorn calls `create_app` (`--factory`), and each module's
@@ -633,79 +637,26 @@ production: one reverse proxy in front of both: pages to Next.js, /api/v1/ to Ne
 
 ## Checking the rules
 
-The web app's rules are checked by `npx oxlint` in `web/`. The backend has no automated check at the moment (the
-architecture test was removed with the other tests, D64), so run these scans from the project folder:
+The rules are checked by tools, not by reading: `backend\scripts\check.py` runs them all (and CI runs it on every
+push, `.github/workflows/ci.yml`). The architecture rules are `backend\scripts\check_rules.py`, which reads the
+source's imports (Python's `ast`) and checks:
 
-```powershell
-# 1. Shared code grouped by concern (D177). Expect no output from any of the four: core/ imports nothing else in
-#    the app; infrastructure/ and web/ import only core/; no module imports infrastructure/.
-Get-ChildItem backend\app\core -Recurse -Filter *.py |
-  Select-String -Pattern '^\s*(from|import)\s+app\.(modules|infrastructure|web|bootstrap|main)\b'
-Get-ChildItem backend\app\infrastructure -Recurse -Filter *.py |
-  Select-String -Pattern '^\s*(from|import)\s+app\.(modules|web|bootstrap|main)\b'
-Get-ChildItem backend\app\web -Recurse -Filter *.py |
-  Select-String -Pattern '^\s*(from|import)\s+app\.(modules|infrastructure|bootstrap|main)\b'
-Get-ChildItem backend\app\modules -Recurse -Filter *.py | Select-String -Pattern 'app\.infrastructure\b'
+1. `core/` imports nothing else in the app; `infrastructure/` and `web/` import only `core/`; no module imports
+   `infrastructure/` (D177).
+2. Another module is used only through its package (`from app.modules import budgets`), never its files.
+3. Only `bootstrap.py` and `main.py` import a `module.py`.
+4. Only a composition root picks the LLM provider (bootstrap.py, the Gemini adapter, the agents' server.py).
+5. Inside the assistant, imports run `api/` → `application/` → the rest, never back.
+6. Each module package imports on its own, in a fresh interpreter (which catches import cycles).
+7. Only a module's HTTP adapters (`api.py`, `account_api.py`, `http.py`, `routes.py`) import `web/`.
+8. No identity provider's name in `backend/app` or `web/src` (D185).
+9. A person's data is never read by its id alone (`session.get(`), except in `take_approval.py`, which compares the
+   owner itself (D190).
+10. The agents use only the backend's `core/` (plus the Gemini adapter and logging in a `server.py`); in the backend
+    only `agents_host.py` imports them (D196, D207).
+11. The agents import on their own.
+12. Only `infrastructure/a2a` imports the A2A SDK (D201).
+13. Module dependencies follow the allowed graph (AGENTS.md, "Boundaries"): no cycles.
 
-# 2. Imports of a module's files. Every line must be inside that same module's folder (expenses/commands/
-#    create_expense.py importing app.modules.expenses.persistence.repository is fine; anything else isn't).
-Get-ChildItem backend\app\modules -Recurse -Filter *.py | Select-String -Pattern '^\s*from\s+app\.modules\.\w+\.'
-
-# 3. Only the composition root imports a module.py. Expect bootstrap.py and main.py.
-Get-ChildItem backend -Recurse -Filter *.py | Select-String -Pattern 'import module as' | Split-Path -Leaf | Sort-Object -Unique
-
-# 4. Only a composition root picks the LLM provider. Expect bootstrap.py, the adapter (infrastructure/llm/gemini.py)
-#    and the receipt and insights agents' server.py (the currency agent uses no model).
-Get-ChildItem backend, agents -Recurse -Filter *.py | Select-String -Pattern 'llm\.gemini|from google'
-
-# 5. Inside the assistant, imports run api/ -> application/ -> agent/, approvals/, tools/, receipt_agent/,
-#    delegation/, skills/, a2ui/, never back.
-#    Expect only module.py, which builds the router and the use cases.
-$assistant = Get-ChildItem backend\app\modules\assistant -Recurse -Filter *.py
-$assistant | Where-Object FullName -NotMatch '\\assistant\\api\\' | Select-String -Pattern 'assistant\.api\b'
-$assistant | Where-Object FullName -NotMatch '\\assistant\\(api|application)\\' |
-  Select-String -Pattern 'assistant\.application\b'
-
-# 6. Each module package imports on its own, in a fresh interpreter. Expect no output. An error here usually means
-#    an import cycle between modules (importing a package also loads its slices, D175).
-foreach ($m in "accounts", "categories", "conversations", "expenses", "budgets", "mcp", "receipts", "reports",
-             "assistant") {
-  .\.venv\Scripts\python.exe -c "import sys; sys.path.insert(0, 'backend'); import app.modules.$m"
-}
-
-# 7. Only a module's HTTP adapters import web/. Expect api.py (accounts, budgets, categories, conversations,
-#    expenses, receipts, reports), account_api.py (accounts), http.py (mcp) and routes.py (the assistant's api/).
-Get-ChildItem backend\app\modules -Recurse -Filter *.py | Select-String -Pattern 'app\.web\b' | Split-Path -Leaf |
-  Sort-Object -Unique
-
-# 8. No identity provider's name in the code (D185): the provider is configuration. Expect no output.
-Get-ChildItem backend\app, web\src -Recurse -Include *.py,*.ts,*.tsx | Select-String -Pattern 'zitadel'
-
-# 9. A person's data is never looked up by its id alone (D190): the owner goes in the same statement. Expect only
-#    take_approval.py, which compares the owner on the next line.
-Get-ChildItem backend\app\modules\expenses, backend\app\modules\budgets, backend\app\modules\conversations,
-  backend\app\modules\receipts, backend\app\modules\assistant -Recurse -Filter *.py |
-  Select-String -Pattern 'session\.get\(' | Split-Path -Leaf
-
-# 10. The agents (and the kit) use only the backend's core/, and the Gemini adapter and logging in a server.py (D196);
-#     in the backend only agents_host.py imports them (D207). Expect no output from the first two, and agents_host.py
-#     alone from the third.
-Get-ChildItem agents -Recurse -Filter *.py |
-  Select-String -Pattern '^\s*(from|import)\s+app\.(modules|web|bootstrap|main|infrastructure\.config)\b'
-Get-ChildItem agents -Recurse -Filter *.py | Where-Object Name -NE server.py |
-  Select-String -Pattern '^\s*(from|import)\s+app\.infrastructure\b'
-Get-ChildItem backend -Recurse -Filter *.py |
-  Select-String -Pattern '^\s*(from|import)\s+(receipt|insights|currency|agent_kit)\b' | Split-Path -Leaf |
-  Sort-Object -Unique
-
-# 11. The agents import and compile on their own. Expect no output.
-$env:PYTHONPATH = "backend;agents"
-.\.venv\Scripts\python.exe -c "import receipt.server, insights.server, currency.server"
-Remove-Item Env:PYTHONPATH
-.\.venv\Scripts\python.exe -m compileall -q agents
-
-# 12. Only infrastructure/a2a uses the A2A SDK in the backend (D201): modules use core/agents.RemoteAgents. Expect
-#     agents.py alone.
-Get-ChildItem backend\app -Recurse -Filter *.py | Select-String -Pattern '^\s*(from|import)\s+a2a\b' |
-  Split-Path -Leaf | Sort-Object -Unique
-```
+The web app's import rules are checked by `npx oxlint`, its types by `tsc`, its style by Prettier. Python's style and
+types: Ruff and Pyright (`pyproject.toml`).

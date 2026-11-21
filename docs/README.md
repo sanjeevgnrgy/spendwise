@@ -25,9 +25,9 @@ it's built that way.
 | [architecture.md](architecture.md) | The modular monolith with CQRS, vertical slices inside each module, the module rules, how a request flows, feature slices, the shared contract |
 | [assistant_architecture.md](assistant_architecture.md) | The agent loop, tools over MCP, AG-UI streaming, A2UI cards and forms, approvals, memory, cost |
 | [how_spendwise_works.md](how_spendwise_works.md) | The main flows as diagrams: adding an expense, the Dashboard, asking, deleting with approval, staying in sync |
-| [architecture-review.md](architecture-review.md) | Every finding of the architecture review and the two code reviews, and how each was resolved |
+| [architecture-review.md](architecture-review.md) | Every finding of the architecture review and the code reviews (the latest: 2026-11-21), and how each was resolved |
 | [roadmap.md](roadmap.md) | What's planned next, in order: each feature's goal, scope, design, open decisions and dependencies, including the public site and SEO, and paid plans with Razorpay |
-| [decisions.md](decisions.md) | Every design decision (D1–D194), with why, and when to revisit it |
+| [decisions.md](decisions.md) | Every design decision (D1 onwards), with why, and when to revisit it |
 
 ## Developer guides
 
@@ -90,6 +90,7 @@ it, and design questions with their answers (collapsed). Later changes are noted
 | [phases/phase-27-budgets.md](phases/phase-27-budgets.md) | Budgets: standing monthly limits, overall and per category, measured against the expenses module's summary; Part 1, the budgets module, its API, the Budgets page and the Dashboard's Budget card; Part 2, the assistant: get_budgets and set_budget, the budget card, alerts when a save crosses 80% or 100% |
 | [phases/refactor-single-server.md](phases/refactor-single-server.md) | One server: the backend hosts the three A2A agents in its own process, reached in memory, still over A2A; the multi-server version kept on its own branch |
 | [phases/refactor-nextjs.md](phases/refactor-nextjs.md) | The move to Next.js for search engines: App Router routes with server-rendered metadata, robots.txt and a sitemap, the signed-in app behind one client boundary, the API rewrite and its proxy settings, a real 404 |
+| [phases/refactor-code-quality.md](phases/refactor-code-quality.md) | The code review of 2026-11-21 acted on: Ruff, Pyright, Prettier, an architecture check and CI; budget warnings on every save path; nothing built at import; smaller units |
 | [phases/refactor-solid.md](phases/refactor-solid.md) | SOLID in practice (surfaces instead of flags, tool and component registries, narrow ports), testability seams and how behaviour was recorded, scalability work and limits |
 | [phases/refactor-architecture.md](phases/refactor-architecture.md) | CQRS and the unit of work, ports and adapters, feature slices, migrations, the generated contract; then the code-review fixes (versions, transactional SQLite) |
 

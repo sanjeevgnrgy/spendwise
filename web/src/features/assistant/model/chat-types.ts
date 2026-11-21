@@ -1,15 +1,28 @@
 // The assistant conversation's view model: what one message, one tool chip and the whole chat look like to the
-// panel. Plain types with no logic, so components, the pure transcript functions (transcript.ts), the payload
-// decoders (api/agent-events.ts) and the hooks (use-chat.ts, assistant-context.ts) all share one definition.
+// panel, and the names of their roles and statuses. Types and constants with no logic, so components, the pure
+// transcript functions (transcript.ts), the payload decoders (api/agent-events.ts) and the hooks (use-chat.ts,
+// assistant-context.ts) all share one definition.
 
 import type { A2uiAction, A2uiSurface } from "../a2ui/protocol"
 import type { ToolLabels } from "../api/agent-events"
 
 /**
- * Where a tool call stands. "unknown": the connection broke (or Stop was pressed) while it ran, so it may have
+ * Where a tool call stands. `unknown`: the connection broke (or Stop was pressed) while it ran, so it may have
  * finished on the server, or not.
  */
-export type ToolStatus = "running" | "done" | "failed" | "unknown"
+export const TOOL_STATUSES = { running: "running", done: "done", failed: "failed", unknown: "unknown" } as const
+/** One of TOOL_STATUSES' values. */
+export type ToolStatus = (typeof TOOL_STATUSES)[keyof typeof TOOL_STATUSES]
+
+/** Who wrote a message: the person, or the assistant. */
+export const MESSAGE_ROLES = { user: "user", assistant: "assistant" } as const
+/** One of MESSAGE_ROLES' values. */
+export type MessageRole = (typeof MESSAGE_ROLES)[keyof typeof MESSAGE_ROLES]
+
+/** How an assistant reply ended, when it didn't end normally: the run failed, or was stopped. */
+export const MESSAGE_STATUSES = { failed: "failed", stopped: "stopped" } as const
+/** One of MESSAGE_STATUSES' values. */
+export type MessageStatus = (typeof MESSAGE_STATUSES)[keyof typeof MESSAGE_STATUSES]
 
 /** One tool call the assistant made, as the panel shows it: a chip that changes as events arrive. */
 export interface ToolActivity {
@@ -26,7 +39,7 @@ export interface ToolActivity {
 /** One bubble in the conversation: yours, or the assistant's. */
 export interface ChatMessage {
   id: number
-  role: "user" | "assistant"
+  role: MessageRole
   text: string
   /** User only: the name of the receipt file sent with the message (the user's own data, shown as it is). */
   attachment?: string
@@ -35,7 +48,7 @@ export interface ChatMessage {
   /** Assistant only: A2UI cards and forms sent with this reply. */
   surfaces?: A2uiSurface[]
   /** The run failed (the text is the error), or was stopped. */
-  status?: "failed" | "stopped"
+  status?: MessageStatus
 }
 
 /** The conversation as the panel uses it (from `useAssistant()`): what to show, and what the user can do. */

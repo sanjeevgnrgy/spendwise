@@ -69,10 +69,11 @@ class ParseResponse(BaseModel):
 # What POST /expenses needs that a note might not mention. currency and spent_on always get a
 # value (INR and today are safe defaults), so they're never missing.
 REQUIRED_TO_SAVE = ("amount", "category", "merchant", "payment_method")
-assert set(REQUIRED_TO_SAVE) <= set(ParsedExpense.model_fields)
 # The field whose allowed values (the category names) are filled in per request.
 CATEGORY_FIELD = "category"
-assert CATEGORY_FIELD in ParsedExpense.model_fields
+# Wiring checks, kept under `python -O` too (an assert would be stripped): both names must be ParsedExpense's fields.
+if not {*REQUIRED_TO_SAVE, CATEGORY_FIELD} <= set(ParsedExpense.model_fields):
+    raise RuntimeError("REQUIRED_TO_SAVE and CATEGORY_FIELD must name ParsedExpense's fields")
 
 
 def _system_instruction(today: date) -> str:

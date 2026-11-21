@@ -12,9 +12,9 @@ import { Separator } from "@/shared/ui/separator"
 
 import { Unsupported } from "./a2ui-unsupported"
 import { ALIGN, AXIS, BUTTON_VARIANT, JUSTIFY, TEXT_VARIANT } from "./basic-catalog"
-import { resolve } from "./protocol"
-import type { A2uiRendererProps, WrapChild } from "./renderer-types"
-import { useButtonClick } from "./use-button-click"
+import { resolve } from "../protocol"
+import type { A2uiRendererProps, WrapChild } from "../renderer-types"
+import { useButtonClick } from "../buttons/use-button-click"
 
 /**
  * Text: plain text through React, which escapes it (never innerHTML). A2UI allows simple Markdown in Text;

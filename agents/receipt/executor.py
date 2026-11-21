@@ -13,13 +13,12 @@ A rejection or failure carries a short English reason for the client's log; the 
 import asyncio
 import logging
 
-from pydantic import ValidationError
-
 from a2a.helpers import get_data_parts, new_data_part
 from a2a.server.agent_execution import AgentExecutor, RequestContext
 from a2a.server.events import EventQueue
 from a2a.types import Message, Part
 from a2a.utils.errors import TaskNotCancelableError
+from pydantic import ValidationError
 
 from agent_kit.tasks import fail, reject, start_task
 from app.core.llm import LlmError

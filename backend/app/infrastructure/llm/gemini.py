@@ -103,7 +103,7 @@ class GeminiModel:
         tools: list[ToolSpec],
         system_instruction: str,
         effort: ReasoningEffort | None = None,
-    ) -> "GeminiStream":
+    ) -> GeminiStream:
         """One step of a tool-using conversation, streamed: the answer may be text, tool calls, or both.
 
         `history` is the whole conversation so far: we don't let Google store it, so it's resent every time.

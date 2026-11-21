@@ -23,6 +23,7 @@ MAX_MERCHANT_LENGTH to check the report's figures, payment_method_label for its 
 """
 
 from app.modules.expenses.application.record_expense import ExpenseRecorder
+from app.modules.expenses.application.save_watch import SaveWatcher
 from app.modules.expenses.commands.create_expense import CreateExpense, NewExpense
 from app.modules.expenses.commands.delete_expense import DeleteExpense
 from app.modules.expenses.commands.update_expense import ExpenseChanges, UpdateExpense
@@ -53,9 +54,9 @@ __all__ = [
     "ExpenseFilters",
     "ExpenseId",
     "ExpenseList",
-    "ExpenseText",
     "ExpenseRead",
     "ExpenseRecorder",
+    "ExpenseText",
     "GetExpense",
     "GetMonthlySummary",
     "GetMonthlyTrend",
@@ -66,6 +67,7 @@ __all__ = [
     "NewExpense",
     "PaymentMethod",
     "RatesUnavailableError",
+    "SaveWatcher",
     "UnsupportedCurrencyError",
     "UpdateExpense",
     "payment_method_label",

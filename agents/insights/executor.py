@@ -16,14 +16,13 @@ history, which the kit's store keeps for an interrupted task (D205).
 import asyncio
 import logging
 
-from pydantic import ValidationError
-
 from a2a.helpers import get_data_parts, get_text_parts, new_data_part, new_text_part
 from a2a.server.agent_execution import AgentExecutor, RequestContext
 from a2a.server.events import EventQueue
 from a2a.server.tasks import TaskUpdater
 from a2a.types import Message, Role, Task, TaskState
 from a2a.utils.errors import TaskNotCancelableError
+from pydantic import ValidationError
 
 from agent_kit.tasks import fail, reject, start_task
 from app.core.llm import LlmError

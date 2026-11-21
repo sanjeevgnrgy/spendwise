@@ -2,7 +2,7 @@
 
 Rules for AI coding agents, and anyone else, changing SpendWise. They describe how this codebase is built: a change
 that doesn't follow them isn't finished. The reasoning behind each rule is in [docs/](docs/README.md). Read the linked
-doc before working in an area, and check [decisions.md](docs/decisions.md) (D1–D194) before changing a settled choice.
+doc before working in an area, and check [decisions.md](docs/decisions.md) before changing a settled choice.
 
 | Before you change… | Read |
 |---|---|
@@ -59,7 +59,8 @@ shared:
   queries/<name>.py    one query: the message, its handler and its result models
   domain/rules.py      business rules shared by several slices
   persistence/         tables.py (+ repository.py for the write side)
-  i18n/                texts for people: en.py (the keys, a StrEnum, and the English source), hi.py, __init__.py
+  i18n/                texts for people: en.py (the keys, a StrEnum, and the English source), hi.py, __init__.py;
+                       a large catalog splits them: keys.py, then en/ and hi/ with one file per area (the assistant's)
 ```
 
 File name = the message in snake_case (`GetMonthlySummary` → `queries/get_monthly_summary.py`), and the handler has
@@ -88,9 +89,10 @@ modules need it. Recipes: [backend_onboarding.md](docs/backend_onboarding.md).
   the backend's process (D207; the `multi-server` branch runs them as services). An agent knows no person: the owner
   is checked in the monolith before anything is sent, and the agent refuses requests without its key (D197).
 
-**Composition root.** `bootstrap.build(clock, llm, tools, engine, files, identity, sealer, agents)` creates
-everything replaceable;
-`main.create_app(services)` serves it; nothing is built at import (uvicorn runs with `--factory`).
+**Composition root.** `bootstrap.build(clock, llm, tools, engine, files, identity, sealer, agents, skills)` creates
+everything replaceable (a module that needs another's work without depending on it defines a port the other implements,
+plugged in here: expenses' `SaveWatcher`, implemented by budgets, D212); `main.create_app(services)` serves it; nothing
+is built at import (uvicorn runs with `--factory`).
 
 **Ports and adapters.** The model sits behind `core/llm` ports: depend on the narrowest one you call
 (`StructuredOutputModel` or `ToolCallingModel`). Only `bootstrap.py` imports the Gemini adapter
@@ -269,7 +271,11 @@ files, not new branches in shared code.
   - Values shared with the web app go through the generated contract.
 - **No duplication:** one definition, referenced everywhere.
 - **Dependencies:** pin every new one to an exact version (`requirements.txt`, `package.json`). Prefer adding none.
-- **No hidden dependencies:** no globals read inside logic, no work done at import time, no `date.today()`.
+- **No hidden dependencies:** no globals read inside logic, no work done at import time (settings and the database
+  engine are built on first use: `get_settings()`, `default_engine()`), no `date.today()`.
+- **Style and types are the tools':** Ruff formats and lints Python, Pyright checks its types (`pyproject.toml`),
+  Prettier formats the web app (`web/.prettierrc.json`). Untrusted input (a tool's arguments, a model's answer) is
+  checked with `Model.model_validate(...)`, never passed to a constructor; Pydantic defaults are `Field(default=...)`.
 
 ## 5. Testability (there are no automated tests yet, D173)
 
@@ -307,12 +313,14 @@ logic that can be a pure function is one.
 
 ## 7. Definition of done
 
-Run these before asking to commit (PowerShell, from the repo root):
+Run these before asking to commit (PowerShell, from the repo root; once: `pip install -r requirements-dev.txt`
+and `npm ci` in `web/`):
 
 ```powershell
-# Backend compiles, and the module rules hold: run every scan in docs/architecture.md, "Checking the rules"
-# (they include each module package importing on its own, which catches import cycles).
-.\.venv\Scripts\python.exe -m compileall -q backend agents
+# Everything automated: compile, Ruff (lint and format), Pyright (types), the architecture rules (check_rules.py:
+# layers, module boundaries and dependencies, adapters, owners, each package importing on its own), then the web
+# app's tsc, oxlint, Prettier and build. The same script runs in CI (.github/workflows/ci.yml).
+.\.venv\Scripts\python.exe backend\scripts\check.py
 
 # Migrations, on a COPY of the database
 Copy-Item backend\spendwise.db $env:TEMP\spendwise-check.db
@@ -323,10 +331,10 @@ Remove-Item Env:DATABASE_URL
 
 # After any change to an API, limit, label or protocol name: regenerate the web app's contract
 .\.venv\Scripts\python.exe backend\scripts\export_contracts.py; cd web; npm run gen:api; cd ..
-
-# Web
-cd web; npx tsc -b; npx oxlint; npm run build; cd ..       # oxlint: warnings only inside src/shared/ui
 ```
+
+Fix what they report rather than silencing it. A `# pyright: ignore[rule]` or a lint suppression is only for a
+library's typing limit, with the reason on the same line.
 
 **Behaviour.**
 - Exercise the change through the HTTP API with a fake model (section 5), not the real one.

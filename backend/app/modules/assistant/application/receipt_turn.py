@@ -93,9 +93,7 @@ def receipt_turn(
     logger.info("receipt %s offered as a form (%s)", receipt_id, "details found" if found else "nothing found")
     reply = text(language, ChatText.RECEIPT_READ if found else ChatText.RECEIPT_NOTHING_FOUND)
     yield TextDelta(reply)
-    yield FormRequested(
-        form=a2ui.expense_form(values, category_names, today, language), source=a2ui.FormSource.RECEIPT
-    )
+    yield FormRequested(form=a2ui.expense_form(values, category_names, today, language), source=a2ui.FormSource.RECEIPT)
     said.append(READ_SAID.format(values=json.dumps(values, ensure_ascii=False)))
     yield TurnFinished(reply=reply, messages=_stored(said, reply))
 

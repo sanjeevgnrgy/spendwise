@@ -13,13 +13,12 @@ No model is involved: the arithmetic is core.money's convert_minor, the one rule
 import logging
 from decimal import Decimal
 
-from pydantic import ValidationError
-
 from a2a.helpers import get_data_parts, get_text_parts, new_data_part
 from a2a.server.agent_execution import AgentExecutor, RequestContext
 from a2a.server.events import EventQueue
 from a2a.types import Message
 from a2a.utils.errors import TaskNotCancelableError
+from pydantic import ValidationError
 
 from agent_kit.tasks import reject, start_task
 from app.core.clock import Clock
@@ -62,8 +61,14 @@ class CurrencyExecutor(AgentExecutor):
         part = new_data_part(answer.model_dump(mode="json"), media_type=JSON_MEDIA_TYPE)
         await updater.add_artifact(parts=[part], name=ARTIFACT_NAME, last_chunk=True)
         await updater.complete()
-        logger.info("task %s: %s %s -> %s %s", updater.task_id, answer.amount, answer.from_currency,
-                    answer.converted, answer.to_currency)
+        logger.info(
+            "task %s: %s %s -> %s %s",
+            updater.task_id,
+            answer.amount,
+            answer.from_currency,
+            answer.converted,
+            answer.to_currency,
+        )
 
     async def cancel(self, context: RequestContext, event_queue: EventQueue) -> None:
         """Not supported: a conversion ends as soon as it starts. Raises TaskNotCancelableError."""

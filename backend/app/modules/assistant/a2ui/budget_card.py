@@ -10,7 +10,7 @@ and is placed in a Text or a Stat: data to show, never instructions or markup.
 from functools import partial
 
 from app.core.i18n import Language, format_month, text
-from app.core.money import BASE_CURRENCY, format_money
+from app.core.money import format_money
 from app.core.months import YearMonth
 from app.modules import budgets
 from app.modules.assistant.a2ui.models import (
@@ -55,14 +55,14 @@ def _categories(status: budgets.BudgetStatus, language: Language) -> list[Compon
     """A row per category with a limit: its name and share used, and "₹4,200 of ₹5,000". Empty if none has one."""
     t = partial(text, language)  # t(key, **values): a text in the request's language
     money = partial(format_money, currency=status.currency, language=language)
-    lines = [line for line in status.categories if line.limit is not None and line.state is not None]
-    if not lines:
+    # Each category with a limit, its limit and state already known not to be None.
+    budgeted = [(line, line.limit, line.state) for line in status.categories if line.limit is not None and line.state]
+    if not budgeted:
         return []
-    components: list[Component] = [List(id="categories", children=[f"cat_{i}" for i in range(len(lines))])]
-    for i, line in enumerate(lines):
-        assert line.limit is not None and line.state is not None  # the filter above
-        used = t(ChatText.BUDGET_USED, percent=line.used_percent, state=t(_STATES[line.state]))
-        amounts = t(ChatText.BUDGET_SPENT_OF, spent=money(line.spent), limit=money(line.limit))
+    components: list[Component] = [List(id="categories", children=[f"cat_{i}" for i in range(len(budgeted))])]
+    for i, (line, limit, state) in enumerate(budgeted):
+        used = t(ChatText.BUDGET_USED, percent=line.used_percent, state=t(_STATES[state]))
+        amounts = t(ChatText.BUDGET_SPENT_OF, spent=money(line.spent), limit=money(limit))
         components += [
             Row(id=f"cat_{i}", children=[f"cat_{i}_info", f"cat_{i}_amount"], justify="spaceBetween"),
             Column(id=f"cat_{i}_info", children=[f"cat_{i}_name", f"cat_{i}_used"]),
@@ -93,18 +93,5 @@ def budget_card(status: budgets.BudgetStatus, language: Language) -> CreateSurfa
 
 
 def alert_texts(alerts: list[budgets.BudgetAlert], language: Language) -> list[str]:
-    """Each alert as a sentence for the expense card: "Food budget: 84.0% used (₹4,200.00 of ₹5,000.00)"."""
-    t = partial(text, language)  # t(key, **values): a text in the request's language
-    written = []
-    for alert in alerts:
-        # Budgets are in INR, like every total (D204).
-        values = {
-            "name": alert.category if alert.category is not None else t(ChatText.BUDGET_OVERALL),
-            "spent": format_money(alert.spent, BASE_CURRENCY, language),
-            "limit": format_money(alert.limit, BASE_CURRENCY, language),
-        }
-        if alert.state is budgets.BudgetState.OVER_LIMIT:
-            written.append(t(ChatText.BUDGET_ALERT_OVER, **values))
-        else:
-            written.append(t(ChatText.BUDGET_ALERT_NEAR, percent=alert.used_percent, **values))
-    return written
+    """Each alert as a sentence for the expense card, worded by the budgets module (budgets.alert_text)."""
+    return [budgets.alert_text(alert, language) for alert in alerts]

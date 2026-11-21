@@ -20,8 +20,9 @@ def _alert(name: str | None, before: BudgetLine | None, after: BudgetLine) -> Bu
     was = before.state if before is not None and before.state is not None else BudgetState.ON_TRACK
     if _RANK[after.state] <= _RANK[was]:
         return None
-    return BudgetAlert(category=name, state=after.state, spent=after.spent, limit=after.limit,
-                       used_percent=after.used_percent)
+    return BudgetAlert(
+        category=name, state=after.state, spent=after.spent, limit=after.limit, used_percent=after.used_percent
+    )
 
 
 def crossed(before: BudgetStatus, after: BudgetStatus) -> list[BudgetAlert]:

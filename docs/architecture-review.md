@@ -213,3 +213,32 @@ new abstractions (surfaces, the split port, the registries) were judged justifie
   render with data; the chat panel loads on demand, draws the insight card's chart, and an approved delete is carried
   out; a blocked page and a blocked chat panel each show the error and recover with Try again.
 
+## 6. The code review of 2026-11-21
+
+A review of the whole codebase (336 Python files, 190 TypeScript files) for god files, industry practice, SOLID and
+DRY, magic strings, clean code, structure and coupling, measured by scripts (file, function and folder sizes, repeated
+code, literals, imports, the dependency graph) before reading the hot spots. Decisions: D212, D213. What changed:
+[phases/refactor-code-quality.md](phases/refactor-code-quality.md).
+
+| # | Finding | Resolution |
+|---|---|---|
+| 1 | Two long-lived branches kept in step by hand | Kept: the owner's choice; `multi-server` gets this review separately |
+| 2 | The verification scripts live outside the repo | Open: AGENTS.md rule 2 leaves tests to the owner; the scripts are offered as material |
+| 3 | No CI, no Python linter, formatter or type checker; rule scans copied by hand | Fixed: Ruff, Pyright, Prettier, `check_rules.py`, `check.py`, CI (D213) |
+| 4 | Budget warnings only on the assistant's save path | Fixed: `SaveWatcher` port, notices on the REST saves (D212) |
+| 5 | Docs drifted (decision range, the composition root's signature) | Fixed; the range is no longer written down |
+| 6 | Adding a module touches the composition root in several places | Kept: an explicit composition root is pure DI, readable in one place |
+| 7 | Folders past the eight-file rule (web `a2ui/`) | Fixed: `renderers/`, `buttons/` |
+| 8 | The agents' card builders repeated | Fixed: `agent_kit.card` |
+| 9 | `Agent.run` did two jobs; `export_contracts.main` 71 lines | Fixed: split |
+| 10 | Chat roles and statuses as literals | Fixed: named constants, a style table |
+| 11 | Two large files (A2UI models, the assistant's texts) | Fixed: split into packages |
+| 12 | Machine-quality Hindi | Open: needs a native speaker |
+| C1 | Settings and the database engine built at import | Fixed: `get_settings()`, `default_engine()` |
+| C2 | A business rule (budget alerts) in the MCP adapter | Fixed: moved into budgets (D212) |
+| C3 | Import-time `assert`s | Fixed: explicit checks that raise |
+
+The tools then found what reading hadn't: two annotations naming something not imported (one new, one older), a
+protocol its implementations didn't satisfy, untyped construction of messages from untrusted input, and more (D213).
+The coupling scan found the module and feature graphs exactly as allowed: no cycles, no reach into another module's
+files, nothing in `shared/` that knows a feature.

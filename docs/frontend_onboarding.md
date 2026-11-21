@@ -218,7 +218,7 @@ Never edit them. After a backend change: run `backend\scripts\export_contracts.p
 | `model/chat-types.ts` | the conversation's types (messages, tool activity) |
 | `api/agent-stream.ts`, `api/sse.ts`, `api/agent-events.ts` | `runAgent()`: POST the run, read the SSE stream (`sse.ts` splits it into events), validate each event with `@ag-ui/core`'s schemas; pure readers for event payloads |
 | `components/` | the panel (header), the transcript, the composer (its own state, so typing doesn't redraw the cards), a message bubble, a tool chip; `lazy-chat-panel.tsx` loads the panel's code in the background |
-| `a2ui/` | the A2UI renderer: `protocol.ts` (messages, data model, size check), `a2ui-surface.tsx` (draws a surface by looking each component up in `catalogs.ts`), `basic-components.tsx`, inputs, insights (Chart, Stat), pure `actions.ts` and `insight-data.ts`, `basic-catalog.ts` (the spec's vocabulary and limits), `use-button-click.ts` (a click sends the event or runs a client function), `functions/` (the allow-listed client functions: `downloadReport`, D209) |
+| `a2ui/` | the A2UI renderer: `protocol.ts` (messages, data model, size check), `a2ui-surface.tsx` (draws a surface by looking each component up in `catalogs.ts`, the allow-list), `renderer-types.ts`; `renderers/` (`basic-components.tsx`, inputs, insights (Chart, Stat), `basic-catalog.ts` (the spec's vocabulary and limits), pure `insight-data.ts`); `buttons/` (pure `actions.ts`, `use-button-click.ts`: a click sends the event or runs a client function; `functions/`: the allow-listed client functions, `downloadReport`, D209) |
 
 How it works end to end: [assistant_architecture.md](assistant_architecture.md).
 
@@ -283,8 +283,8 @@ insists).
 
 ### Draw a new A2UI component
 
-1. The backend allows it (a model in `assistant/a2ui/models.py`, added to `Component`), so it's in
-   `A2UI.components` after regenerating.
+1. The backend allows it (a model in `assistant/a2ui/models/`, `basic.py` or `insights.py`, added to `Component` in
+   `messages.py`), so it's in `A2UI.components` after regenerating.
 2. A renderer component (`A2uiRendererProps`: the node, the render context, and functions to draw children) in
    `basic-components.tsx`, `a2ui-inputs.tsx` or `a2ui-insights.tsx`, reading each property defensively (`typeof`,
    `pick()`, `textOf()`), never trusting the shape.
@@ -298,6 +298,7 @@ insists).
   feature, in `shared/config`, or from the generated contract.
 - **No text in code:** every text a person sees or hears (labels, `aria-label`s, toasts, placeholders) is a key in
   the feature's `i18n/en.ts`, translated in every other language's file (D178).
+- **Formatting is Prettier's** (`npm run format`; `web/.prettierrc.json`): no hand formatting, no style debates.
 - **Effects only for the outside world** (subscriptions, timers, the DOM); derive everything else during render.
   `useSyncExternalStore` for browser state like media queries.
 - **Error boundaries** around the app, the page area, the chat panel and every A2UI card.

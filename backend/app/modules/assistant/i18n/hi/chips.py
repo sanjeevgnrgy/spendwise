@@ -1,0 +1,57 @@
+"""The assistant's texts in Hindi: the tool chips (api/chip_labels.py): while a tool runs, then done or failed.
+
+A translation of en/chips.py. Machine-quality: to be reviewed by a native speaker.
+"""
+
+from app.core.i18n import TextValue
+from app.modules.assistant.i18n.keys import ChatText
+
+CHIPS: dict[ChatText, TextValue] = {
+    ChatText.CHIP_ADD_RUNNING: "खर्च सहेजा जा रहा है…",
+    ChatText.CHIP_ADD_DONE: "खर्च सहेज लिया गया",
+    ChatText.CHIP_ADD_FAILED: "खर्च सहेजा नहीं जा सका",
+    ChatText.CHIP_UPDATE_RUNNING: "खर्च बदला जा रहा है…",
+    ChatText.CHIP_UPDATE_DONE: "खर्च बदल दिया गया",
+    ChatText.CHIP_UPDATE_FAILED: "खर्च बदला नहीं जा सका",
+    ChatText.CHIP_DELETE_RUNNING: "खर्च हटाया जा रहा है…",
+    ChatText.CHIP_DELETE_DONE: "खर्च हटा दिया गया",
+    ChatText.CHIP_DELETE_FAILED: "खर्च हटाया नहीं जा सका",
+    ChatText.CHIP_GET_RUNNING: "खर्च खोजा जा रहा है…",
+    ChatText.CHIP_GET_DONE: "खर्च मिल गया",
+    ChatText.CHIP_GET_FAILED: "खर्च नहीं मिला",
+    ChatText.CHIP_LIST_RUNNING: "खर्च खोजे जा रहे हैं…",
+    ChatText.CHIP_LIST_DONE: "खर्च खोज लिए गए",
+    ChatText.CHIP_LIST_FAILED: "खर्च खोजे नहीं जा सके",
+    ChatText.CHIP_SUMMARY_RUNNING: "महीने का कुल जोड़ा जा रहा है…",
+    ChatText.CHIP_SUMMARY_DONE: "महीने का कुल जोड़ लिया गया",
+    ChatText.CHIP_SUMMARY_FAILED: "महीने का कुल नहीं जोड़ा जा सका",
+    ChatText.CHIP_APPROVAL_RUNNING: "खर्च जाँचा जा रहा है…",
+    ChatText.CHIP_APPROVAL_DONE: "आपकी मंज़ूरी का इंतज़ार है",
+    ChatText.CHIP_APPROVAL_FAILED: "खर्च नहीं मिला",
+    ChatText.CHIP_TOOL_RUNNING: "{tool} चलाया जा रहा है…",
+    ChatText.CHIP_TOOL_DONE: "{tool} चलाया गया",
+    ChatText.CHIP_TOOL_FAILED: "{tool} विफल रहा",
+    ChatText.CHIP_RECEIPT_RUNNING: "रसीद एजेंट से पूछा जा रहा है…",
+    ChatText.CHIP_RECEIPT_DONE: "रसीद पढ़ ली गई",
+    ChatText.CHIP_RECEIPT_FAILED: "रसीद नहीं पढ़ी जा सकी",
+    ChatText.CHIP_TASK: "A2A टास्क {task}",
+    ChatText.CHIP_TASK_WAITING: "A2A टास्क {task} · आपके जवाब का इंतज़ार है",
+    ChatText.CHIP_SKILL_RUNNING: "एक स्किल पढ़ी जा रही है…",
+    ChatText.CHIP_SKILL_DONE: "एक स्किल पढ़ ली गई",
+    ChatText.CHIP_SKILL_FAILED: "वह स्किल नहीं मिली",
+    ChatText.CHIP_REPORT_RUNNING: "महीने की रिपोर्ट बन रही है…",
+    ChatText.CHIP_REPORT_DONE: "महीने की रिपोर्ट बन गई",
+    ChatText.CHIP_REPORT_FAILED: "महीने की रिपोर्ट नहीं बन सकी",
+    ChatText.CHIP_GET_BUDGETS_RUNNING: "आपके बजट देखे जा रहे हैं…",
+    ChatText.CHIP_GET_BUDGETS_DONE: "आपके बजट देख लिए गए",
+    ChatText.CHIP_GET_BUDGETS_FAILED: "आपके बजट नहीं देखे जा सके",
+    ChatText.CHIP_SET_BUDGET_RUNNING: "बजट तय किया जा रहा है…",
+    ChatText.CHIP_SET_BUDGET_DONE: "बजट तय हो गया",
+    ChatText.CHIP_SET_BUDGET_FAILED: "बजट तय नहीं हो सका",
+    ChatText.CHIP_INSIGHTS_RUNNING: "इनसाइट्स एजेंट से पूछा जा रहा है…",
+    ChatText.CHIP_INSIGHTS_DONE: "इनसाइट्स एजेंट ने जवाब दिया",
+    ChatText.CHIP_INSIGHTS_FAILED: "इनसाइट्स एजेंट जवाब नहीं दे सका",
+    ChatText.CHIP_CURRENCY_RUNNING: "करेंसी एजेंट से पूछा जा रहा है…",
+    ChatText.CHIP_CURRENCY_DONE: "करेंसी एजेंट ने जवाब दिया",
+    ChatText.CHIP_CURRENCY_FAILED: "करेंसी एजेंट जवाब नहीं दे सका",
+}

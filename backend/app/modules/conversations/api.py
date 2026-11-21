@@ -17,8 +17,9 @@ router = APIRouter(tags=["conversations"])
 
 
 # GET /api/v1/threads/{thread_id}: the signed-in person's whole conversation as text for people, oldest first; a 404
-# problem if they have no such thread (another person's thread with that id is never read, D190). The path's length limit matches ThreadId, so a too-long id is a 422, not a
-# lookup. (A route's docstring would become its OpenAPI text, so notes go here.)
+# problem if they have no such thread (another person's thread with that id is never read, D190). The path's length
+# limit matches ThreadId, so a too-long id is a 422, not a lookup. (A route's docstring would become its OpenAPI text,
+# so notes go here.)
 @router.get("/threads/{thread_id}")
 def get_thread(
     thread_id: Annotated[str, Path(max_length=THREAD_ID_MAX_LENGTH)], principal: CurrentUserDep, bus: BusDep

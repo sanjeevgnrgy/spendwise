@@ -14,15 +14,39 @@ from insights.contract import ExpenseRow
 
 # A month's name, as a person might write it, to its number. English (full and short) and Hindi.
 MONTH_NAMES: dict[str, int] = {
-    **{name.lower(): number for number, name in enumerate(
-        ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October",
-         "November", "December"], start=1)},
-    **{name: number for number, name in enumerate(
-        ["jan", "feb", "mar", "apr", "may", "jun", "jul", "aug", "sep", "oct", "nov", "dec"], start=1)},
+    **{
+        name.lower(): number
+        for number, name in enumerate(
+            [
+                "January",
+                "February",
+                "March",
+                "April",
+                "May",
+                "June",
+                "July",
+                "August",
+                "September",
+                "October",
+                "November",
+                "December",
+            ],
+            start=1,
+        )
+    },
+    **{
+        name: number
+        for number, name in enumerate(
+            ["jan", "feb", "mar", "apr", "may", "jun", "jul", "aug", "sep", "oct", "nov", "dec"], start=1
+        )
+    },
     "sept": 9,
-    **{name: number for number, name in enumerate(
-        ["जनवरी", "फ़रवरी", "मार्च", "अप्रैल", "मई", "जून", "जुलाई", "अगस्त", "सितंबर", "अक्टूबर", "नवंबर",
-         "दिसंबर"], start=1)},
+    **{
+        name: number
+        for number, name in enumerate(
+            ["जनवरी", "फ़रवरी", "मार्च", "अप्रैल", "मई", "जून", "जुलाई", "अगस्त", "सितंबर", "अक्टूबर", "नवंबर", "दिसंबर"], start=1
+        )
+    },
     "फरवरी": 2,
 }
 THIS_MONTH = ("this month", "current month", "इस महीने", "यह महीना")

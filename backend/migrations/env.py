@@ -2,19 +2,18 @@
 
 Alembic runs this for every migration command, from the command line (`alembic -c backend/alembic.ini ...`)
 or from code (infrastructure/migrations.upgrade_to_latest, used by seed.py and mcp_stdio.py). It runs on the connection
-upgrade_to_latest hands it, if any, else on the default engine (infrastructure/db.engine, the database in DATABASE_URL),
+upgrade_to_latest hands it, if any, else on the default engine (infrastructure/db.default_engine(), DATABASE_URL's),
 and compares against every module's tables, which the composition root collects (bootstrap.metadata).
 """
 
 from logging.config import fileConfig
 
 from alembic import context
-
 from sqlalchemy import Connection
 
 from app.bootstrap import metadata
-from app.infrastructure.config import settings
-from app.infrastructure.db import engine
+from app.infrastructure.config import get_settings
+from app.infrastructure.db import default_engine
 from app.infrastructure.migrations import CONNECTION_ATTRIBUTE
 
 config = context.config
@@ -29,7 +28,7 @@ target_metadata = metadata()
 def run_migrations_offline() -> None:
     """Write the SQL out instead of running it (alembic upgrade head --sql), e.g. for review."""
     context.configure(
-        url=settings.database_url,
+        url=get_settings().database_url,
         target_metadata=target_metadata,
         literal_binds=True,
         # SQLite can't change most of a table in place; "batch" mode copies it into a new one instead.
@@ -49,7 +48,7 @@ def run_migrations_online() -> None:
         # From app/migrations.upgrade_to_latest(engine): migrate that database, inside its transaction.
         _run_on(given)
         return
-    with engine.connect() as connection:
+    with default_engine().connect() as connection:
         _run_on(connection)
 
 

@@ -11,6 +11,7 @@ Web layer. main.py installs register_error_handlers and UnexpectedErrorMiddlewar
 """
 
 import logging
+from collections.abc import Mapping
 from typing import Any
 
 from fastapi import FastAPI, Request
@@ -43,7 +44,7 @@ RETRY_AFTER = "Retry-After"
 
 
 def problem_response(
-    status: int, slug: str, title: str, detail: str, instance: str, headers: dict[str, str] | None = None, **extra: Any
+    status: int, slug: str, title: str, detail: str, instance: str, headers: Mapping[str, str] | None = None, **extra: Any
 ) -> JSONResponse:
     """One problem-details response. Used here and by any other adapter (e.g. the MCP endpoint's 401).
 

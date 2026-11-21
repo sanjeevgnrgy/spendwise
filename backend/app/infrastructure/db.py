@@ -5,17 +5,19 @@ transactions behave as they do on Postgres: schema changes can be rolled back (a
 SAVEPOINTs work (a command sent from inside another). session_factory() turns an engine into what the bus
 (core/cqrs.py) opens one session with per outermost message.
 
-`engine` is the default, for the database in DATABASE_URL: the composition root (bootstrap.build) uses it
-unless it's given another engine, and the migrations' env.py runs on it unless handed a connection.
+default_engine() is the engine for the database in DATABASE_URL, built on the first call and kept: the
+composition root (bootstrap.build) uses it unless it's given another engine, and the migrations' env.py runs on it
+unless handed a connection. Importing this file builds nothing.
 """
 
+from functools import cache
 from typing import Any
 
 from sqlalchemy import Engine, StaticPool, event, make_url
 from sqlmodel import Session, create_engine
 
 from app.core.cqrs import SessionFactory
-from app.infrastructure.config import settings
+from app.infrastructure.config import get_settings
 
 # The backend name SQLAlchemy gives every SQLite URL ("sqlite:///...", "sqlite+pysqlite:///...").
 SQLITE_BACKEND = "sqlite"
@@ -75,5 +77,7 @@ def session_factory(engine: Engine) -> SessionFactory:
     return new_session
 
 
-# The default engine, for the database in DATABASE_URL (see the module docstring for who uses it).
-engine = create_db_engine(settings.database_url)
+@cache
+def default_engine() -> Engine:
+    """The engine for the database in DATABASE_URL, built on the first call and kept for the process."""
+    return create_db_engine(get_settings().database_url)

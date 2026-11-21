@@ -49,8 +49,9 @@ def set_budget(ctx: Context, command: SetBudget) -> int:
     limit_minor = rupees_to_paise(command.limit)
     budget = repository.find(ctx.session, command.owner_id, category_id)
     if budget is None:
-        budget = Budget(owner_id=command.owner_id, category_id=category_id, limit_minor=limit_minor,
-                        updated_at=ctx.clock.now())
+        budget = Budget(
+            owner_id=command.owner_id, category_id=category_id, limit_minor=limit_minor, updated_at=ctx.clock.now()
+        )
     else:
         budget.limit_minor = limit_minor
         budget.updated_at = ctx.clock.now()

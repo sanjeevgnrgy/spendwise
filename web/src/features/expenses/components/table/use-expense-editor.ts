@@ -11,6 +11,7 @@ import { messageOf } from "@/shared/lib/errors"
 import type { ExpenseChanges } from "../../api"
 import { useTexts } from "../../i18n"
 import { useSavingExpenseIds, useUpdateExpense } from "../../queries"
+import { showSaveNotices } from "../../save-notices"
 
 /** What useExpenseEditor returns: the open row, and what can be done with it. */
 export interface ExpenseEditor {
@@ -46,8 +47,9 @@ export function useExpenseEditor(): ExpenseEditor {
     // call, so a row saved while another row was still saving would lose its toast (and a failure would be silent).
     // Each mutateAsync call has its own promise, so every save gets its own answer.
     void update.mutateAsync({ id, changes }).then(
-      () => {
+      (saved) => {
         toast.success(t("edit.updated"))
+        showSaveNotices(saved.notices ?? [])
         close(id)
       },
       (error: unknown) => toast.error(messageOf(error)),

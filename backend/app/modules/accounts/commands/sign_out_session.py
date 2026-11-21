@@ -13,6 +13,7 @@ from app.core.cqrs import Command, Context
 from app.core.errors import NotFoundError
 from app.core.i18n import translatable
 from app.core.ids import UserId
+from app.core.sql import rows_affected
 from app.modules.accounts.i18n import AccountText
 from app.modules.accounts.persistence.tables import UserSession
 from app.modules.accounts.values import SessionId
@@ -35,5 +36,5 @@ def sign_out_session(ctx: Context, command: SignOutSession) -> None:
         )
         .values(revoked_at=ctx.clock.now())
     )
-    if ctx.session.execute(statement).rowcount == 0:
+    if rows_affected(ctx.session, statement) == 0:
         raise NotFoundError(translatable(AccountText.SESSION_NOT_FOUND, session_id=command.session_id))

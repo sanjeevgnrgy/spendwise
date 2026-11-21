@@ -64,8 +64,12 @@ def _breakdowns(report: MonthlyReport, language: Language, money: Callable[[Deci
         for line in report.by_category
     ]
     by_payment = [
-        [expenses.payment_method_label(line.payment_method, language), money(line.total),
-         _percent(line.share_percent), str(line.count)]
+        [
+            expenses.payment_method_label(line.payment_method, language),
+            money(line.total),
+            _percent(line.share_percent),
+            str(line.count),
+        ]
         for line in report.by_payment_method
     ]
     biggest = [
@@ -75,14 +79,22 @@ def _breakdowns(report: MonthlyReport, language: Language, money: Callable[[Deci
     biggest_headers = [t(ReportText.COLUMN_DATE), t(ReportText.COLUMN_MERCHANT), t(ReportText.COLUMN_CATEGORY)]
     average = t(ReportText.AVERAGE, average=money(report.daily_average), count=report.days_counted)
     return [
-        f"## {t(ReportText.CATEGORIES_HEADING)}", "",
-        *_table([t(ReportText.COLUMN_CATEGORY), *numbers], by_category, numeric_from=1), "",
-        f"## {t(ReportText.PAYMENTS_HEADING)}", "",
-        *_table([t(ReportText.COLUMN_PAYMENT_METHOD), *numbers], by_payment, numeric_from=1), "",
-        f"## {t(ReportText.BIGGEST_HEADING)}", "",
-        *_table([*biggest_headers, t(ReportText.COLUMN_AMOUNT)], biggest, numeric_from=3), "",
-        f"## {t(ReportText.AVERAGE_HEADING)}", "",
-        average, "",
+        f"## {t(ReportText.CATEGORIES_HEADING)}",
+        "",
+        *_table([t(ReportText.COLUMN_CATEGORY), *numbers], by_category, numeric_from=1),
+        "",
+        f"## {t(ReportText.PAYMENTS_HEADING)}",
+        "",
+        *_table([t(ReportText.COLUMN_PAYMENT_METHOD), *numbers], by_payment, numeric_from=1),
+        "",
+        f"## {t(ReportText.BIGGEST_HEADING)}",
+        "",
+        *_table([*biggest_headers, t(ReportText.COLUMN_AMOUNT)], biggest, numeric_from=3),
+        "",
+        f"## {t(ReportText.AVERAGE_HEADING)}",
+        "",
+        average,
+        "",
     ]
 
 
@@ -100,9 +112,14 @@ def report_markdown(report: MonthlyReport, language: Language) -> str:
     else:
         total = t(ReportText.TOTAL, total=money(report.total), count=report.expense_count)
     lines = [
-        f"# {title}", "", total, "",
-        f"## {t(ReportText.COMPARED_HEADING, previous_month=format_month(previous, language))}", "",
-        _comparison(report, language, previous), "",
+        f"# {title}",
+        "",
+        total,
+        "",
+        f"## {t(ReportText.COMPARED_HEADING, previous_month=format_month(previous, language))}",
+        "",
+        _comparison(report, language, previous),
+        "",
     ]
     if report.expense_count:
         lines += _breakdowns(report, language, money)

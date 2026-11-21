@@ -92,4 +92,3 @@ def _finish(call: ToolCall, output: str, ok: bool) -> Generator[AgentEvent, None
         summary=ToolCallSummary(name=call.name, arguments=call.arguments, ok=ok),
         ends_turn=False,
     )
-

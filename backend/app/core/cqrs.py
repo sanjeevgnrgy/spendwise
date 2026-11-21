@@ -64,7 +64,7 @@ class Context:
     """
 
     session: Session
-    bus: "MessageBus"  # for asking other modules, inside the same transaction
+    bus: MessageBus  # for asking other modules, inside the same transaction
     clock: Clock
 
 

@@ -7,7 +7,7 @@
 import { A2UI } from "@/shared/api/contracts.gen"
 import { isObject, pick } from "@/shared/lib/guards"
 
-import { INSIGHTS_CATALOG } from "../protocol"
+import { INSIGHTS_CATALOG } from "../../protocol"
 import { downloadReport } from "./download-report"
 
 /** A client function: checks a call's arguments and gives what a click runs, or null if they aren't valid. */

@@ -105,7 +105,9 @@ def report_card(report: reports.MonthlyReport, language: Language) -> CreateSurf
         if report.biggest:
             top = report.biggest[0]
             biggest = t(
-                ChatText.REPORT_BIGGEST, merchant=top.merchant, amount=money(top.amount),
+                ChatText.REPORT_BIGGEST,
+                merchant=top.merchant,
+                amount=money(top.amount),
                 date=format_day(top.spent_on, language),
             )
             components.append(Text(id="biggest", text=biggest, variant="caption"))

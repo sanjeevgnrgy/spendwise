@@ -6,8 +6,9 @@ language of the request, or raise errors carrying a translatable() that web/prob
 """
 
 from app.core.i18n import Language, define_catalog
-from app.modules.assistant.i18n.en import EN, ChatText
+from app.modules.assistant.i18n.en import EN
 from app.modules.assistant.i18n.hi import HI
+from app.modules.assistant.i18n.keys import ChatText
 
 define_catalog(ChatText, {Language.EN: EN, Language.HI: HI})
 

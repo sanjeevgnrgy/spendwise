@@ -24,8 +24,6 @@ class FindUsersByEmail(Query[list[int]]):
 def find_users_by_email(ctx: Context, query: FindUsersByEmail) -> list[int]:
     """Every user id with that email, compared in lower case, oldest first."""
     statement = (
-        select(AppUser.id)
-        .where(func.lower(AppUser.email) == query.email.strip().lower())
-        .order_by(col(AppUser.id))
+        select(AppUser.id).where(func.lower(AppUser.email) == query.email.strip().lower()).order_by(col(AppUser.id))
     )
     return [user_id for user_id in ctx.session.exec(statement) if user_id is not None]

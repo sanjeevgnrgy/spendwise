@@ -17,7 +17,7 @@ from app.modules.receipts.values import MAX_MEDIA_TYPE_LENGTH, STORAGE_KEY_LENGT
 class ReceiptFile(SQLModel, table=True):
     """An uploaded receipt. Private to the receipts module: other modules never import it."""
 
-    __tablename__ = "receipt_file"
+    __tablename__ = "receipt_file"  # pyright: ignore[reportAssignmentType]  (SQLModel declares it as declared_attr)
 
     # None until the row is inserted; the database assigns it (see the flush in commands/store_receipt.py).
     id: int | None = Field(default=None, primary_key=True)

@@ -108,8 +108,13 @@ def to_steps(messages: list[Message]) -> list[dict[str, Any]]:
                 steps.append({"type": StepType.FUNCTION_CALL, "id": call_id, "name": name, "arguments": arguments})
             case ToolResult(call_id=call_id, name=name, output=output, is_error=is_error):
                 steps.append(
-                    {"type": StepType.FUNCTION_RESULT, "call_id": call_id, "name": name, "is_error": is_error,
-                     "result": _text_content(output)}
+                    {
+                        "type": StepType.FUNCTION_RESULT,
+                        "call_id": call_id,
+                        "name": name,
+                        "is_error": is_error,
+                        "result": _text_content(output),
+                    }
                 )
             case Reasoning(provider=provider, opaque=opaque) if provider == PROVIDER:
                 # Gemini needs its own thoughts back (with their signature) to carry on after a tool call.
@@ -132,8 +137,12 @@ def from_steps(steps: list[dict[str, Any]]) -> list[Message]:
                 messages.append(ToolCall(call_id=step["id"], name=step["name"], arguments=step.get("arguments") or {}))
             case StepType.FUNCTION_RESULT:
                 messages.append(
-                    ToolResult(call_id=step["call_id"], name=step["name"], output=_joined_text(step.get("result")),
-                               is_error=bool(step.get("is_error")))
+                    ToolResult(
+                        call_id=step["call_id"],
+                        name=step["name"],
+                        output=_joined_text(step.get("result")),
+                        is_error=bool(step.get("is_error")),
+                    )
                 )
             case StepType.THOUGHT:
                 opaque = {key: value for key, value in step.items() if key != "type" and value is not None}

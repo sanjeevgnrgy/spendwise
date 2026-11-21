@@ -236,7 +236,10 @@ one yet); names are unique ignoring letter case.
 ### `POST /api/v1/expenses`
 
 Records an expense for the signed-in person. **201 Created** with the expense, and
-`Location: /api/v1/expenses/{id}`. The body is `NewExpense`; it has no owner (the session decides).
+`Location: /api/v1/expenses/{id}`. The body is `NewExpense`; it has no owner (the session decides). The answer is a
+`SavedExpense`: the expense, plus `notices`, what the app noticed about the save, written for the person in the
+request's language: today, a budget the save pushed near (80%) or over its limit ("Food budget: 84.0% used (₹4,200.00
+of ₹5,000.00)", D212). Usually empty; the web app shows each as a warning toast.
 
 ```json
 {
@@ -285,7 +288,8 @@ One expense, or 404.
 
 ### `PATCH /api/v1/expenses/{expense_id}`
 
-Changes only the fields you send; anything left out stays. Answers with the updated expense (its `version` raised).
+Changes only the fields you send; anything left out stays. Answers with the updated expense (its `version` raised)
+and its `notices`, as for POST (the month checked is the new date's, or the expense's own).
 
 ```json
 {"amount": "300", "note": null}

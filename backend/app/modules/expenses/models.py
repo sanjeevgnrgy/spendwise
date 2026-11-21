@@ -1,4 +1,5 @@
-"""The expenses module's shared read models: ExpenseRead, ExpenseList, and Totalled, the base of every total.
+"""The expenses module's shared read models: ExpenseRead, SavedExpense, ExpenseList, and Totalled, the base of every
+total.
 
 Part of the module's contract layer. ExpenseRead and ExpenseList are what GetExpense and ListExpenses answer
 (queries/get_expense.py, queries/list_expenses.py) and what api.py sends; Totalled is the base of the summary's
@@ -53,6 +54,12 @@ class ExpenseRead(BaseModel):
     @property
     def base_amount(self) -> Decimal | None:
         return None if self.base_amount_minor is None else paise_to_rupees(self.base_amount_minor)
+
+
+# What POST /expenses and PATCH /expenses/{id} answer: the expense as stored, and what the app noticed about the save
+# (a budget pushed near or over its limit, D212), written for the person in the request's language; usually empty.
+class SavedExpense(ExpenseRead):
+    notices: list[str] = []
 
 
 # ListExpenses's answer: one page of expenses, plus how many match in all, so a caller can page through

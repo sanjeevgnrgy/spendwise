@@ -9,7 +9,7 @@ import { reportUnexpected } from "@/shared/lib/errors"
 
 import type { A2uiAction } from "../a2ui/protocol"
 import { runAgent, type AgentPrompt, type RunAgent } from "../api/agent-stream"
-import type { ChatMessage, ChatState } from "./chat-types"
+import { MESSAGE_ROLES, type ChatMessage, type ChatState } from "./chat-types"
 import { mayHaveChanged, NEW_RUN, trackEvent } from "./run-progress"
 import * as transcript from "./transcript"
 import { useAgentRun } from "./use-agent-run"
@@ -33,7 +33,7 @@ export function useChat(onDataChanged: () => void, runAgentFn: RunAgent = runAge
       const replyId = nextId.current++ // reserved now; the bubble appears when the first text, chip or card does
       const attachment = "file" in prompt ? prompt.file?.name : undefined
       setMessages((current) =>
-        transcript.appendMessage(current, { id: userId, role: "user", text: shown, attachment }),
+        transcript.appendMessage(current, { id: userId, role: MESSAGE_ROLES.user, text: shown, attachment }),
       )
       let progress = NEW_RUN
       const ok = await runAgentOnce(prompt, {

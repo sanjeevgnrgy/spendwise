@@ -913,8 +913,34 @@ Read 2026-11-20.
   forms; mitigations include "Prepend each cell field with a single quote"; "The above techniques are not reliable in
   Microsoft Excel after saving and re-opening the CSV file".
 
-**Used in:** `backend/app/modules/assistant/a2ui/models.py` (`FunctionCall`, `ClientFunction`),
-`web/src/features/assistant/a2ui/functions/`, `backend/app/modules/reports/documents/spreadsheet.py`, D209.
+**Used in:** `backend/app/modules/assistant/a2ui/models/actions.py` (`FunctionCall`, `ClientFunction`),
+`web/src/features/assistant/a2ui/buttons/functions/`, `backend/app/modules/reports/documents/spreadsheet.py`, D209.
+
+---
+
+## 36. Type checkers and Pydantic, Ruff, Prettier (the code review of 2026-11-21)
+
+Observed with the pinned tools (Pyright 1.1.414, Ruff 0.17.6, Prettier 3.10.1, Pydantic 2.14) while acting on the
+review; each was reproduced and fixed in the code, so a change in a later version would show up in `check.py`.
+
+- **Pyright and Pydantic fields:** Pydantic models are `dataclass_transform`s; Pyright reads a field's default only
+  from `Field(default=...)` (a positional `Field(None)` makes the field required to it), and names the constructor's
+  parameter after `alias=` when there is one. So a field the code creates by its Python name while its JSON name
+  differs (`DataBinding.path`, JSON `@path`) uses `validation_alias` and `serialization_alias` instead of `alias`;
+  `populate_by_name` keeps reading the Python name at run time, and the JSON schema is unchanged.
+- **Pyright and protocols:** a protocol's plain attribute (`agent: str`) is writable, so a frozen dataclass doesn't
+  satisfy it; a read-only member is a `@property` in the protocol.
+- **SQLAlchemy:** `Session.execute()` is typed as returning `Result`; a DELETE or UPDATE returns a `CursorResult`, whose
+  `rowcount` is what the repositories read (`core/sql.rows_affected` says so once).
+- **pydantic-settings:** a required setting filled from the environment, and the `_env_file` argument, are unknown to
+  a type checker; the two calls carry a commented ignore.
+- **Annotations are evaluated lazily** (Python 3.14, PEP 649): an annotation naming something never imported doesn't
+  fail at import, only when something reads it. Ruff's F821 finds it.
+- **Prettier on Windows:** with Git's `core.autocrlf`, files are checked out with CRLF; Prettier's default
+  `endOfLine: "lf"` reports every such file as different. `"endOfLine": "auto"` keeps each file's own.
+
+**Used in:** `pyproject.toml`, `web/.prettierrc.json`, `backend/app/modules/assistant/a2ui/models/`,
+`backend/app/core/sql.py`, `backend/app/modules/assistant/delegation/skills.py`, D213.
 
 ---
 

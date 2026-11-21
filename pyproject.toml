@@ -1,0 +1,30 @@
+# Tooling for the Python code (backend/, agents/, skills/): the linter and formatter (Ruff) and the type checker
+# (Pyright). Dependencies aren't declared here: they're pinned in requirements.txt (the app) and requirements-dev.txt
+# (these tools). backend/scripts/check.py runs everything, locally and in CI (.github/workflows/ci.yml).
+
+[tool.ruff]
+line-length = 120
+target-version = "py314"
+extend-exclude = ["web", "**/__pycache__"]
+
+[tool.ruff.lint]
+# Errors and warnings, import order, likely bugs, modern syntax, simplifications, comprehensions, Ruff's own rules.
+select = ["E", "F", "W", "I", "B", "UP", "SIM", "C4", "PIE", "RUF"]
+ignore = [
+    # The CQRS messages (core/cqrs.py) are generic Pydantic models declared with Generic[R]: kept as they are, so a
+    # syntax change to the base of every message is a deliberate decision, not a linter's.
+    "UP046",
+]
+
+[tool.ruff.lint.isort]
+# The backend's package and the agents' packages (each agent runs with agents/ on its path).
+known-first-party = ["app", "agent_kit", "receipt", "insights", "currency"]
+
+[tool.pyright]
+include = ["backend", "agents", "skills"]
+exclude = ["**/__pycache__", "web", ".venv"]
+pythonVersion = "3.14"
+typeCheckingMode = "basic"
+venvPath = "."
+venv = ".venv"
+extraPaths = ["backend", "agents"]

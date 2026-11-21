@@ -11,9 +11,9 @@ from datetime import datetime
 from pydantic import BaseModel
 
 from app.core.cqrs import Context, Query
-from app.core.ids import UserId
 from app.core.errors import NotFoundError
 from app.core.i18n import translatable
+from app.core.ids import UserId
 from app.core.llm import (
     AssistantText,
     Message,
@@ -24,8 +24,8 @@ from app.core.llm import (
     UserText,
     messages_adapter,
 )
-from app.modules.conversations.queries.thread_rows import thread_rows
 from app.modules.conversations.i18n import ConversationText
+from app.modules.conversations.queries.thread_rows import thread_rows
 from app.modules.conversations.values import ThreadId
 
 

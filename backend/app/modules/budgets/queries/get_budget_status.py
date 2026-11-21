@@ -57,18 +57,18 @@ class GetBudgetStatus(Query[BudgetStatus]):
     month: YearMonth
 
 
-def _line(spent_minor: int, limit_minor: int | None) -> dict[str, object]:
-    """A BudgetLine's fields for spending against a limit (or no limit), in rupees."""
-    fields: dict[str, object] = {"spent": paise_to_rupees(spent_minor)}
-    if limit_minor is not None:
-        result = standing(spent_minor, limit_minor)
-        fields |= {
-            "limit": paise_to_rupees(limit_minor),
-            "remaining": paise_to_rupees(result.remaining_minor),
-            "used_percent": result.used_percent,
-            "state": result.state,
-        }
-    return fields
+def _line(spent_minor: int, limit_minor: int | None) -> BudgetLine:
+    """Spending against a limit (or no limit), in rupees."""
+    if limit_minor is None:
+        return BudgetLine(spent=paise_to_rupees(spent_minor))
+    result = standing(spent_minor, limit_minor)
+    return BudgetLine(
+        spent=paise_to_rupees(spent_minor),
+        limit=paise_to_rupees(limit_minor),
+        remaining=paise_to_rupees(result.remaining_minor),
+        used_percent=result.used_percent,
+        state=result.state,
+    )
 
 
 def _order(line: CategoryBudgetLine) -> tuple[bool, Decimal, Decimal, str]:
@@ -85,14 +85,17 @@ def get_budget_status(ctx: Context, query: GetBudgetStatus) -> BudgetStatus:
     rows = ctx.session.exec(select(Budget).where(col(Budget.owner_id) == query.owner_id))
     limits = {row.category_id: row.limit_minor for row in rows}
     lines = [
-        CategoryBudgetLine(category_id=category.id, category_name=category.name,
-                           **_line(spent.get(category.id, 0), limits.get(category.id)))
+        CategoryBudgetLine(
+            category_id=category.id,
+            category_name=category.name,
+            **_line(spent.get(category.id, 0), limits.get(category.id)).model_dump(),
+        )
         for category in ctx.bus.ask(categories.ListCategories())
     ]
     return BudgetStatus(
         month=str(query.month),
         currency=BASE_CURRENCY,
         month_elapsed_percent=month_elapsed_percent(query.month, ctx.clock.today()),
-        overall=BudgetLine(**_line(summary.total_minor, limits.get(None))),
+        overall=_line(summary.total_minor, limits.get(None)),
         categories=sorted(lines, key=_order),
     )

@@ -6,7 +6,7 @@ import { Check, CircleHelp, Loader2, X } from "lucide-react"
 import { Badge } from "@/shared/ui/badge"
 
 import { useTexts } from "../i18n"
-import type { ToolActivity } from "../model/chat-types"
+import { TOOL_STATUSES, type ToolActivity } from "../model/chat-types"
 
 /**
  * One tool call as a chip: spinning while it runs, then a tick or a cross, or "?" if the connection broke while
@@ -19,14 +19,14 @@ export function ToolChip({ tool }: { tool: ToolActivity }) {
   const { running, done, failed } = tool.labels
   const detail = tool.detail ? <span className="font-mono opacity-70">{tool.detail}</span> : null
 
-  if (tool.status === "running") {
+  if (tool.status === TOOL_STATUSES.running) {
     return (
       <Badge variant="outline">
         <Loader2 className="animate-spin" /> {running}
       </Badge>
     )
   }
-  if (tool.status === "unknown") {
+  if (tool.status === TOOL_STATUSES.unknown) {
     // The connection broke while it ran: it may or may not have finished. Don't claim either.
     const notConfirmed = t("chips.notConfirmed")
     return (
@@ -35,7 +35,7 @@ export function ToolChip({ tool }: { tool: ToolActivity }) {
       </Badge>
     )
   }
-  if (tool.status === "failed") {
+  if (tool.status === TOOL_STATUSES.failed) {
     // Only that it failed: the tool's own reason is written for the model and stays on the server (D180). The
     // reply explains what went wrong, in the user's language.
     return (

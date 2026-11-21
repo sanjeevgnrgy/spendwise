@@ -60,17 +60,17 @@ def _builders(llm: LanguageModel, clock: Clock) -> dict[str, Callable[[str], tup
 
     def receipt(key: str) -> tuple[str, Starlette]:
         """The receipt agent, reading with the backend's model."""
-        settings = ReceiptSettings(_env_file=None, receipt_agent_key=key)
+        settings = ReceiptSettings(_env_file=None, receipt_agent_key=key)  # pyright: ignore[reportCallIssue]  (pydantic-settings' own argument)
         return settings.url, receipt_app(settings, llm)
 
     def insights(key: str) -> tuple[str, Starlette]:
         """The insights agent, writing tips with the backend's model."""
-        settings = InsightsSettings(_env_file=None, insights_agent_key=key)
+        settings = InsightsSettings(_env_file=None, insights_agent_key=key)  # pyright: ignore[reportCallIssue]  (pydantic-settings' own argument)
         return settings.url, insights_app(settings, llm)
 
     def currency(key: str) -> tuple[str, Starlette]:
         """The currency agent, with the mock rates and the backend's clock."""
-        settings = CurrencySettings(_env_file=None, currency_agent_key=key)
+        settings = CurrencySettings(_env_file=None, currency_agent_key=key)  # pyright: ignore[reportCallIssue]  (pydantic-settings' own argument)
         return settings.url, currency_app(settings, MockRateProvider(), clock)
 
     return {"receipt": receipt, "insights": insights, "currency": currency}

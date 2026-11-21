@@ -112,7 +112,8 @@ def _receipt_in(media: list[Any]) -> int | None:
         raise BusinessRuleError(translatable(ChatText.ONE_RECEIPT))
     source = getattr(media[0], "source", None)
     if (
-        media[0].type not in RECEIPT_PARTS
+        source is None
+        or media[0].type not in RECEIPT_PARTS
         or getattr(source, "type", None) != FILE_SOURCE
         or getattr(source, "provider", None) != RECEIPT_PROVIDER
     ):

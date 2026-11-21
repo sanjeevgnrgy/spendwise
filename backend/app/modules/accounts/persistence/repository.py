@@ -13,7 +13,6 @@ from app.modules.accounts.domain.rules import Profile
 from app.modules.accounts.persistence.tables import AppUser, LoginAttempt, UserIdentity, UserSession
 from app.modules.accounts.values import LOGIN_ATTEMPT_TTL, MAX_LOGIN_ATTEMPTS
 
-
 # `moment` as an aware UTC time (SQLite gives stored times back without their zone): core's rule, by its old name.
 utc = as_utc
 

@@ -59,8 +59,10 @@ def totals(rows: list[dict], key: str) -> list[dict]:
         counts[row[key]] += 1
     whole = sum(sums.values(), Decimal(0))
     ranked = sorted(sums.items(), key=lambda item: (-item[1], item[0]))
-    return [{key: name, "total": money(amount), "count": counts[name], "share_percent": percent(amount, whole)}
-            for name, amount in ranked]
+    return [
+        {key: name, "total": money(amount), "count": counts[name], "share_percent": percent(amount, whole)}
+        for name, amount in ranked
+    ]
 
 
 def compute(data: dict) -> dict:

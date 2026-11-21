@@ -18,10 +18,10 @@ from uuid import uuid4
 
 from app.core.agents import RemoteAgents
 from app.core.cqrs import MessageBus
-from app.core.skills import SkillLibrary
 from app.core.errors import NotFoundError
 from app.core.i18n import Language, translatable
 from app.core.llm import ToolCallingModel
+from app.core.skills import SkillLibrary
 from app.modules import conversations, receipts
 from app.modules.assistant.agent.agent import Agent
 from app.modules.assistant.agent.events import AgentEvent, TurnFinished

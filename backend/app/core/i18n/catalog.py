@@ -16,6 +16,7 @@ from collections.abc import Mapping
 from dataclasses import dataclass, field, fields
 from enum import StrEnum
 from string import Formatter
+from typing import cast
 
 from babel import Locale
 
@@ -62,7 +63,7 @@ def _placeholders(value: TextValue) -> set[str]:
     return {name for template in templates for _, name, _, _ in Formatter().parse(template) if name}
 
 
-def define_catalog(keys: type[StrEnum], texts: Mapping[Language, LanguageTexts]) -> None:
+def define_catalog[K: StrEnum](keys: type[K], texts: Mapping[Language, Mapping[K, TextValue]]) -> None:
     """Register `keys`' texts in every language, after checking them (raises ValueError, so a bad catalog stops the
     app as it starts): every language present, with exactly the keys of `keys`; no placeholder a translation uses
     that English doesn't fill; a key that counts (a Plural) counts in every language; a Plural's "other" form always
@@ -83,7 +84,8 @@ def define_catalog(keys: type[StrEnum], texts: Mapping[Language, LanguageTexts])
             extra = _placeholders(value) - _placeholders(english[key])
             if extra:
                 raise ValueError(f"{keys.__name__}.{key.name} ({language}): unknown placeholders {sorted(extra)}")
-    _CATALOGS[keys] = texts
+    # Stored under the StrEnum base: text() looks a catalog up by its key's class, whatever that class is.
+    _CATALOGS[keys] = cast(Mapping[Language, LanguageTexts], texts)
 
 
 def text(language: Language, key: StrEnum, /, **values: object) -> str:

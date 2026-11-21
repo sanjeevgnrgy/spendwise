@@ -18,8 +18,8 @@ from app.core.money import paise_to_rupees
 from app.modules import categories, expenses
 from app.modules.reports.i18n import ReportText
 
-BYTE_ORDER_MARK = "﻿"
-FORMULA_STARTS = ("=", "+", "-", "@", "\t", "\r", "\n", "＝", "＋", "－", "＠")
+BYTE_ORDER_MARK = "\ufeff"
+FORMULA_STARTS = ("=", "+", "-", "@", "\t", "\r", "\n", "\uff1d", "\uff0b", "\uff0d", "\uff20")
 COLUMNS = (
     ReportText.COLUMN_DATE,
     ReportText.COLUMN_MERCHANT,

@@ -1,0 +1,5 @@
+# The development tools: the app's requirements, plus the linter and formatter (Ruff) and the type checker (Pyright).
+# Their settings are in pyproject.toml; backend/scripts/check.py runs them. Pinned exactly, like everything else.
+-r requirements.txt
+ruff==0.17.6
+pyright==1.1.414

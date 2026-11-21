@@ -22,10 +22,10 @@ import { Textarea } from "@/shared/ui/textarea"
 import { formatDate, isoDate, parseIsoDate } from "@/shared/lib/format"
 import { isObject } from "@/shared/lib/guards"
 
-import { useTexts } from "../i18n"
+import { useTexts } from "../../i18n"
 import { Unsupported } from "./a2ui-unsupported"
 import { CHOICE_VARIANT, TEXT_FIELD_VARIANT } from "./basic-catalog"
-import { boundPath, resolve, textOf, type A2uiComponent, type A2uiRenderContext } from "./protocol"
+import { boundPath, resolve, textOf, type A2uiComponent, type A2uiRenderContext } from "../protocol"
 
 // What an input needs from the renderer's props: its component and the surface (inputs have no children).
 interface InputProps {

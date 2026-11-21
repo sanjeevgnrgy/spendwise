@@ -31,8 +31,8 @@ class TakeApproval(Command[PendingCard | None]):
 def take_approval(ctx: Context, command: TakeApproval) -> PendingCard | None:
     """Handler for TakeApproval: return the card's record and delete it, in the same transaction.
 
-    None if the owner has no live card by that id in this thread: already answered, expired, never shown,
-    another conversation's or another person's. The bus commits the delete as this returns, so the card can't decide twice.
+    None if the owner has no live card by that id in this thread: already answered, expired, never shown, another
+    conversation's or another person's. The bus commits the delete as this returns, so the card can't decide twice.
     """
     # Expired cards go first, so a card past its TTL_MINUTES is simply not found.
     forget_expired(ctx)

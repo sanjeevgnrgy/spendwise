@@ -67,7 +67,11 @@ class AccessTokenAuth:
         owner = await anyio.to_thread.run_sync(self._resolve, token) if token else None
         if owner is None:
             response = problem_response(
-                401, UNAUTHORIZED_SLUG, UNAUTHORIZED_TITLE, UNAUTHORIZED_DETAIL, scope.get("path", ""),
+                401,
+                UNAUTHORIZED_SLUG,
+                UNAUTHORIZED_TITLE,
+                UNAUTHORIZED_DETAIL,
+                scope.get("path", ""),
                 headers={WWW_AUTHENTICATE: BEARER_SCHEME},
             )
             await response(scope, receive, send)

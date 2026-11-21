@@ -18,9 +18,7 @@ HI: dict[ReportText, TextValue] = {
     ReportText.PAYMENTS_HEADING: "भुगतान के तरीके के अनुसार",
     ReportText.BIGGEST_HEADING: "सबसे बड़े खर्च",
     ReportText.AVERAGE_HEADING: "रोज़ का औसत",
-    ReportText.AVERAGE: Plural(
-        one="{count} दिन में {average} प्रतिदिन।", other="{count} दिनों में {average} प्रतिदिन।"
-    ),
+    ReportText.AVERAGE: Plural(one="{count} दिन में {average} प्रतिदिन।", other="{count} दिनों में {average} प्रतिदिन।"),
     ReportText.IN_INR: "रकम भारतीय रुपयों में है: दूसरी मुद्रा का खर्च INR में उसकी रकम से गिना जाता है।",
     ReportText.COLUMN_DATE: "तारीख",
     ReportText.COLUMN_MERCHANT: "दुकान",

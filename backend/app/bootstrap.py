@@ -15,6 +15,7 @@ from mcp.server.mcpserver import MCPServer
 from sqlalchemy import Engine, MetaData
 from sqlmodel import SQLModel
 
+from app import agents_host
 from app.core.agents import RemoteAgents
 from app.core.clock import Clock, SystemClock
 from app.core.cqrs import MessageBus
@@ -24,15 +25,14 @@ from app.core.llm import LanguageModel
 from app.core.rate_limit import RateLimiter
 from app.core.sealing import Sealer
 from app.core.skills import SkillLibrary
-from app import agents_host
 from app.infrastructure import db
-from app.infrastructure.config import API_PREFIX, settings
+from app.infrastructure.config import API_PREFIX, Settings, get_settings
 from app.infrastructure.files import LocalFileStore
 from app.infrastructure.identity import ClientCredentials, OidcIdentityProvider, UnconfiguredIdentityProvider
 from app.infrastructure.llm.gemini import GeminiModel
 from app.infrastructure.sealing import FernetSealer
 from app.infrastructure.skills import FolderSkillLibrary
-from app.modules import accounts, expenses, reports
+from app.modules import accounts, budgets, expenses, reports
 from app.modules.accounts import module as accounts_module
 from app.modules.assistant import module as assistant_module
 from app.modules.budgets import module as budgets_module
@@ -77,6 +77,9 @@ class Services:
     recorder: expenses.ExpenseRecorder
     # Monthly reports (D209): the REST routes and MCP's get_monthly_report share it.
     reports: reports.MonthlyReports
+    # Which budgets a save pushes near or over their limit (D212): the expenses routes' SaveWatcher, the MCP save
+    # tools'.
+    budget_watch: budgets.BudgetWatch
     # The Agent Skills the assistant may read (D208): SKILL.md folders, by default the project's skills/.
     skills: SkillLibrary
     mcp_server: MCPServer
@@ -122,7 +125,7 @@ def build(
     - clock: the system clock;
     - llm: Gemini, with GEMINI_API_KEY and GEMINI_MODEL (checked on the first model call, not here);
     - tools: this app's own MCP server, called in-process (acting, on each run, for the person signed in);
-    - engine: the database in DATABASE_URL (infrastructure/db.engine);
+    - engine: the database in DATABASE_URL (infrastructure/db.default_engine());
     - files: a folder on disk, UPLOADS_DIR (created on the first upload). A check that uses a copy of the database
       should pass its own too, so uploads don't land among the real ones;
     - identity: the OpenID Connect provider in OIDC_ISSUER (nothing is fetched from it until someone signs in), or,
@@ -132,7 +135,8 @@ def build(
       (agents_host.py, D207), using `llm` and `clock`. A check passes a fake RemoteAgents, or its own A2AAgents.
     """
     clock = SystemClock() if clock is None else clock
-    engine = db.engine if engine is None else engine
+    settings = get_settings()
+    engine = db.default_engine() if engine is None else engine
     skills = FolderSkillLibrary(settings.skills_dir) if skills is None else skills
     bus = build_bus(clock, engine)
     if llm is None:
@@ -143,12 +147,14 @@ def build(
     recorder = expenses_module.create_recorder(bus, agents)
     # The monthly reports: the monthly-report skill's script works the figures out, run by the server (D209).
     monthly_reports = reports_module.create_reports(bus, skills, clock)
-    mcp_server = mcp_module.create_server(bus, recorder, monthly_reports, clock)
+    # Which budgets a save pushes near or over their limit: the REST save routes' notices, the MCP tools' alerts (D212).
+    budget_watch = budgets_module.create_watch(bus)
+    mcp_server = mcp_module.create_server(bus, recorder, monthly_reports, clock, budget_watch)
     if tools is None:
         # The assistant's tools: this app's own MCP server, in-process. Each run binds them to the signed-in person.
         tools = assistant_module.McpExpenseTools(mcp_server)
     files = LocalFileStore(settings.uploads_dir) if files is None else files
-    identity = _identity_provider(clock) if identity is None else identity
+    identity = _identity_provider(settings, clock) if identity is None else identity
     if sealer is None:
         sealer = FernetSealer([key.get_secret_value() for key in settings.session_encryption_keys])
     return Services(
@@ -161,6 +167,7 @@ def build(
         agents=agents,
         recorder=recorder,
         reports=monthly_reports,
+        budget_watch=budget_watch,
         skills=skills,
         mcp_server=mcp_server,
         access_tokens=accounts_module.create_access_tokens(bus, clock),
@@ -168,12 +175,12 @@ def build(
         identity=identity,
         sealer=sealer,
         sessions=accounts_module.create_session_gate(bus, identity, clock),
-        cookies=_session_cookies(),
-        sign_in=_sign_in_config(),
+        cookies=_session_cookies(settings),
+        sign_in=_sign_in_config(settings),
     )
 
 
-def _session_cookies() -> SessionCookies:
+def _session_cookies(settings: Settings) -> SessionCookies:
     """How the session and login cookies are written: Secure (COOKIE_SECURE), and as long-lived as the session and
     the sign-in attempt they stand for (the server ends either sooner when it must)."""
     return SessionCookies(
@@ -183,7 +190,7 @@ def _session_cookies() -> SessionCookies:
     )
 
 
-def _sign_in_config() -> accounts_module.SignInConfig:
+def _sign_in_config(settings: Settings) -> accounts_module.SignInConfig:
     """The addresses the provider is given, all on PUBLIC_URL (the origin people open the web app at, D184), and the
     role sign-in requires."""
     return accounts_module.SignInConfig(
@@ -193,7 +200,7 @@ def _sign_in_config() -> accounts_module.SignInConfig:
     )
 
 
-def _identity_provider(clock: Clock) -> IdentityProvider:
+def _identity_provider(settings: Settings, clock: Clock) -> IdentityProvider:
     """The one place that picks the sign-in adapter: standard OpenID Connect, configured from the OIDC_* settings, or,
     while one of them (or SESSION_ENCRYPTION_KEYS) is missing, one that refuses every sign-in (fail closed)."""
     missing = settings.missing_for_sign_in()
@@ -231,7 +238,7 @@ def api_routers(services: Services) -> list[APIRouter]:
     receipt_files = receipts_module.create_files(services.bus, services.files)
     return [
         categories_module.router,
-        expenses_module.create_router(services.recorder),
+        expenses_module.create_router(services.recorder, services.budget_watch),
         budgets_module.router,
         conversations_module.router,
         receipts_module.create_router(services.bus, services.files),

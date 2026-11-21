@@ -65,7 +65,7 @@ class CallOutcome:
     ends_turn: bool
 
     @classmethod
-    def reported(cls, call: ToolCall, output: ToolOutput) -> "CallOutcome":
+    def reported(cls, call: ToolCall, output: ToolOutput) -> CallOutcome:
         """The outcome of a call that ran (or was checked): its output for the model, and its summary."""
         return cls(
             result=ToolResult(call_id=call.call_id, name=call.name, output=output.text, is_error=not output.ok),

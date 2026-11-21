@@ -4,7 +4,7 @@
 
 import { isObject } from "@/shared/lib/guards"
 
-import { resolve, textOf, type A2uiAction, type A2uiSurface } from "./protocol"
+import { resolve, textOf, type A2uiAction, type A2uiSurface } from "../protocol"
 
 /** A Button's event as the server described it: the action's name, its context bindings and its chat text. */
 export interface A2uiButtonEvent {

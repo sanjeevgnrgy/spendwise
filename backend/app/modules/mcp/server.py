@@ -16,7 +16,7 @@ from mcp.server.mcpserver import MCPServer
 
 from app.core.clock import Clock
 from app.core.cqrs import MessageBus
-from app.modules import expenses, reports
+from app.modules import budgets, expenses, reports
 from app.modules.mcp.contracts import SERVER_NAME
 from app.modules.mcp.resources import register_resources
 from app.modules.mcp.tools.add_expense import register_add_expense
@@ -54,10 +54,15 @@ TOOL_REGISTRARS: tuple[ToolRegistrar, ...] = (
 
 
 def create_server(
-    bus: MessageBus, recorder: expenses.ExpenseRecorder, monthly_reports: reports.MonthlyReports, clock: Clock
+    bus: MessageBus,
+    recorder: expenses.ExpenseRecorder,
+    monthly_reports: reports.MonthlyReports,
+    clock: Clock,
+    budget_watch: budgets.BudgetWatch,
 ) -> MCPServer:
     """Build the MCP server around a bus, the expenses recorder (its add and update tools save through it), the
-    monthly reports (its get_monthly_report tool) and the clock (the budget tools' current month).
+    monthly reports (its get_monthly_report tool), the clock (the budget tools' current month) and the budget watch
+    (the save tools' alerts).
     Called once by the composition root (bootstrap.py).
 
     Registers every tool in TOOL_REGISTRARS order, then the resources. Raises RuntimeError if a tool lacks
@@ -66,7 +71,12 @@ def create_server(
     server = MCPServer(SERVER_NAME, instructions=INSTRUCTIONS)
     views = ExpenseViews(bus)
     context = ToolContext(
-        bus=bus, views=views, recorder=recorder, monthly_reports=monthly_reports, clock=clock
+        bus=bus,
+        views=views,
+        recorder=recorder,
+        monthly_reports=monthly_reports,
+        clock=clock,
+        budget_watch=budget_watch,
     )
     for register in TOOL_REGISTRARS:
         register(server, context)

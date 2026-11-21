@@ -1,0 +1,8 @@
+# Generated files: rewritten by their generators, never formatted by hand.
+src/shared/api/*.gen.ts
+openapi.json
+# shadcn/ui components are generated too (npx shadcn add) and keep their own style.
+src/shared/ui/
+# Build output and dependencies.
+.next/
+node_modules/

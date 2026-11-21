@@ -12,6 +12,8 @@ import { api, unwrap, unwrapEmpty, type Schemas } from "@/shared/api/http"
  * `amount_minor` is the same amount in paise, a whole number (exact, and what the table sorts by).
  */
 export type Expense = Schemas["ExpenseRead"]
+/** A save's answer (POST, PATCH): the expense as stored, and what the server noticed about the save (D212). */
+export type SavedExpense = Schemas["SavedExpense"]
 /** GET /expenses's answer: up to `limit` expenses, newest first (`items`), and how many match in all (`total`). */
 export type ExpenseList = Schemas["ExpenseList"]
 /** The body of POST /expenses. The backend checks the real rules (amount > 0, a known category...). */
@@ -34,16 +36,19 @@ export function listExpenses(filters: ExpenseFilters, signal?: AbortSignal): Pro
   return unwrap(api.GET("/api/v1/expenses", { params: { query: filters }, signal }))
 }
 
-/** Saves a new expense and returns it as stored (with its id). Throws ApiError with the backend's reason. */
-export function createExpense(expense: NewExpense): Promise<Expense> {
+/**
+ * Saves a new expense and returns it as stored (with its id) and the save's notices. Throws ApiError with the backend's
+ * reason.
+ */
+export function createExpense(expense: NewExpense): Promise<SavedExpense> {
   return unwrap(api.POST("/api/v1/expenses", { body: expense }))
 }
 
 /**
- * Changes only the fields in `changes` and returns the updated expense. Throws ApiError with the backend's
- * reason (an invalid value, or an expense that no longer exists).
+ * Changes only the fields in `changes` and returns the updated expense and the save's notices. Throws ApiError with
+ * the backend's reason (an invalid value, or an expense that no longer exists).
  */
-export function updateExpense(id: number, changes: ExpenseChanges): Promise<Expense> {
+export function updateExpense(id: number, changes: ExpenseChanges): Promise<SavedExpense> {
   return unwrap(api.PATCH(EXPENSE, { params: { path: { expense_id: id } }, body: changes }))
 }
 

@@ -36,9 +36,7 @@ def request_limit(largest_file: int = 0) -> int:
 class AgentGate:
     """Checks the key and the size of every request but those to `open_paths`, and marks every answer no-store."""
 
-    def __init__(
-        self, app: ASGIApp, key: SecretStr, open_paths: frozenset[str], max_request_bytes: int
-    ) -> None:
+    def __init__(self, app: ASGIApp, key: SecretStr, open_paths: frozenset[str], max_request_bytes: int) -> None:
         """Wrap `app`; `key` is the agent's key, `open_paths` the paths anyone may read (the Agent Card), and
         `max_request_bytes` the largest request it reads (request_limit)."""
         self._app = app

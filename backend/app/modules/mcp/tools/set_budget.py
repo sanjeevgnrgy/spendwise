@@ -46,5 +46,8 @@ def register_set_budget(server: MCPServer, context: ToolContext) -> None:
             # The caller's own budget (caller.py, D191); never a person named in the arguments.
             owner = current_caller()
             category_id = views.category_id(category) if given(category) else None
-            bus.execute(budgets.SetBudget(owner_id=owner, category_id=category_id, limit=str(limit)))
+            command = budgets.SetBudget.model_validate(
+                {"owner_id": owner, "category_id": category_id, "limit": str(limit)}
+            )
+            bus.execute(command)
             return bus.ask(budgets.GetBudgetStatus(owner_id=owner, month=YearMonth.of(clock.today())))

@@ -67,7 +67,7 @@ def get_monthly_summary(ctx: Context, query: GetMonthlySummary) -> MonthlySummar
                 category_id=category_id,
                 category_name=names.get(category_id, categories.UNKNOWN_CATEGORY),
                 expense_count=count,
-                total_minor=total,
+                total_minor=total or 0,  # SUM() is NULL only over no rows; a group always has some
             )
             for category_id, count, total in ctx.session.exec(statement)
         ),

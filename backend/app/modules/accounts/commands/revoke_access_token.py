@@ -11,6 +11,7 @@ from app.core.cqrs import Command, Context
 from app.core.errors import NotFoundError
 from app.core.i18n import translatable
 from app.core.ids import UserId
+from app.core.sql import rows_affected
 from app.modules.accounts.i18n import AccountText
 from app.modules.accounts.persistence.tables import AccessToken
 from app.modules.accounts.values import TokenId
@@ -27,5 +28,5 @@ def revoke_access_token(ctx: Context, command: RevokeAccessToken) -> None:
     statement = delete(AccessToken).where(
         col(AccessToken.id) == command.token_id, col(AccessToken.user_id) == command.owner_id
     )
-    if ctx.session.execute(statement).rowcount == 0:
+    if rows_affected(ctx.session, statement) == 0:
         raise NotFoundError(translatable(AccountText.TOKEN_NOT_FOUND, token_id=command.token_id))

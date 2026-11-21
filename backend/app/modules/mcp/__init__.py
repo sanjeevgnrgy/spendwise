@@ -37,6 +37,7 @@ __all__ = [
     "EXPECTED_VERSION_ARGUMENT",
     "EXPENSE_ID_ARGUMENT",
     "SERVER_NAME",
+    "CallerLookup",
     "ExpenseDeleted",
     "ExpenseFound",
     "ExpenseSaved",
@@ -46,7 +47,6 @@ __all__ = [
     "MonthSpending",
     "ResourceUri",
     "ToolName",
-    "CallerLookup",
     "act_for_process",
     "acting_for",
 ]

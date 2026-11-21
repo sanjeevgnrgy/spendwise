@@ -32,7 +32,7 @@ class ToolOutput:
 class ExpenseTools(Protocol):
     """What the agent needs from the expense tools. Every method raises ToolsUnavailableError if unreachable."""
 
-    def acting_for(self, owner_id: int) -> "ExpenseTools":
+    def acting_for(self, owner_id: int) -> ExpenseTools:
         """The same tools, acting for one person: every call reads and changes only `owner_id`'s expenses."""
         ...
 

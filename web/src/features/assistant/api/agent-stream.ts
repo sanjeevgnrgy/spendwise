@@ -63,12 +63,7 @@ export function messageContent(text: string, receipt?: Receipt): UserMessage["co
  * the conversation's history itself. `dataVersion` is the shared state as this browser knows it: the server
  * sends it back, raised, when data changed. `receipt` is the prompt's file, already uploaded.
  */
-export function runInput(
-  threadId: string,
-  prompt: AgentPrompt,
-  dataVersion: number,
-  receipt?: Receipt,
-): RunAgentInput {
+export function runInput(threadId: string, prompt: AgentPrompt, dataVersion: number, receipt?: Receipt): RunAgentInput {
   return {
     threadId,
     runId: newId(),

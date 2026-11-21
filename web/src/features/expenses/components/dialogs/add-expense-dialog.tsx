@@ -27,6 +27,7 @@ import { Input } from "@/shared/ui/input"
 import { emptyDraft, isComplete, toNewExpense } from "../../expense-form"
 import { useTexts } from "../../i18n"
 import { useCreateExpense } from "../../queries"
+import { showSaveNotices } from "../../save-notices"
 import { useExpenseDraft, type ExpenseDraftState } from "../../use-expense-draft"
 import { PaymentMethodSelect } from "../fields/payment-method-select"
 
@@ -54,8 +55,9 @@ export function AddExpenseDialog() {
   function handleSubmit(event: FormEvent) {
     event.preventDefault() // stop the browser's default form submit, which would reload the page
     create.mutate(toNewExpense(draft), {
-      onSuccess: () => {
+      onSuccess: (saved) => {
         toast.success(t("add.added"))
+        showSaveNotices(saved.notices ?? [])
         setOpen(false)
         reset()
       },

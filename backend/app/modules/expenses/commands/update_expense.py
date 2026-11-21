@@ -22,10 +22,10 @@ from app.modules.expenses.domain.rules import require_category_exists, require_p
 from app.modules.expenses.persistence import repository
 from app.modules.expenses.values import Amount, ExpenseId, Merchant, Note, PaymentMethod
 
-
 # The stored fields that decide the base amount: changing any of them converts the expense again (D204). The
 # handler sees the table's names, so the amount is amount_minor.
 CONVERTED_BY = frozenset({"amount_minor", "currency", "spent_on"})
+
 
 # What to change in an expense: UpdateExpense carries it, and PATCH /expenses/{id} takes it as the body.
 # Only a part of a command, not a Message itself, so it sets frozen and extra="forbid" on its own. Every

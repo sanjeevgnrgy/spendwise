@@ -43,7 +43,9 @@ class ExpenseFilters(BaseModel):
     search: str | None = Field(
         default=None, min_length=1, max_length=MAX_SEARCH_LENGTH, description="Text to find in the merchant or note"
     )
-    limit: int = Field(default=DEFAULT_LIST_LIMIT, ge=1, le=MAX_LIST_LIMIT, description="At most this many, newest first")
+    limit: int = Field(
+        default=DEFAULT_LIST_LIMIT, ge=1, le=MAX_LIST_LIMIT, description="At most this many, newest first"
+    )
     offset: int = Field(default=0, ge=0, description="Skip this many first (for the next page)")
 
     # A start after the end can match nothing, which is almost certainly a mistake: refuse it (a

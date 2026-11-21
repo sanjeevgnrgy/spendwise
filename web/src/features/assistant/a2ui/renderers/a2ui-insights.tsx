@@ -12,10 +12,10 @@ import { pick } from "@/shared/lib/guards"
 import { Card, CardContent } from "@/shared/ui/card"
 import { ChartContainer, ChartTooltip, ChartTooltipContent, type ChartConfig } from "@/shared/ui/chart"
 
-import { useTexts } from "../i18n"
+import { useTexts } from "../../i18n"
 import { Unsupported } from "./a2ui-unsupported"
 import { formatValue, readPoints, readUnit, type ChartPoint } from "./insight-data"
-import type { A2uiRendererProps } from "./renderer-types"
+import type { A2uiRendererProps } from "../renderer-types"
 
 // The chart config: a FIXED key and colour. shadcn's ChartContainer writes the config's keys and colours into a
 // <style> tag, so nothing from the agent may ever become a key or a colour: its labels are only drawn as text.

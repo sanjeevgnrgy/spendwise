@@ -2852,3 +2852,65 @@ is natural. It's still a soft, model-judged guard.
   unverified live.
 - **Revisit:** a proactive alert when the app opens (the roadmap's "proactive alerts"); a `remove_budget` tool if
   people ask for it in chat.
+- **Updated by D212:** the before-and-after comparison moved from the MCP adapter into the budgets module
+  (`BudgetWatch`), and the alerts' wording into the budgets module's catalog, so the REST save routes give the same
+  warnings.
+
+---
+
+## The code review of 2026-11-21
+
+> A review of the whole codebase against clean code, SOLID, DRY, magic strings, structure and coupling. Its findings
+> and how each was resolved: [architecture-review.md](architecture-review.md#6-the-code-review-of-2026-11-21); what
+> changed: [phases/refactor-code-quality.md](phases/refactor-code-quality.md). On `main`; `multi-server` is reviewed
+> separately.
+
+### D212. Budget warnings on every save path, through a port the expenses module defines and budgets implements
+- **What:** `expenses.SaveWatcher` (`expenses/application/save_watch.py`): run a save of one of a person's expenses and
+  return notices for them, in the request's language. `budgets.BudgetWatch` implements it (`watch`) and gives the MCP
+  tools their structured alerts (`around`); both use `budgets.crossed` and `budgets.alert_text`, the one place a
+  budget alert is worded. The composition root plugs it into the expenses routes (`create_router(recorder,
+  watcher)`) and the MCP server. `POST /expenses` and `PATCH /expenses/{id}` answer `SavedExpense` (the expense plus
+  `notices`); the web app shows each notice as a warning toast after adding or editing. The MCP tools still answer
+  `budget_alerts`, and the assistant's expense card words them with `alert_text`.
+- **Why a port:** budgets depends on expenses, so expenses can't call budgets. Defining the interface where it's used
+  and implementing it where the knowledge is (dependency inversion) keeps the dependency one way; an event bus would
+  have worked too, but a save needs the answer synchronously, to show it.
+- **Why notices are texts:** the expenses module doesn't know what a budget alert is, only that there is something to
+  tell the person; texts for people (D179) are what it can pass on without knowing more.
+- **How it was verified:** 9 checks through the REST API (a save that changes nothing, crossing 80%, no repeat while
+  near, the overall budget in Hindi, an edit over the limit, an edit moving an expense to another month, another
+  person's expense, another person's save, `GET` unchanged), the 24 budget chat checks and every earlier suite; the
+  recorded behaviour of the assistant's main paths is unchanged.
+
+### D213. Tools enforce the rules: Ruff, Pyright, Prettier, an architecture check and CI; nothing is built at import
+- **What:**
+  - **Tools:** Ruff 0.17.6 (lint: errors, import order, likely bugs, modern syntax, simplifications; format) and
+    Pyright 1.1.414 (basic) for Python, configured in `pyproject.toml` and pinned in `requirements-dev.txt`; Prettier
+    3.10.1 for the web app (`web/.prettierrc.json`: no semicolons, 120 columns, line endings as they are).
+  - **The architecture rules as code:** `backend/scripts/check_rules.py` checks the thirteen rules the docs listed as
+    PowerShell scans (layers, module boundaries and the allowed dependency graph, adapters, owners, agents, packages
+    importing on their own). `backend/scripts/check.py` runs every check; `.github/workflows/ci.yml` runs it on every
+    push and pull request, with no secrets.
+  - **Nothing built at import:** `get_settings()` and `db.default_engine()` replace the `settings` and `engine`
+    globals: built on first use by the composition root, the migrations and main.py, then kept.
+  - **What the tools found, fixed:** an annotation naming a module that wasn't imported (in the change being
+    reviewed) and one naming a class that wasn't (`ToolContext`, older); a protocol declaring writable attributes its
+    frozen implementations can't have; a loop variable hiding `text()`; tool arguments passed to constructors instead
+    of being validated (`model_validate`); `define_catalog` not generic in its keys; `SUM()` typed as possibly NULL;
+    invisible characters in the CSV guard; `assert`s used as import-time checks (stripped by `python -O`).
+  - **Structure:** the three agents' cards built by `agent_kit.card` from a spec; `Agent.run` split into preparing a
+    turn and running its steps; the A2UI models a package (`base`, `basic`, `actions`, `insights`, `messages`); the
+    assistant's texts split by area (`keys.py`, `en/`, `hi/`); the web app's A2UI renderer in `renderers/` and
+    `buttons/`; the chat's roles and statuses named constants; `export_contracts` one function per contract.
+- **Why tools:** rules written only in docs drift (the docs had: decision ranges, the composition root's signature);
+  a check that runs on every push doesn't. Formatting and import order stop being anyone's judgement.
+- **Why basic Pyright, and these Ruff rules:** they catch real defects (they did) without asking for annotations the
+  code doesn't need; stricter settings can follow once this baseline holds.
+- **Not changed:** the explicit composition root (pure dependency injection: one place to read how the app is built;
+  a registry would hide it); `Generic[R]` on the CQRS messages (a deliberate change, not a linter's: the UP046
+  ignore in pyproject.toml); the two branches (the owner keeps them; `multi-server` gets the same review separately).
+- **How it was verified:** before and after every refactor, the recorded AG-UI events and everything the model is sent
+  over seven turns, the REST answers and the markdown report were compared (identical); the MCP tools' definitions,
+  the OpenAPI document, the A2UI schemas, the agents' cards and the 126 assistant texts in two languages too
+  (identical); every suite; `check.py` passes (9 steps); a planted violation was caught by `check_rules.py`.

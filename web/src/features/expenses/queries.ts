@@ -9,7 +9,14 @@ import { keepPreviousData, useIsMutating, useMutation, useMutationState, useQuer
 import { DATA_SCOPES } from "@/shared/config/data-scopes"
 import { isObject } from "@/shared/lib/guards"
 
-import { createExpense, deleteExpense, listExpenses, updateExpense, type ExpenseChanges, type ExpenseFilters } from "./api"
+import {
+  createExpense,
+  deleteExpense,
+  listExpenses,
+  updateExpense,
+  type ExpenseChanges,
+  type ExpenseFilters,
+} from "./api"
 
 // The root every expenses key starts with. Written once, so the query keys and the delete mutation's key can't
 // drift apart.

@@ -9,8 +9,8 @@ agui_request.read_request, which applies MAX_MESSAGE_LENGTH too.
 
 from pydantic import BaseModel, Field
 
-from app.modules.conversations import ThreadId
 from app.modules.assistant.agent.events import ToolCallSummary
+from app.modules.conversations import ThreadId
 
 # What one chat message may hold (also the web app's text box limit, via the generated contracts).
 MAX_MESSAGE_LENGTH = 2000

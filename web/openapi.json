@@ -340,7 +340,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/ExpenseRead"
+                  "$ref": "#/components/schemas/SavedExpense"
                 }
               }
             }
@@ -544,7 +544,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/ExpenseRead"
+                  "$ref": "#/components/schemas/SavedExpense"
                 }
               }
             }
@@ -3511,6 +3511,136 @@
         ],
         "title": "RunAgentInput",
         "description": "A request to run an agent. Also echoed back as RUN_STARTED.input. Only\nthreadId, runId and messages are required: those are the three the SDKs\nalready agree on, and for tools and context an absent key and an empty\narray mean the same thing, so requiring them would catch nothing a\nproducer could get wrong."
+      },
+      "SavedExpense": {
+        "properties": {
+          "id": {
+            "type": "integer",
+            "title": "Id"
+          },
+          "amount_minor": {
+            "type": "integer",
+            "title": "Amount Minor"
+          },
+          "currency": {
+            "type": "string",
+            "title": "Currency"
+          },
+          "category_id": {
+            "type": "integer",
+            "title": "Category Id"
+          },
+          "merchant": {
+            "type": "string",
+            "title": "Merchant"
+          },
+          "note": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Note"
+          },
+          "spent_on": {
+            "type": "string",
+            "format": "date",
+            "title": "Spent On"
+          },
+          "payment_method": {
+            "$ref": "#/components/schemas/PaymentMethod"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Created At"
+          },
+          "version": {
+            "type": "integer",
+            "title": "Version"
+          },
+          "base_amount_minor": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Base Amount Minor"
+          },
+          "exchange_rate": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Exchange Rate"
+          },
+          "rate_date": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Rate Date"
+          },
+          "notices": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Notices",
+            "default": []
+          },
+          "amount": {
+            "type": "string",
+            "title": "Amount",
+            "readOnly": true
+          },
+          "base_amount": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Base Amount",
+            "readOnly": true
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "amount_minor",
+          "currency",
+          "category_id",
+          "merchant",
+          "note",
+          "spent_on",
+          "payment_method",
+          "created_at",
+          "version",
+          "base_amount_minor",
+          "exchange_rate",
+          "rate_date",
+          "amount",
+          "base_amount"
+        ],
+        "title": "SavedExpense"
       },
       "SessionRead": {
         "properties": {

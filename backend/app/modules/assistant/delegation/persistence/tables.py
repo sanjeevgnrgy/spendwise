@@ -20,7 +20,7 @@ class PendingDelegation(SQLModel, table=True):
     In the database (not in memory) so the answer works whichever server process gets it, and after a restart.
     """
 
-    __tablename__ = "pending_delegation"
+    __tablename__ = "pending_delegation"  # pyright: ignore[reportAssignmentType]  (SQLModel declares it as declared_attr)
 
     # Whose conversation it is (core.ids.UserId, no foreign key), and which: together, the key. Only the person's
     # next message in that conversation answers it (D190, D206).

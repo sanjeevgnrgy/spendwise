@@ -6,9 +6,17 @@
 
 import { A2UI } from "@/shared/api/contracts.gen"
 
-import { A2uiChoicePicker, A2uiDateTimeInput, A2uiTextField } from "./a2ui-inputs"
-import { A2uiChart, A2uiStat } from "./a2ui-insights"
-import { A2uiButton, A2uiCard, A2uiColumn, A2uiDivider, A2uiList, A2uiRow, A2uiText } from "./basic-components"
+import { A2uiChoicePicker, A2uiDateTimeInput, A2uiTextField } from "./renderers/a2ui-inputs"
+import { A2uiChart, A2uiStat } from "./renderers/a2ui-insights"
+import {
+  A2uiButton,
+  A2uiCard,
+  A2uiColumn,
+  A2uiDivider,
+  A2uiList,
+  A2uiRow,
+  A2uiText,
+} from "./renderers/basic-components"
 import { BASIC_CATALOG, INSIGHTS_CATALOG } from "./protocol"
 import type { A2uiCatalog } from "./renderer-types"
 

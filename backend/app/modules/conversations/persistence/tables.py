@@ -26,7 +26,7 @@ OWNER_THREAD_TURN_INDEX = "ix_conversation_message_owner_id_thread_id_turn"
 class ConversationMessage(SQLModel, table=True):
     """One message of a chat thread. Private to this module: other modules never import it."""
 
-    __tablename__ = "conversation_message"
+    __tablename__ = "conversation_message"  # pyright: ignore[reportAssignmentType]  (SQLModel declares it as declared_attr)
     __table_args__ = (Index(OWNER_THREAD_TURN_INDEX, "owner_id", "thread_id", "turn"),)
 
     # None until the row is inserted; the database assigns it. Also the order of a thread's messages.

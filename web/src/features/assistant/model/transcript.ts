@@ -15,7 +15,7 @@ import { toolDetailOf, toolLabelsOf, toolSucceeded } from "../api/agent-events"
 import type { AgentEvent } from "../api/agent-stream"
 import { connectionLostMessage } from "../api/sse"
 import { assistantTexts } from "../i18n"
-import type { ChatMessage, ToolActivity } from "./chat-types"
+import { MESSAGE_ROLES, MESSAGE_STATUSES, TOOL_STATUSES, type ChatMessage, type ToolActivity } from "./chat-types"
 
 // How a form's values read in your bubble: "Sent: 250 · Food · Subway · 2026-11-13 · upi" (the text
 // "transcript.sent", with the values joined by these).
@@ -62,7 +62,7 @@ export function setSubmitted(messages: ChatMessage[], surfaceId: string, submitt
 // The reply's bubble, added at the end the first time something arrives for it (text, a chip or a new card).
 function withReply(messages: ChatMessage[], replyId: number): ChatMessage[] {
   if (messages.some((message) => message.id === replyId)) return messages
-  return appendMessage(messages, { id: replyId, role: "assistant", text: "", tools: [] })
+  return appendMessage(messages, { id: replyId, role: MESSAGE_ROLES.assistant, text: "", tools: [] })
 }
 
 function updateTool(
@@ -110,7 +110,7 @@ export function applyAgentEvent(messages: ChatMessage[], replyId: number, event:
         name: event.toolCallName,
         args: "",
         labels: toolLabelsOf(event.metadata, event.toolCallName),
-        status: "running",
+        status: TOOL_STATUSES.running,
       }
       return updateMessage(withReply(messages, replyId), replyId, (message) => ({
         ...message,
@@ -121,7 +121,7 @@ export function applyAgentEvent(messages: ChatMessage[], replyId: number, event:
       return updateTool(messages, replyId, event.toolCallId, (tool) => ({ ...tool, args: tool.args + event.delta }))
     // TOOL_CALL_END only says the arguments are complete; the chip keeps spinning while the tool runs.
     case EventType.TOOL_CALL_RESULT: {
-      const status = toolSucceeded(event.metadata) ? "done" : "failed"
+      const status = toolSucceeded(event.metadata) ? TOOL_STATUSES.done : TOOL_STATUSES.failed
       const detail = toolDetailOf(event.metadata)
       return updateTool(messages, replyId, event.toolCallId, (tool) => ({ ...tool, status, detail }))
     }
@@ -139,7 +139,7 @@ export function applyAgentEvent(messages: ChatMessage[], replyId: number, event:
 export function markToolsUnknown(messages: ChatMessage[], replyId: number, ids: ReadonlySet<string>): ChatMessage[] {
   return updateMessage(messages, replyId, (message) => ({
     ...message,
-    tools: message.tools?.map((tool) => (ids.has(tool.id) ? { ...tool, status: "unknown" } : tool)),
+    tools: message.tools?.map((tool) => (ids.has(tool.id) ? { ...tool, status: TOOL_STATUSES.unknown } : tool)),
   }))
 }
 
@@ -165,8 +165,8 @@ export function sentText(action: A2uiAction): string {
 export function endedEarlyMessage(id: number, error: unknown): ChatMessage {
   if (isAbort(error)) {
     const stopped = i18n.t("transcript.stopped", { ns: assistantTexts.name })
-    return { id, role: "assistant", text: stopped, status: "stopped" }
+    return { id, role: MESSAGE_ROLES.assistant, text: stopped, status: MESSAGE_STATUSES.stopped }
   }
   const text = error instanceof Error ? messageOf(error) : connectionLostMessage()
-  return { id, role: "assistant", text, status: "failed" }
+  return { id, role: MESSAGE_ROLES.assistant, text, status: MESSAGE_STATUSES.failed }
 }

@@ -122,7 +122,7 @@ def _read_skill(folder: Path) -> _Skill | None:
     if match is None:
         logger.warning("skill %s skipped: no frontmatter", folder.name)
         return None
-    fields = dict(m.groups() for line in match.group(1).splitlines() if (m := FIELD.match(line.strip())))
+    fields = {m.group(1): m.group(2) for line in match.group(1).splitlines() if (m := FIELD.match(line.strip()))}
     name, description = _unquoted(fields.get("name", "")), _unquoted(fields.get("description", ""))
     if not (len(name) <= MAX_NAME and NAME_PATTERN.match(name) and name == folder.name):
         logger.warning(

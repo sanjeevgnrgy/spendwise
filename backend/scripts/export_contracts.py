@@ -23,6 +23,15 @@ from app.core.money import DEFAULT_CURRENCY  # noqa: E402
 from app.core.months import YearMonth  # noqa: E402
 from app.infrastructure.config import API_PREFIX, PROJECT_DIR  # noqa: E402
 from app.main import create_app  # noqa: E402
+from app.modules.accounts import (  # noqa: E402
+    DEFAULT_TOKEN_LIFETIME,
+    MAX_ACCESS_TOKENS,
+    MAX_TOKEN_NAME_LENGTH,
+    SIGN_IN_PAGE,
+    SignInFailure,
+    SignInParam,
+    TokenLifetime,
+)
 from app.modules.assistant.a2ui import MAX_USER_MESSAGE_LENGTH, ActionName, Catalog, ClientFunction  # noqa: E402
 from app.modules.assistant.a2ui.models import (  # noqa: E402
     A2UI_VERSION,
@@ -41,26 +50,17 @@ from app.modules.assistant.api.protocol import (  # noqa: E402
     MetadataKey,
 )
 from app.modules.assistant.api.schemas import MAX_MESSAGE_LENGTH  # noqa: E402
+from app.modules.budgets import FULL_PERCENT, NEAR_LIMIT_PERCENT, BudgetState  # noqa: E402
 from app.modules.conversations import THREAD_ID_MAX_LENGTH  # noqa: E402
 from app.modules.expenses import PaymentMethod, payment_method_label  # noqa: E402
-from app.modules.receipts import MAX_RECEIPT_BYTES, ReceiptMediaType  # noqa: E402
-from app.modules.reports import ReportFormat  # noqa: E402
-from app.modules.budgets import FULL_PERCENT, NEAR_LIMIT_PERCENT, BudgetState  # noqa: E402
 from app.modules.expenses.values import (  # noqa: E402
     DEFAULT_LIST_LIMIT,
     DEFAULT_TREND_MONTHS,
     MAX_LIST_LIMIT,
     MAX_TREND_MONTHS,
 )
-from app.modules.accounts import (  # noqa: E402
-    DEFAULT_TOKEN_LIFETIME,
-    MAX_ACCESS_TOKENS,
-    MAX_TOKEN_NAME_LENGTH,
-    SIGN_IN_PAGE,
-    SignInFailure,
-    SignInParam,
-    TokenLifetime,
-)
+from app.modules.receipts import MAX_RECEIPT_BYTES, ReceiptMediaType  # noqa: E402
+from app.modules.reports import ReportFormat  # noqa: E402
 from app.web.auth import CSRF_HEADER, CSRF_VALUE  # noqa: E402
 from app.web.problems import PROBLEM_JSON  # noqa: E402
 
@@ -113,78 +113,106 @@ def _component_names() -> dict[str, str]:
     return {name: name for name in names}
 
 
-def main() -> None:
-    """Write web/openapi.json and contracts.gen.ts from the backend's current code."""
-    openapi = WEB_DIR / "openapi.json"
-    # Built here, not imported: app.main builds nothing at import (uvicorn calls create_app itself).
-    document = create_app().openapi()
-    openapi.write_text(json.dumps(document, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
+def _payment_method_labels() -> dict[str, dict[str, str]]:
+    """Each payment method's label, by language."""
+    return {
+        language.value: {method.value: payment_method_label(method, language) for method in PaymentMethod}
+        for language in Language
+    }
 
-    contracts = {
+
+def _limits() -> dict[str, int]:
+    """The limits the web app checks before sending (the server checks them again)."""
+    return {
+        "messageLength": MAX_MESSAGE_LENGTH,
+        "threadIdLength": THREAD_ID_MAX_LENGTH,
+        "userMessageLength": MAX_USER_MESSAGE_LENGTH,
+        "listDefault": DEFAULT_LIST_LIMIT,
+        "listMax": MAX_LIST_LIMIT,
+        "trendMonthsDefault": DEFAULT_TREND_MONTHS,
+        "trendMonthsMax": MAX_TREND_MONTHS,
+        "receiptBytes": MAX_RECEIPT_BYTES,
+    }
+
+
+def _budgets_contract() -> dict[str, object]:
+    """Budgets (Phase 27): each state's value, and where "near the limit" and "the limit" are, in percent."""
+    return {
+        "states": {state.name.lower(): state.value for state in BudgetState},
+        "nearLimitPercent": NEAR_LIMIT_PERCENT,
+        "fullPercent": FULL_PERCENT,
+    }
+
+
+def _a2ui_contract() -> dict[str, object]:
+    """A2UI: the version, the catalogs and components the renderer allows, the insights catalog's names and limits,
+    the actions a click sends, and the functions the browser runs on a click (D209)."""
+    return {
+        "version": A2UI_VERSION,
+        "rootId": ROOT_ID,
+        "catalogs": {"basic": Catalog.BASIC.value, "insights": Catalog.INSIGHTS.value},
+        "components": _component_names(),
+        "insights": {
+            "chartTypes": {kind.name.lower(): kind.value for kind in ChartType},
+            "trends": {trend.name.lower(): trend.value for trend in Trend},
+            "maxChartPoints": MAX_CHART_POINTS,
+            "maxUnitLength": MAX_UNIT_LENGTH,
+        },
+        "actions": {
+            "saveExpense": ActionName.SAVE_EXPENSE.value,
+            "approveDelete": ActionName.APPROVE_DELETE.value,
+            "cancelDelete": ActionName.CANCEL_DELETE.value,
+        },
+        "functions": {"downloadReport": ClientFunction.DOWNLOAD_REPORT.value},
+    }
+
+
+def _agui_contract() -> dict[str, object]:
+    """AG-UI: the custom event's name, the forwarded action's key, the shared state's key, the receipt provider and
+    the metadata keys on tool events."""
+    return {
+        "customEvents": {"a2ui": CustomEventName.A2UI.value},
+        "forwardedA2uiAction": FORWARDED_A2UI_ACTION,
+        "stateDataVersion": STATE_DATA_VERSION,
+        "receiptProvider": RECEIPT_PROVIDER,
+        "metadata": {key.name.lower(): key.value for key in MetadataKey},
+    }
+
+
+def _contracts() -> dict[str, object]:
+    """Every constant contracts.gen.ts exports, by name, in the file's order."""
+    return {
         "API_PREFIX": API_PREFIX,
         "PROBLEM_JSON": PROBLEM_JSON,
         "DEFAULT_CURRENCY": DEFAULT_CURRENCY,
         # The languages the server writes its texts in; the web app's language table is typed against them.
         "LANGUAGES": [language.value for language in Language],
-        # Each payment method's label, by language.
-        "PAYMENT_METHOD_LABELS": {
-            language.value: {method.value: payment_method_label(method, language) for method in PaymentMethod}
-            for language in Language
-        },
-        "LIMITS": {
-            "messageLength": MAX_MESSAGE_LENGTH,
-            "threadIdLength": THREAD_ID_MAX_LENGTH,
-            "userMessageLength": MAX_USER_MESSAGE_LENGTH,
-            "listDefault": DEFAULT_LIST_LIMIT,
-            "listMax": MAX_LIST_LIMIT,
-            "trendMonthsDefault": DEFAULT_TREND_MONTHS,
-            "trendMonthsMax": MAX_TREND_MONTHS,
-            "receiptBytes": MAX_RECEIPT_BYTES,
-        },
+        "PAYMENT_METHOD_LABELS": _payment_method_labels(),
+        "LIMITS": _limits(),
         # The kinds of file a receipt may be (the chat's file picker offers these; the server checks the bytes).
         "RECEIPT_MEDIA_TYPES": [media_type.value for media_type in ReceiptMediaType],
         # A monthly report's downloads (GET /reports/monthly/{month}/{format}); the report card's buttons name one.
         "REPORT_FORMATS": [form.value for form in ReportFormat],
         # How a month is written (YYYY-MM, 1900-2099): the browser checks a card's month against it.
         "MONTH_PATTERN": YearMonth.PATTERN,
-        # Budgets (Phase 27): each state's value, and where "near the limit" and "the limit" are, in percent.
-        "BUDGETS": {
-            "states": {state.name.lower(): state.value for state in BudgetState},
-            "nearLimitPercent": NEAR_LIMIT_PERCENT,
-            "fullPercent": FULL_PERCENT,
-        },
-        "A2UI": {
-            "version": A2UI_VERSION,
-            "rootId": ROOT_ID,
-            "catalogs": {"basic": Catalog.BASIC.value, "insights": Catalog.INSIGHTS.value},
-            "components": _component_names(),
-            "insights": {
-                "chartTypes": {kind.name.lower(): kind.value for kind in ChartType},
-                "trends": {trend.name.lower(): trend.value for trend in Trend},
-                "maxChartPoints": MAX_CHART_POINTS,
-                "maxUnitLength": MAX_UNIT_LENGTH,
-            },
-            "actions": {
-                "saveExpense": ActionName.SAVE_EXPENSE.value,
-                "approveDelete": ActionName.APPROVE_DELETE.value,
-                "cancelDelete": ActionName.CANCEL_DELETE.value,
-            },
-            # The functions the insights catalog declares for the browser to run on a click (D209).
-            "functions": {"downloadReport": ClientFunction.DOWNLOAD_REPORT.value},
-        },
+        "BUDGETS": _budgets_contract(),
+        "A2UI": _a2ui_contract(),
         "AUTH": _auth_contract(),
         "ACCOUNT": _account_contract(),
-        "AGUI": {
-            "customEvents": {"a2ui": CustomEventName.A2UI.value},
-            "forwardedA2uiAction": FORWARDED_A2UI_ACTION,
-            "stateDataVersion": STATE_DATA_VERSION,
-            "receiptProvider": RECEIPT_PROVIDER,
-            "metadata": {key.name.lower(): key.value for key in MetadataKey},
-        },
+        "AGUI": _agui_contract(),
     }
+
+
+def main() -> None:
+    """Write web/openapi.json and contracts.gen.ts from the backend's current code."""
+    openapi = WEB_DIR / "openapi.json"
+    # Built here, not imported: app.main builds nothing at import (uvicorn calls create_app itself).
+    document = create_app().openapi()
+    openapi.write_text(json.dumps(document, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
     target = WEB_DIR / "src" / "shared" / "api" / "contracts.gen.ts"
     target.parent.mkdir(parents=True, exist_ok=True)
-    target.write_text(HEADER + "\n".join(_const(name, value) for name, value in contracts.items()), encoding="utf-8")
+    lines = (_const(name, value) for name, value in _contracts().items())
+    target.write_text(HEADER + "\n".join(lines), encoding="utf-8")
     print(f"Wrote {openapi.relative_to(PROJECT_DIR)} and {target.relative_to(PROJECT_DIR)}")
 
 

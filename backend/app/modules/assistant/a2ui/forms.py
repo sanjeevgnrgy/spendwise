@@ -148,8 +148,8 @@ def _model_form(form: Any, language: Language) -> CreateSurfaceMessage:
     if not isinstance(data, dict):
         raise ValueError("the form isn't a JSON object")
     # The surface id and catalog are ours to choose; the model only describes components and data.
-    surface = CreateSurface(
-        surface_id=_form_surface_id(), components=data.get("components"), data_model=data.get("dataModel")
+    surface = CreateSurface.model_validate(
+        {"surfaceId": _form_surface_id(), "components": data.get("components"), "dataModel": data.get("dataModel")}
     )
     # Only the components the form rules describe: no charts, stats or lists inside a form.
     outside = {c.component for c in surface.components if not isinstance(c, FORM_COMPONENTS)}

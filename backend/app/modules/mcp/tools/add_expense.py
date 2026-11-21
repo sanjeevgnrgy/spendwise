@@ -5,7 +5,7 @@ TOOL_REGISTRARS order. The tool only translates: it turns its arguments into the
 NewExpense, saved through the expenses module's recorder (which converts an amount in another currency to INR
 first, D204), so MCP callers get exactly the REST API's rules (amount > 0, the category must exist, a currency that
 can be converted), then answers with the saved expense (ExpenseSaved) and the budgets it pushed near or over their
-limit (budget_watch.py).
+limit (the budgets module's BudgetWatch).
 
 What clients see comes from the tool function: the SDK builds the input schema (titled
 "add_expenseArguments") from its name, parameters and annotations, and the description from `description=`.
@@ -21,9 +21,8 @@ from app.core.money import CURRENCY_PATTERN, DEFAULT_CURRENCY
 from app.modules import expenses
 from app.modules.mcp.caller import current_caller
 from app.modules.mcp.contracts import ExpenseSaved, ResourceUri, ToolName
-from app.modules.mcp.tools.budget_watch import BUDGET_ALERTS_NOTE, watch_budgets
-from app.modules.mcp.tools.support import ADDS_DATA, PAYMENT_METHODS, given, tool_errors
 from app.modules.mcp.tools.context import ToolContext
+from app.modules.mcp.tools.support import ADDS_DATA, BUDGET_ALERTS_NOTE, PAYMENT_METHODS, given, tool_errors
 
 
 def register_add_expense(server: MCPServer, context: ToolContext) -> None:
@@ -62,16 +61,18 @@ def register_add_expense(server: MCPServer, context: ToolContext) -> None:
             # The caller's own expense: the person behind the token or the signed-in run (caller.py), never an
             # argument (D191).
             owner = current_caller()
-            new = expenses.NewExpense(
-                amount=str(amount),
-                currency=currency,
-                category_id=views.category_id(category),
-                merchant=merchant,
-                note=given(note),
-                spent_on=spent_on,
-                payment_method=payment_method,
+            new = expenses.NewExpense.model_validate(
+                {
+                    "amount": str(amount),
+                    "currency": currency,
+                    "category_id": views.category_id(category),
+                    "merchant": merchant,
+                    "note": given(note),
+                    "spent_on": spent_on,
+                    "payment_method": payment_method,
+                }
             )
             # Saved between two looks at the month's budgets, so the answer can say which ones it pushed near or over
             # their limit (D211).
-            expense_id, alerts = watch_budgets(context.bus, owner, new.spent_on, lambda: recorder.create(owner, new))
+            expense_id, alerts = context.budget_watch.around(owner, new.spent_on, lambda: recorder.create(owner, new))
             return ExpenseSaved(saved=views.find(owner, expense_id), budget_alerts=alerts)

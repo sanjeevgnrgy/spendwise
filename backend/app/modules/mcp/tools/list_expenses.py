@@ -17,8 +17,9 @@ from pydantic import Field
 from app.modules import expenses
 from app.modules.mcp.caller import current_caller
 from app.modules.mcp.contracts import ExpenseSearch, ToolName
+from app.modules.mcp.tools.context import ToolContext
 from app.modules.mcp.tools.support import READS_ONLY, given, tool_errors
-from app.modules.mcp.views import ExpenseViews, to_view
+from app.modules.mcp.views import to_view
 
 # Each listed row is sent to the client's model and costs tokens, so lists are capped.
 MAX_ROWS = 50
@@ -48,14 +49,16 @@ def register_list_expenses(server: MCPServer, context: ToolContext) -> None:
     ) -> ExpenseSearch:
         with tool_errors():
             category_name = given(category)
-            filters = expenses.ExpenseFilters(
-                start_date=given(start_date),
-                end_date=given(end_date),
-                category_id=views.category_id(category_name) if category_name else None,
-                merchant=given(merchant),
-                search=given(search),
-                # The database stops after MAX_ROWS and counts the rest, instead of sending every row.
-                limit=MAX_ROWS,
+            filters = expenses.ExpenseFilters.model_validate(
+                {
+                    "start_date": given(start_date),
+                    "end_date": given(end_date),
+                    "category_id": views.category_id(category_name) if category_name else None,
+                    "merchant": given(merchant),
+                    "search": given(search),
+                    # The database stops after MAX_ROWS and counts the rest, instead of sending every row.
+                    "limit": MAX_ROWS,
+                }
             )
             # Only the caller's expenses are ever listed (caller.py, D191).
             found = bus.ask(expenses.ListExpenses(owner_id=current_caller(), filters=filters))

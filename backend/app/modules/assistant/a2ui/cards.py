@@ -19,6 +19,7 @@ from pydantic import BaseModel, ValidationError
 from app.core.i18n import Language, format_day, text
 from app.core.money import format_money
 from app.modules import budgets, reports
+from app.modules.assistant.a2ui.budget_card import alert_texts, budget_card
 from app.modules.assistant.a2ui.models import (
     ROOT_ID,
     Action,
@@ -36,7 +37,6 @@ from app.modules.assistant.a2ui.models import (
 )
 from app.modules.assistant.a2ui.parts import expense_ref, new_surface_id, surface
 from app.modules.assistant.a2ui.report_card import report_card
-from app.modules.assistant.a2ui.budget_card import alert_texts, budget_card
 from app.modules.assistant.a2ui.summary_card import summary_card
 from app.modules.assistant.i18n import ChatText
 from app.modules.mcp import (

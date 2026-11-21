@@ -52,7 +52,7 @@ class YearMonth:
         """The 1st of the month: where its date range starts."""
         return date(self.year, self.month, 1)
 
-    def shift(self, months: int) -> "YearMonth":
+    def shift(self, months: int) -> YearMonth:
         """The month `months` later (or earlier, if negative)."""
         index = self.year * MONTHS_PER_YEAR + (self.month - 1) + months
         return YearMonth(index // MONTHS_PER_YEAR, index % MONTHS_PER_YEAR + 1)

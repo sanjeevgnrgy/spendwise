@@ -572,6 +572,24 @@ is in the backend terminal (D180).
 - **Fix:** use `npm install` instead (it leaves unchanged packages in place), or close VS Code and run `npm ci`
   again. If `npm ci` stopped half-way, `npm install` puts the rest back.
 
+## Checks (`backend/scripts/check.py`)
+
+### Prettier says nearly every file is badly formatted
+- **Cause:** line endings: Git for Windows checks files out with CRLF, and Prettier's default is LF.
+- **Fix:** keep `"endOfLine": "auto"` in `web/.prettierrc.json` (it is): each file keeps its own endings.
+
+### Pyright: "Argument missing for parameter '@path'" (or another `@` name)
+- **Cause:** a Pydantic field with `alias="@path"` is created by its Python name (`DataBinding(path=...)`); Pyright
+  names the constructor's parameter after the alias. Or a default written positionally (`Field(None, ...)`), which
+  Pyright doesn't read as a default.
+- **Fix:** `Field(default=...)` for defaults; `validation_alias` and `serialization_alias` (not `alias`) on a field the
+  code creates by name. sources.md, section 36.
+
+### `check_rules.py` fails on rule 6 ("fails on its own")
+- **Cause:** a module package doesn't import by itself, usually an import cycle between modules (or a module importing
+  another module's files).
+- **Fix:** the message ends with the import error; follow AGENTS.md "Boundaries" (a port, an event, or a third module).
+
 ## Git
 
 ### `warning: LF will be replaced by CRLF`

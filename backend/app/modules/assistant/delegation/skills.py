@@ -46,10 +46,26 @@ class DelegatedSkill(Protocol):
     """One skill the server knows how to hand over: its agent and skill ids, its artifact, its chip, and the two
     directions of the conversation."""
 
-    agent: str
-    skill_id: str
-    artifact: str
-    chip: str
+    # Read-only: each skill is a frozen dataclass whose ids never change.
+    @property
+    def agent(self) -> str:
+        """The app's name for the agent that has the skill ("insights")."""
+        ...
+
+    @property
+    def skill_id(self) -> str:
+        """The skill's id on the agent's card ("analyze_spending")."""
+        ...
+
+    @property
+    def artifact(self) -> str:
+        """The name of the artifact the answer comes in."""
+        ...
+
+    @property
+    def chip(self) -> str:
+        """The name its status chip is shown under (api/chip_labels.py)."""
+        ...
 
     def parts(self, request: DelegationRequest) -> list[Part]:
         """What the agent is sent for `request` (the person's data added by the server, never by the model)."""
@@ -169,4 +185,5 @@ class CurrencySkill:
 
 def delegable_skills(bus: MessageBus) -> list[DelegatedSkill]:
     """Every skill the assistant may hand over (the receipt agent isn't one: it needs a file and has its own turn)."""
-    return [InsightsSkill(bus=bus), CurrencySkill()]
+    skills: list[DelegatedSkill] = [InsightsSkill(bus=bus), CurrencySkill()]
+    return skills

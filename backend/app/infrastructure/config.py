@@ -1,14 +1,16 @@
 """Settings and fixed values the whole backend reads (infrastructure).
 
 Values that differ between machines (the Gemini key and model, the database URL, the MCP token and URL, the uploads
-folder, the sign-in provider and its keys) come from the environment or .env,
-into the one `settings` object, read once at startup. Values that are part of the design (the API prefix and version, the MCP path) are constants instead:
-they change in code, together with the contract, never per machine. Read by db.py (the default engine), the
-composition root (which hands the Gemini key and model to the Gemini adapter, the MCP URL and token to the tools, the
-uploads folder to the file store, and the OIDC_* settings, PUBLIC_URL and the session keys to sign-in), main.py (the
-constants), the migrations and the export script. docs/configuration.md lists every setting.
+folder, the sign-in provider and its keys) come from the environment or .env, into one Settings object that
+get_settings() reads on first use and keeps: importing this file reads nothing. Values that are part of the design (the
+API prefix and version, the MCP path) are constants instead: they change in code, together with the contract, never per
+machine. Read by db.py (the default engine), the composition root (which hands the Gemini key and model to the Gemini
+adapter, the MCP URL and token to the tools, the uploads folder to the file store, and the OIDC_* settings, PUBLIC_URL
+and the session keys to sign-in), main.py (the constants), the migrations and the export script. docs/configuration.md
+lists every setting.
 """
 
+from functools import cache
 from pathlib import Path
 from urllib.parse import urlsplit
 
@@ -107,5 +109,9 @@ class Settings(BaseSettings):
         return [name for name, value in needed.items() if value is None]
 
 
-# Read once at startup. Real environment variables override values from .env.
-settings = Settings()
+@cache
+def get_settings() -> Settings:
+    """The settings, read from the environment and .env on the first call, then kept for the process. Real
+    environment variables override .env. Called by the composition root, main.py, the migrations and db.py's default
+    engine, never at import, so importing the backend reads no file."""
+    return Settings()

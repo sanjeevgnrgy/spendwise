@@ -13,6 +13,7 @@ from typing import Any
 
 import jwt
 from jwt.exceptions import PyJWKError, PyJWTError
+from jwt.types import Options
 
 from app.core.identity import InvalidTokenError
 
@@ -52,7 +53,7 @@ def decode_signed(token: str, signing_key: KeyLookup, issuer: str, audience: str
     try:
         public_key = jwt.PyJWK(key, algorithm=algorithm).key
         # Times are checked by check_times, against the app's clock; everything else by PyJWT.
-        options = {"verify_exp": False, "verify_iat": False, "verify_nbf": False, "require": list(required)}
+        options: Options = {"verify_exp": False, "verify_iat": False, "verify_nbf": False, "require": list(required)}
         return jwt.decode(token, public_key, algorithms=[algorithm], audience=audience, issuer=issuer, options=options)
     except (PyJWTError, PyJWKError) as error:
         raise InvalidTokenError(f"the token failed a check: {error}") from None

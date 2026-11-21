@@ -8,11 +8,12 @@ Every setting SpendWise reads, where it comes from, and its default. Secrets nev
 All backend settings are one Pydantic `Settings` class in `backend/app/infrastructure/config.py` (pydantic-settings):
 
 - read from the **environment**, then from **`.env` in the project folder**; a real environment variable wins;
-- names are case-insensitive (`GEMINI_MODEL` → `settings.gemini_model`);
+- names are case-insensitive (`GEMINI_MODEL` → `get_settings().gemini_model`);
 - an empty value (`GEMINI_MODEL=`) counts as **not set**, so the default applies;
 - unknown names in `.env` are ignored (it may hold settings for other tools);
 - secrets are `SecretStr`, so printing the settings never shows the key;
-- read **once at startup**: after changing `.env`, restart the server.
+- read **once**, by `get_settings()` on its first call (when the app is built, not when a file is imported), and
+  kept for the process: after changing `.env`, restart the server.
 
 ## Backend settings (`.env`)
 

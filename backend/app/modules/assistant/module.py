@@ -13,8 +13,8 @@ from fastapi import APIRouter
 from app.core.agents import RemoteAgents
 from app.core.clock import Clock
 from app.core.cqrs import MessageBus
-from app.core.skills import SkillLibrary
 from app.core.llm import LanguageModel
+from app.core.skills import SkillLibrary
 from app.modules import receipts
 from app.modules.assistant.api import routes
 from app.modules.assistant.application.assistant import Assistant
@@ -66,8 +66,14 @@ def create_router(
     directory = AgentDirectory(agents, delegable_skills(bus), clock)
     directory.load()
     assistant = Assistant(
-        bus=bus, tools=tools, llm=llm, receipt_files=receipt_files, receipt_reader=reader, directory=directory,
-        agents=agents, skills=skills,
+        bus=bus,
+        tools=tools,
+        llm=llm,
+        receipt_files=receipt_files,
+        receipt_reader=reader,
+        directory=directory,
+        agents=agents,
+        skills=skills,
     )
     return routes.create_router(assistant, ExpenseParser(bus=bus, llm=llm))
 

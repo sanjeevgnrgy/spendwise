@@ -47,7 +47,7 @@ class ExpenseSnapshot(BaseModel):
     payment_method: str
 
     @classmethod
-    def of(cls, expense: ExpenseView) -> "ExpenseSnapshot":
+    def of(cls, expense: ExpenseView) -> ExpenseSnapshot:
         """The snapshot of an expense the tools returned.
 
         Made from its JSON form (amount, date and payment method as text), the same form the table

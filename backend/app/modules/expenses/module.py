@@ -12,6 +12,7 @@ from app.core.agents import RemoteAgents
 from app.core.cqrs import MessageBus
 from app.modules.expenses import api
 from app.modules.expenses.application.record_expense import ExpenseRecorder
+from app.modules.expenses.application.save_watch import SaveWatcher
 from app.modules.expenses.commands.create_expense import CreateExpense, create_expense
 from app.modules.expenses.commands.delete_expense import DeleteExpense, delete_expense
 from app.modules.expenses.commands.update_expense import UpdateExpense, update_expense
@@ -43,9 +44,9 @@ def create_recorder(bus: MessageBus, agents: RemoteAgents) -> ExpenseRecorder:
     return ExpenseRecorder(bus=bus, rates=CurrencyAgentRates(agents))
 
 
-def create_router(recorder: ExpenseRecorder) -> APIRouter:
-    """The expenses routes, around `recorder`."""
-    return api.create_router(recorder)
+def create_router(recorder: ExpenseRecorder, watcher: SaveWatcher) -> APIRouter:
+    """The expenses routes, around `recorder` and the save watcher (the budgets module's, D212)."""
+    return api.create_router(recorder, watcher)
 
 
 __all__ = ["TABLES", "create_recorder", "create_router", "register_handlers"]

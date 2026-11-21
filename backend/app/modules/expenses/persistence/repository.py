@@ -15,6 +15,7 @@ from sqlmodel import Session, col, select
 
 from app.core.errors import BusinessRuleError, NotFoundError
 from app.core.i18n import translatable
+from app.core.sql import rows_affected
 from app.modules.expenses.i18n import ExpenseText
 from app.modules.expenses.persistence.tables import Expense
 
@@ -55,7 +56,7 @@ def remove(session: Session, owner_id: int, expense_id: int, expected_version: i
         statement = statement.where(col(Expense.version) == expected_version)
     # rowcount 0 means nothing matched: either they have no such expense, or (only with expected_version)
     # it's at another version. Looking it up tells the two apart, for a clear error.
-    if session.execute(statement).rowcount == 0:
+    if rows_affected(session, statement) == 0:
         current = get(session, owner_id, expense_id)  # raises NotFoundError if it isn't theirs or is gone
         raise BusinessRuleError(
             translatable(

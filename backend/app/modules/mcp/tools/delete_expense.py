@@ -25,8 +25,8 @@ from app.modules.mcp.contracts import (
     ExpenseDeleted,
     ToolName,
 )
-from app.modules.mcp.tools.support import CHANGES_DATA, ExpenseIdArg, require_arguments, tool_errors
 from app.modules.mcp.tools.context import ToolContext
+from app.modules.mcp.tools.support import CHANGES_DATA, ExpenseIdArg, require_arguments, tool_errors
 
 
 def register_delete_expense(server: MCPServer, context: ToolContext) -> None:

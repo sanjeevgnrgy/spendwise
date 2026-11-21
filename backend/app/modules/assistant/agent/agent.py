@@ -92,6 +92,16 @@ class _Turn:
         yield self.finished()
 
 
+@dataclass(frozen=True)
+class _Setup:
+    """What one turn offers the model: the tool declarations, the system instruction, and the handlers of the calls
+    carried out in place (the form, the surface's own, the extensions')."""
+
+    specs: list[ToolSpec]
+    instruction: str
+    handlers: dict[str, CallHandler]
+
+
 class Extension(Protocol):
     """More the model may do this turn, beside the expense tools: other agents (delegation/delegator.py) or skills
     (skills/skill_tool.py). Each gives its tools, their handlers, and the lines of instruction that go with them; none
@@ -132,28 +142,37 @@ class Agent:
         logger.info("user message (%d characters, %d earlier messages)", len(message), len(history))
         logger.debug("  message: %s", message)
         try:
-            # What the assistant can do comes from the tools, not from this code.
-            specs = self.tools.specs()
-            category_names = self.tools.category_names()
+            setup = self._prepare(today, surface, language)
         except ToolsUnavailableError as exc:
             # Without tools the model could only guess, so answer honestly without asking it.
             logger.warning("tools unavailable, not calling the model: %s", exc)
             yield from turn.end_with(text(language, ChatText.TOOLS_UNAVAILABLE))
             return
-        specs = surface.tool_specs(specs) + [spec for extension in self.extensions for spec in extension.specs()]
-        rules = surface.prompt_rules(category_names)
+        yield from self._steps(turn, history, setup, language)
+
+    def _prepare(self, today: date, surface: Surface, language: Language) -> _Setup:
+        """What this turn offers the model: the tools (the surface's choice of them, then the extensions'), the system
+        instruction, and the calls handled in place. Raises ToolsUnavailableError if the tools can't be listed."""
+        # What the assistant can do comes from the tools, not from this code.
+        tool_specs = self.tools.specs()
+        category_names = self.tools.category_names()
+        specs = surface.tool_specs(tool_specs) + [spec for extension in self.extensions for spec in extension.specs()]
         # The extensions' rules only when they offer something: without them the instruction is as before.
         extra = [rule for extension in self.extensions for rule in extension.rules()]
-        instruction = system_instruction(today, category_names, rules, language, extra)
+        instruction = system_instruction(today, category_names, surface.prompt_rules(category_names), language, extra)
         # The form is shown on either surface: a model may ask for one even where the tool wasn't offered.
         form = partial(_show_form, category_names, today, language)
         handlers: dict[str, CallHandler] = {a2ui.SHOW_FORM_TOOL_NAME: form, **surface.call_handlers(self.tools)}
         for extension in self.extensions:
             handlers.update(extension.handlers())
+        return _Setup(specs=specs, instruction=instruction, handlers=handlers)
 
+    def _steps(self, turn: _Turn, history: list[Message], setup: _Setup, language: Language) -> Iterator[AgentEvent]:
+        """Ask the model, carry out its calls, and repeat until it answers in text, a form ends the turn, or
+        MAX_STEPS is reached (then the server's own closing line ends it)."""
         for step in range(1, MAX_STEPS + 1):
             logger.info("step %d/%d: asking the model", step, MAX_STEPS)
-            response = yield from self._ask(turn, history, specs, instruction)
+            response = yield from self._ask(turn, history, setup.specs, setup.instruction)
             calls = [m for m in response.messages if isinstance(m, ToolCall)]
             if not calls:
                 if not response.text:
@@ -163,7 +182,7 @@ class Agent:
                 return
             ends_turn = False
             for call in calls:
-                outcome = yield from self._handle(call, handlers)
+                outcome = yield from self._handle(call, setup.handlers)
                 turn.record(outcome)
                 ends_turn = ends_turn or outcome.ends_turn
             if ends_turn:
@@ -181,18 +200,16 @@ class Agent:
         """One step: ask the model, stream its text to the user, add all it produced to the turn. Returns it."""
         # Stateless: every request carries the earlier history plus this turn so far.
         response = self.llm.stream_with_tools(history + turn.messages, specs, instruction, REASONING_EFFORT)
-        for index, text in enumerate(response):
+        for index, piece in enumerate(response):
             # The step's first piece starts a new paragraph if the model already said something earlier.
-            yield turn.say(text, continues=index > 0)
+            yield turn.say(piece, continues=index > 0)
         # Every request resends the whole history, so input tokens grow as a conversation gets longer.
         logger.info("  tokens: %s in, %s out", response.usage.input_tokens, response.usage.output_tokens)
         # Everything the model produced (reasoning, calls, text) goes into the history unchanged.
         turn.messages += response.messages
         return response
 
-    def _handle(
-        self, call: ToolCall, handlers: Mapping[str, CallHandler]
-    ) -> Generator[AgentEvent, None, CallOutcome]:
+    def _handle(self, call: ToolCall, handlers: Mapping[str, CallHandler]) -> Generator[AgentEvent, None, CallOutcome]:
         """Carry out one tool call: by its handler if it has one, else by running it as the model asked."""
         handler = handlers.get(call.name)
         if handler is not None:

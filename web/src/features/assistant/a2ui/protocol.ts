@@ -195,7 +195,9 @@ export function applyA2uiMessage(surfaces: A2uiSurface[], message: unknown): A2u
     return surfaces.map((surface) => {
       if (surface.id !== updateDataModel.surfaceId) return surface
       // "/" (or no path) replaces the whole model; anything else sets one value.
-      if (path === WHOLE_MODEL) return { ...surface, data: isObject(updateDataModel.value) ? updateDataModel.value : {} }
+      if (path === WHOLE_MODEL) {
+        return { ...surface, data: isObject(updateDataModel.value) ? updateDataModel.value : {} }
+      }
       return { ...surface, data: setAt(surface.data, path, updateDataModel.value) }
     })
   }

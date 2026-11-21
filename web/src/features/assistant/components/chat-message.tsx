@@ -7,9 +7,23 @@ import { cn } from "@/shared/lib/utils"
 
 import { A2uiSurfaceView } from "../a2ui/a2ui-surface"
 import type { A2uiRenderContext } from "../a2ui/protocol"
-import type { ChatMessage } from "../model/chat-types"
+import { MESSAGE_ROLES, type ChatMessage, type MessageStatus } from "../model/chat-types"
 import { AttachedFile } from "./attached-file"
 import { ToolChip } from "./tool-chip"
+
+// How a bubble looks: the person's, the assistant's, and an assistant reply that failed or was stopped.
+const USER_BUBBLE = "bg-primary text-primary-foreground"
+const ASSISTANT_BUBBLE = "bg-muted"
+const ENDED_BUBBLES: Readonly<Record<MessageStatus, string>> = {
+  failed: "border border-destructive/40 bg-destructive/10 text-destructive",
+  stopped: "border text-muted-foreground",
+}
+
+/** The bubble's colours for a message: by who wrote it, and how an assistant reply ended. */
+function bubbleStyle(message: ChatMessage): string {
+  if (message.role === MESSAGE_ROLES.user) return USER_BUBBLE
+  return message.status ? ENDED_BUBBLES[message.status] : ASSISTANT_BUBBLE
+}
 
 interface ChatMessageBubbleProps {
   message: ChatMessage
@@ -33,7 +47,7 @@ export const ChatMessageBubble = memo(function ChatMessageBubble({
   onFormChange,
   onFormSubmit,
 }: ChatMessageBubbleProps) {
-  const isUser = message.role === "user"
+  const isUser = message.role === MESSAGE_ROLES.user
 
   // The chips' row is a polite live region, so screen readers announce them as they change ("Expense saved").
   // An assistant reply can be chips only for a moment, before its text arrives, so the text box waits for text.
@@ -68,10 +82,7 @@ export const ChatMessageBubble = memo(function ChatMessageBubble({
         <div
           className={cn(
             "max-w-[85%] rounded-lg px-3 py-2 text-sm wrap-break-word whitespace-pre-wrap",
-            isUser && "bg-primary text-primary-foreground",
-            !isUser && !message.status && "bg-muted",
-            message.status === "failed" && "border border-destructive/40 bg-destructive/10 text-destructive",
-            message.status === "stopped" && "border text-muted-foreground",
+            bubbleStyle(message),
           )}
         >
           {message.text}

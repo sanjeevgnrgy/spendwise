@@ -6,7 +6,6 @@
 import { AGUI } from "@/shared/api/contracts.gen"
 import { isObject } from "@/shared/lib/guards"
 
-
 /** What a tool's chip says while it runs, and after it worked or failed. The backend sends them. */
 export interface ToolLabels {
   running: string

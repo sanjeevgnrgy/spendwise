@@ -22,7 +22,14 @@ export interface ExpenseDraft {
 
 /** A blank draft for the Add dialog: dated `today` ("YYYY-MM-DD"), with the default payment method. */
 export function emptyDraft(today: string): ExpenseDraft {
-  return { amount: "", merchant: "", category_id: "", spent_on: today, payment_method: DEFAULT_PAYMENT_METHOD, note: "" }
+  return {
+    amount: "",
+    merchant: "",
+    category_id: "",
+    spent_on: today,
+    payment_method: DEFAULT_PAYMENT_METHOD,
+    note: "",
+  }
 }
 
 /** An existing expense as a draft, for the edit row: the category id becomes text, and no note becomes "". */

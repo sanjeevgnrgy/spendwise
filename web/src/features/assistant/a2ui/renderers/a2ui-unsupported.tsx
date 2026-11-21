@@ -2,8 +2,8 @@
 // unknown catalog or component, a malformed property, a card over the limits, or a card that crashed.
 // Used by every renderer in this folder.
 
-import { useTexts } from "../i18n"
-import type en from "../i18n/en"
+import { useTexts } from "../../i18n"
+import type en from "../../i18n/en"
 
 /** Why something isn't drawn: a key of the "unsupported" texts, each a whole "Can't show …" sentence. */
 export type UnsupportedReason = keyof typeof en.unsupported

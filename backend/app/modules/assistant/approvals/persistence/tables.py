@@ -22,7 +22,7 @@ class PendingApproval(SQLModel, table=True):
     and after a restart.
     """
 
-    __tablename__ = "pending_approval"
+    __tablename__ = "pending_approval"  # pyright: ignore[reportAssignmentType]  (SQLModel declares it as declared_attr)
 
     # The card's surface id: what the browser sends back with the click.
     approval_id: str = Field(primary_key=True, max_length=APPROVAL_ID_LENGTH)

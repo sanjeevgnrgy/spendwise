@@ -45,8 +45,6 @@ class SignOutFlow:
         IdentityError (the provider's keys can't be read)."""
         notice = self.identity.read_logout_token(logout_token)
         self.bus.execute(
-            RevokeSessions(
-                issuer=notice.issuer, subject=notice.subject, provider_session_id=notice.session_id
-            )
+            RevokeSessions(issuer=notice.issuer, subject=notice.subject, provider_session_id=notice.session_id)
         )
         logger.info("back-channel logout: sessions ended for a provider %s", "session" if notice.session_id else "user")

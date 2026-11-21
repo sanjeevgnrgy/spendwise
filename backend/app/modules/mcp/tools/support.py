@@ -15,8 +15,8 @@ from mcp.types import ToolAnnotations
 from pydantic import Field, ValidationError
 from sqlalchemy.exc import OperationalError
 
-from app.core.ids import RecordId
 from app.core.errors import AuthenticationError, BusinessRuleError, NotFoundError
+from app.core.ids import RecordId
 from app.modules import expenses
 from app.modules.mcp.contracts import ToolName
 
@@ -43,6 +43,13 @@ ExpenseIdArg = Annotated[RecordId, Field(description=f"The expense's id (see {To
 # would quietly become None, and "[1, 2]" a list).
 
 
+# What add_expense's and update_expense's descriptions tell the model about the alerts in their results (D211).
+BUDGET_ALERTS_NOTE = (
+    "The result's budget_alerts lists budgets this save pushed near (80%) or over their monthly limit; "
+    "if there are any, mention them in one short sentence."
+)
+
+
 def given(value: str) -> str | None:
     """An optional text argument's value, or None if it wasn't given ("" or only spaces)."""
     return value.strip() or None
@@ -61,10 +68,10 @@ def is_lock_error(exc: OperationalError) -> bool:
 def tool_errors() -> Iterator[None]:
     """Report expected problems to the client as tool errors.
 
-    The SDK hides the text of unexpected exceptions from clients (it could leak internals) and only
-    passes on a ToolError's message. Our expected errors (unknown category, amount <= 0, bad date,
-    missing expense, no signed-in caller) are safe and useful to show, so they become ToolErrors. A locked database becomes
-    ToolError(BUSY); every other exception passes through unchanged.
+    The SDK hides the text of unexpected exceptions from clients (it could leak internals) and only passes on a
+    ToolError's message. Our expected errors (unknown category, amount <= 0, bad date, missing expense, no signed-in
+    caller) are safe and useful to show, so they become ToolErrors. A locked database becomes ToolError(BUSY); every
+    other exception passes through unchanged.
     """
     try:
         yield

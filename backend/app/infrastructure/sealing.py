@@ -41,5 +41,5 @@ class FernetSealer:
             return None
         try:
             return self._fernet.decrypt(sealed.encode(ASCII)).decode()
-        except (InvalidToken, ValueError):
+        except InvalidToken, ValueError:
             return None

@@ -18,10 +18,10 @@ from fastapi import Depends, FastAPI
 from sqlalchemy import Engine, text
 
 from app import bootstrap
+from app.agents_host import AGENT_LOGGERS
 from app.bootstrap import Services
 from app.infrastructure import migrations
-from app.infrastructure.config import API_PREFIX, API_VERSION, MCP_PATH, settings
-from app.agents_host import AGENT_LOGGERS
+from app.infrastructure.config import API_PREFIX, API_VERSION, MCP_PATH, get_settings
 from app.infrastructure.logging import setup_logging
 from app.modules.mcp import module as mcp_module
 from app.web.auth import require_csrf, require_user
@@ -99,7 +99,7 @@ def _add_error_handling(app: FastAPI) -> None:
     app.add_middleware(
         SecurityHeadersMiddleware,
         data_prefixes=(API_PREFIX, MCP_PATH),
-        https=settings.public_url.startswith(HTTPS_SCHEME),
+        https=get_settings().public_url.startswith(HTTPS_SCHEME),
     )
 
 
@@ -113,4 +113,3 @@ def _add_health_check(app: FastAPI, engine: Engine) -> None:
         with engine.connect() as connection:
             connection.execute(text("SELECT 1"))
         return HEALTHY
-

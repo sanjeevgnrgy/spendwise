@@ -70,5 +70,5 @@ def get_monthly_trend(ctx: Context, query: GetMonthlyTrend) -> MonthlyTrend:
     for offset in range(query.months):
         month = first.shift(offset)
         count, total = found.get(month, (0, 0))
-        trend.append(MonthTotal(month=str(month), expense_count=count, total_minor=total))
+        trend.append(MonthTotal(month=str(month), expense_count=count, total_minor=total or 0))
     return MonthlyTrend(currency=BASE_CURRENCY, months=trend)

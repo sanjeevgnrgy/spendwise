@@ -281,13 +281,21 @@ pass internals into a text's placeholders either (an exception's message, a URL,
 
 Never catch exceptions in a route: `web/problems.py` turns them into problem responses in one place.
 
+## Recipe: react to another module's save without depending on it
+
+Expenses can't import budgets (budgets already depends on expenses). When the expenses routes need budgets' view of a
+save, expenses defines the port (`expenses.SaveWatcher`: run this save, return notices for the person), budgets
+implements it (`budgets.BudgetWatch`), and the composition root plugs one into the other (D212). Use the same shape for
+the next such need: the port lives with the module that calls it, the implementation with the module that knows.
+
 ## Recipe: add or change a text for people
 
 1. Add the key to the module's `i18n/en.py` (`class ExpenseText(StrEnum)`, value a stable dotted name) and its
    English text, a `str.format` template (`"Expense {expense_id} not found"`); a count is a
    `Plural(one=..., other=...)`.
 2. Add it to every other language's file (`hi.py`). If you don't, the app refuses to start: `define_catalog` checks
-   every language has every key and no placeholder English lacks.
+   every language has every key and no placeholder English lacks. The assistant's catalog is large, so it's split:
+   the keys in `i18n/keys.py`, the texts in `i18n/en/` and `i18n/hi/`, one file per area (cards, chips, replies).
 3. Use it: `text(language, ExpenseText.X, **values)` where you know the language (a route's `LanguageDep`), or
    `translatable(ExpenseText.X, **values)` in an error (written later in the reader's language).
 

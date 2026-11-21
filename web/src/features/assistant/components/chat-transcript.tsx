@@ -11,7 +11,7 @@ import { ScrollArea } from "@/shared/ui/scroll-area"
 import type { A2uiRenderContext } from "../a2ui/protocol"
 import { useTexts } from "../i18n"
 import type en from "../i18n/en"
-import type { ChatMessage } from "../model/chat-types"
+import { MESSAGE_ROLES, TOOL_STATUSES, type ChatMessage } from "../model/chat-types"
 import { ChatMessageBubble } from "./chat-message"
 
 // The messages to try, in order: keys of the "suggestions" texts, looked up when drawn, so each one is shown (and
@@ -31,8 +31,8 @@ interface ChatTranscriptProps {
 // True while the assistant is working with nothing to show yet: before its first event, or after its
 // tools have finished and before the answer's text starts (the model is deciding what to say).
 function isWaiting(last: ChatMessage | undefined): boolean {
-  if (last?.role !== "assistant") return true
-  return !last.text && !last.tools?.some((tool) => tool.status === "running")
+  if (last?.role !== MESSAGE_ROLES.assistant) return true
+  return !last.text && !last.tools?.some((tool) => tool.status === TOOL_STATUSES.running)
 }
 
 // What an empty conversation shows: a short hint and a few messages to try.

@@ -62,6 +62,7 @@ class SignOutView(BaseModel):
 
     sealed_id_token: str | None
 
+
 # One of the signed-in person's live sessions, as Settings lists them (GET /account/sessions). `current` is the
 # session the request came from (this browser); ListSessions leaves it False and the route sets it.
 class SessionRead(BaseModel):

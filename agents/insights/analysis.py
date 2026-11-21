@@ -76,8 +76,11 @@ def _trends(this: list[ExpenseRow], before: list[ExpenseRow]) -> list[CategoryTr
         change = None
         if previous:
             change = str((Decimal(paise - previous) * PERCENT / previous).quantize(ONE_DECIMAL, ROUND_HALF_UP))
-        trends.append(CategoryTrend(category=category, this_month=_money(paise), previous_month=_money(previous),
-                                    change_percent=change))
+        trends.append(
+            CategoryTrend(
+                category=category, this_month=_money(paise), previous_month=_money(previous), change_percent=change
+            )
+        )
     return trends
 
 
@@ -97,8 +100,14 @@ def _unusual(this: list[ExpenseRow], everything: list[ExpenseRow]) -> list[Unusu
             unusual.append((paise, row, int(usual)))
     unusual.sort(key=lambda item: item[0], reverse=True)
     return [
-        UnusualSpend(spent_on=row.spent_on, merchant=row.merchant, category=row.category, amount=_money(paise),
-                     usual=_money(usual), times=str((Decimal(paise) / usual).quantize(ONE_DECIMAL, ROUND_HALF_UP)))
+        UnusualSpend(
+            spent_on=row.spent_on,
+            merchant=row.merchant,
+            category=row.category,
+            amount=_money(paise),
+            usual=_money(usual),
+            times=str((Decimal(paise) / usual).quantize(ONE_DECIMAL, ROUND_HALF_UP)),
+        )
         for paise, row, usual in unusual[:MAX_UNUSUAL]
     ]
 
@@ -109,5 +118,10 @@ def _forecast(total: int, month: YearMonth, today: date) -> Forecast | None:
         return None
     days = calendar.monthrange(month.year, month.month)[1]
     projected = (Decimal(total) * days / today.day).quantize(Decimal(1), ROUND_HALF_UP)
-    return Forecast(spent_so_far=_money(total), days_elapsed=today.day, days_in_month=days,
-                    month_end_total=_money(int(projected)), method=FORECAST_METHOD)
+    return Forecast(
+        spent_so_far=_money(total),
+        days_elapsed=today.day,
+        days_in_month=days,
+        month_end_total=_money(int(projected)),
+        method=FORECAST_METHOD,
+    )

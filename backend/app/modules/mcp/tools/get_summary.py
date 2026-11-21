@@ -18,13 +18,12 @@ from app.core.months import YearMonth
 from app.modules import expenses
 from app.modules.mcp.caller import current_caller
 from app.modules.mcp.contracts import MonthSpending, ToolName
-from app.modules.mcp.tools.support import READS_ONLY, tool_errors
 from app.modules.mcp.tools.context import ToolContext
+from app.modules.mcp.tools.support import READS_ONLY, tool_errors
 
 
 def register_get_summary(server: MCPServer, context: ToolContext) -> None:
-    """Add the get_summary tool: one month's totals (GetMonthlySummary) plus the previous month's total.
-    """
+    """Add the get_summary tool: one month's totals (GetMonthlySummary) plus the previous month's total."""
     bus = context.bus
 
     # Two summaries, the month asked about and the one before; the database adds them up (GROUP BY), and

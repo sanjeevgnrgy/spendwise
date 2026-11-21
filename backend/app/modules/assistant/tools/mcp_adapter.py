@@ -69,7 +69,7 @@ class McpExpenseTools:
         self._owner_id = owner_id
         self._listed = _ToolList() if listed is None else listed
 
-    def acting_for(self, owner_id: int) -> "McpExpenseTools":
+    def acting_for(self, owner_id: int) -> McpExpenseTools:
         """A copy acting for `owner_id`: every tool call reads and changes only their expenses."""
         return McpExpenseTools(self._server, owner_id, self._listed)
 
